@@ -1,0 +1,137 @@
+/* ============================================================
+   CarLocationMap.css
+   Styles for the car detail page location map section
+   ============================================================ */
+
+/* ── Root ───────────────────────────────────────────────────── */
+.clm-root {
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.07);
+}
+
+/* ── Address bar (above map) ────────────────────────────────── */
+.clm-address-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  background: #fff;
+  border-bottom: 1px solid #f0f0f0;
+  flex-wrap: wrap;
+}
+
+.clm-address-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.clm-address-text {
+  flex: 1;
+  font-size: 0.8rem;
+  color: #4a5568;
+  line-height: 1.4;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clm-open-maps-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #00b14f;
+  background: #f0fff4;
+  border: 1.5px solid #9ae6b4;
+  border-radius: 8px;
+  padding: 4px 10px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.clm-open-maps-btn:hover {
+  background: #00b14f;
+  color: #fff;
+  border-color: #00b14f;
+}
+
+/* ── Map wrapper ────────────────────────────────────────────── */
+.clm-map-wrap {
+  position: relative;
+  height: 280px;
+  background: #f7fafc;
+}
+
+.clm-map-wrap .leaflet-container {
+  width: 100%;
+  height: 100%;
+  font-family: 'Inter', sans-serif;
+}
+
+/* Ensure leaflet controls stay on top */
+.clm-map-wrap .leaflet-top,
+.clm-map-wrap .leaflet-bottom {
+  z-index: 400;
+}
+
+/* ── Overlay (loading / error) ──────────────────────────────── */
+.clm-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 800;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(247, 250, 252, 0.92);
+  backdrop-filter: blur(4px);
+}
+
+.clm-overlay--error {
+  background: rgba(255, 245, 245, 0.95);
+}
+
+.clm-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #00b14f;
+  border-radius: 50%;
+  animation: clmSpin 0.7s linear infinite;
+}
+
+@keyframes clmSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.clm-overlay-text {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #4a5568;
+  margin: 0;
+}
+
+.clm-overlay-sub {
+  font-size: 0.72rem;
+  color: #e53e3e;
+  margin: 0;
+}
+
+/* ── Red dot marker ───────────────────────────────────── */
+.clm-red-dot {
+  width: 16px;
+  height: 16px;
+  background: #e53e3e;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(229, 62, 62, 0.4), 0 2px 8px rgba(0, 0, 0, 0.25);
+}

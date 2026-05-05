@@ -1,0 +1,30 @@
+# # Docker Compose — biến build frontend (REACT_APP_*)
+# /.env
+
+# # ── Frontend ────────────────────────────────
+frontend/node_modules/
+# frontend/build/
+frontend/.env
+# frontend/.env.*
+
+# # ── Backend ─────────────────────────────────
+backend/node_modules/
+backend/.env
+# backend/.env.*
+
+# # ── OS / IDE ─────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# # ── Agents ─────────────────────────────────
+.agents/skills/web-design-guidelines/SKILL.md
+
+# # ── SmartRent ─────────────────────────────────
+smartrent-scoreboard.md
+PROJECT_PHASES_SMARTRENT.md
+
+# # ── Other ─────────────────────────────────
+.cursor/rules/smartrent-scope.mdc
+.cursor/rules/smartrent-scope.mdc

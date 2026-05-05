@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Auth Demo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://js.stripe.com/v3/"></script>
+    <link rel="stylesheet" href="checkout.css" />
+    <script type="module" src="./main.js" defer></script>
+  </head>
+  <body>
+    <h2>Demo Auth</h2>
+
+    <div id="loginSection">
+      <button id="loginBtn">Login</button>
+    </div>
+
+    <div id="appSection" style="display: none">
+      <button id="bookingBtn">Booking in console dev tools</button>
+      <button id="paymentBtn">Payment list in console dev tools</button>
+      <div>
+        <label for="bookingIdInput">Booking ID:</label>
+        <input type="text" id="bookingIdInput" placeholder="Nhập Booking ID" />
+        <button id="createPaymentBtn">Tạo Payment Intent</button>
+      </div>
+
+      <button id="logoutBtn">Logout</button>
+    </div>
+  </body>
+</html>

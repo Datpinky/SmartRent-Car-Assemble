@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Leaflet + LocationIQ Backend</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+      <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  </head>
+  <body>
+    <h3>Bản đồ Leaflet</h3>
+      <h2>Demo Map API</h2>
+
+  <!-- Forward Geocode -->
+  <div>
+    <h3>Forward Geocode (Địa chỉ → Tọa độ)</h3>
+    <input id="forwardInput" type="text" placeholder="Nhập địa chỉ...">
+    <button id="forwardBtn">Forward Geocode</button>
+  </div>
+
+  <!-- Reverse Geocode -->
+  <div>
+    <h3>Reverse Geocode (Tọa độ → Địa chỉ)</h3>
+    <input id="latInput" type="text" placeholder="Lat">
+    <input id="lonInput" type="text" placeholder="Lon">
+    <button id="reverseBtn">Reverse Geocode</button>
+  </div>
+
+  <!-- Autocomplete -->
+  <div>
+    <h3>Place Autocomplete (Gợi ý địa chỉ)</h3>
+    <input id="autocompleteInput" type="text" placeholder="Nhập để gợi ý..." oninput="handleAutocomplete()">
+    <ul id="autocompleteResults"></ul>
+  </div>
+
+  <hr>
+    <div id="map" style="height: 500px; width: 100%"></div>
+
+    <script type="module">
+      import { initMap } from "./mapApp.js";
+      initMap();
+    </script>
+  </body>
+</html>
