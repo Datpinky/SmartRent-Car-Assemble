@@ -6,6 +6,7 @@ const BOOKING_STATUSES = ['pending',
   'completed',
   'waiting_payment',
   'paid',
+  'payment_failed',
   'waiting_handover',
   'handed_over',
   'in_use',
@@ -14,15 +15,7 @@ const BOOKING_STATUSES = ['pending',
 
 class BookingValidation {
   createBooking = [
-    body("user_id")
-      .notEmpty().withMessage("Không được để trống")
-      .isMongoId().withMessage("Phải là MongoId hợp lệ"),
-
     body("vehicle_id")
-      .notEmpty().withMessage("Không được để trống")
-      .isMongoId().withMessage("Phải là MongoId hợp lệ"),
-
-    body("showroom_id")
       .notEmpty().withMessage("Không được để trống")
       .isMongoId().withMessage("Phải là MongoId hợp lệ"),
 
@@ -34,9 +27,21 @@ class BookingValidation {
       .notEmpty().withMessage("Không được để trống")
       .isISO8601().withMessage("Không đúng định dạng (ISO8601)"),
 
+    body("user_id")
+      .optional()
+      .custom(() => {
+        throw new Error("user_id được lấy từ token, không được gửi từ client");
+      }),
+    body("showroom_id")
+      .optional()
+      .custom(() => {
+        throw new Error("showroom_id được suy ra từ xe, không được gửi từ client");
+      }),
     body("total_price")
-      .notEmpty().withMessage("Không được để trống")
-      .isFloat({ gt: 0 }).withMessage("Phải là số lớn hơn 0"),
+      .optional()
+      .custom(() => {
+        throw new Error("total_price được tính ở backend, không được gửi từ client");
+      }),
 
     body("note")
       .optional()

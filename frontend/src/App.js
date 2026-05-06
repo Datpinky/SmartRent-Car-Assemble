@@ -18,11 +18,6 @@ import AdminProfile from './pages/admin/AdminProfile/AdminProfile';
 import ShowroomVerification from './pages/admin/ShowroomVerification/ShowroomVerification';
 import TransactionMonitor from './pages/admin/TransactionMonitor/TransactionMonitor';
 import UserManagement from './pages/admin/UserManagement/UserManagement';
-import MyVehicles from './pages/owner/MyVehicles/MyVehicles';
-import OwnerDashboard from './pages/owner/OwnerDashboard/OwnerDashboard';
-import OwnerProfile from './pages/owner/OwnerProfile/OwnerProfile';
-import Revenue from './pages/owner/Revenue/Revenue';
-import VehicleTracking from './pages/owner/VehicleTracking/VehicleTracking';
 import NotFound from './pages/NotFound';
 import AIReports from './pages/renter/AIReports/AIReports';
 import Checkout from './pages/renter/Checkout/Checkout';
@@ -109,11 +104,7 @@ const App = () => (
           <Route path="/showroom/ai-inspection" element={<DashboardPage roles={['showroom']}><AIInspection /></DashboardPage>} />
           <Route path="/showroom/profile" element={<DashboardPage roles={['showroom']}><ShowroomProfile /></DashboardPage>} />
 
-          <Route path="/owner/dashboard" element={<DashboardPage roles={['owner']}><OwnerDashboard /></DashboardPage>} />
-          <Route path="/owner/vehicles" element={<DashboardPage roles={['owner']}><MyVehicles /></DashboardPage>} />
-          <Route path="/owner/tracking" element={<DashboardPage roles={['owner']}><VehicleTracking /></DashboardPage>} />
-          <Route path="/owner/revenue" element={<DashboardPage roles={['owner']}><Revenue /></DashboardPage>} />
-          <Route path="/owner/profile" element={<DashboardPage roles={['owner']}><OwnerProfile /></DashboardPage>} />
+          <Route path="/owner/*" element={<Navigate to="/showroom/dashboard" replace />} />
 
           <Route path="/renter/dashboard" element={<RenterPage><RenterDashboard /></RenterPage>} />
           <Route path="/renter/profile" element={<RenterPage><Profile /></RenterPage>} />

@@ -32,7 +32,18 @@ class ProfileService {
     }
 
     async updateProfile(userId, data) {
-        return await UserModel.findByIdAndUpdate(userId, data, { new: true }).select('-password');
+        const payload = { ...(data || {}) };
+        if (Object.prototype.hasOwnProperty.call(payload, 'logo_url')) {
+            payload.logo = payload.logo_url;
+            delete payload.logo_url;
+        }
+        if (Object.prototype.hasOwnProperty.call(payload, 'public_address')) {
+            const pa = payload.public_address;
+            if (pa && !payload.address) payload.address = pa;
+            if (pa && !payload.showroom_address) payload.showroom_address = pa;
+            delete payload.public_address;
+        }
+        return await UserModel.findByIdAndUpdate(userId, payload, { new: true }).select('-password');
     }
 
     async deleteProfileById(userId) {

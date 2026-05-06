@@ -17,6 +17,43 @@ const normalizeResult = (item = {}) => ({
   raw: item,
 });
 
+/** Có số nhà ở đầu chuỗi (vd. 130, 12A) — autocomplete thuần thường chỉ trả cấp phường/thành phố. */
+const leadingHouseToken = (query) => {
+  const m = String(query || '').trim().match(/^(\d+[a-zA-Z]*)\b/);
+  return m ? m[1] : '';
+};
+
+/** Ưu tiên kết quả có số nhà/trùng từ khoá với câu tìm (OSM thiếu số nhà là chuyện thường gặp ở VN). */
+const scoreSuggestion = (displayName, query) => {
+  const q = normalizeQuery(query).toLowerCase();
+  const a = String(displayName || '').toLowerCase();
+  let score = 0;
+  const house = leadingHouseToken(q);
+  if (house) {
+    const re = new RegExp(`(?:^|[,\\s])${house}(?:[,\\s]|$)`, 'i');
+    if (re.test(a)) score += 220;
+  }
+  const tokens = q.split(/[,]+|\s+/).filter((t) => t.length > 1);
+  for (const t of tokens) {
+    if (a.includes(t)) score += Math.min(12, 4 + t.length);
+  }
+  return score;
+};
+
+const mergeDedupeAndRank = (items, query, limit) => {
+  const seen = new Set();
+  const merged = [];
+  for (const item of items) {
+    if (!item?.address || !Number.isFinite(item.lat) || !Number.isFinite(item.lng)) continue;
+    const key = `${item.address.toLowerCase()}|${item.lat.toFixed(4)}|${item.lng.toFixed(4)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push({ ...item, _rank: scoreSuggestion(item.address, query) });
+  }
+  merged.sort((x, y) => y._rank - x._rank);
+  return merged.slice(0, limit).map(({ _rank, ...rest }) => rest);
+};
+
 const normalizeReverseResult = (payload = {}) => normalizeResult({
   ...payload,
   display_name: payload.display_name || payload.name || '',
@@ -122,7 +159,11 @@ export const mapService = {
       return [];
     }
 
-    const cacheKey = `${trimmedQuery.toLowerCase()}|${limit}|${countrycodes}|${dedupe}|${normalizecity}|direct`;
+    const hasHouse = Boolean(leadingHouseToken(trimmedQuery));
+    const iqDedupe = hasHouse ? 0 : dedupe;
+    const iqNormCity = hasHouse ? 0 : normalizecity;
+
+    const cacheKey = `${trimmedQuery.toLowerCase()}|${limit}|${countrycodes}|${iqDedupe}|${iqNormCity}|v2`;
     if (directAutocompleteCache.has(cacheKey)) {
       return directAutocompleteCache.get(cacheKey);
     }
@@ -134,7 +175,7 @@ export const mapService = {
     const providerUrls = [];
     if (locationIqKey) {
       providerUrls.push(
-        `https://api.locationiq.com/v1/autocomplete?key=${encodeURIComponent(locationIqKey)}&q=${encodedQuery}&accept-language=vi&format=json&limit=${normalizedLimit}&countrycodes=${encodeURIComponent(countrycodes)}&dedupe=${encodeURIComponent(dedupe)}&normalizecity=${encodeURIComponent(normalizecity)}`
+        `https://api.locationiq.com/v1/autocomplete?key=${encodeURIComponent(locationIqKey)}&q=${encodedQuery}&accept-language=vi&format=json&limit=${normalizedLimit}&countrycodes=${encodeURIComponent(countrycodes)}&dedupe=${encodeURIComponent(iqDedupe)}&normalizecity=${encodeURIComponent(iqNormCity)}`
       );
     }
 
@@ -142,34 +183,37 @@ export const mapService = {
       `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodedQuery}&accept-language=vi&limit=${normalizedLimit}&countrycodes=${encodeURIComponent(countrycodes)}&addressdetails=1`
     );
 
-    for (const url of providerUrls) {
-      try {
-        const payload = await fetchJson(url);
-        const data = Array.isArray(payload) ? payload : [];
-        const seenAddresses = new Set();
-        const results = data
-          .map(normalizeResult)
-          .filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng) && item.address)
-          .filter((item) => {
-            const key = item.address.toLowerCase();
-            if (seenAddresses.has(key)) {
-              return false;
-            }
-            seenAddresses.add(key);
-            return true;
-          });
+    const collectFromUrl = async (url) => {
+      const payload = await fetchJson(url);
+      const data = Array.isArray(payload) ? payload : [];
+      return data
+        .map(normalizeResult)
+        .filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng) && item.address);
+    };
 
-        if (results.length > 0) {
-          directAutocompleteCache.set(cacheKey, results);
-          return results;
-        }
+    const autoLists = await Promise.all(
+      providerUrls.map((url) =>
+        collectFromUrl(url).catch(() => [])
+      )
+    );
+
+    let combined = autoLists.flat();
+
+    if (hasHouse && trimmedQuery.length >= 5) {
+      try {
+        const forward = await this.directForwardGeocode(trimmedQuery, {
+          limit: normalizedLimit,
+          countrycodes,
+        });
+        combined = combined.concat(forward);
       } catch {
-        // Try the next public map provider.
+        /* noop */
       }
     }
 
-    directAutocompleteCache.set(cacheKey, []);
-    return [];
+    const results = mergeDedupeAndRank(combined, trimmedQuery, normalizedLimit);
+    directAutocompleteCache.set(cacheKey, results);
+    return results;
   },
 
   async autocomplete(query, { limit = 5, countrycodes = 'vn', dedupe = 1, normalizecity = 1 } = {}) {

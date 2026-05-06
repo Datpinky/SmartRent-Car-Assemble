@@ -46,21 +46,43 @@ const vehicleSchema = new mongoose.Schema(
         },
         verified: { type: Date },
         company_owned: { type: Boolean, default: false },
+        showroom_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
         added_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
         active: { type: Boolean, default: true },
 
-        // Consignment support: xe ký gửi từ chủ xe cá nhân
+        ownership_type: {
+            type: String,
+            enum: ['showroom_owned', 'consigned'],
+            default: 'showroom_owned'
+        },
         source: {
             type: String,
             enum: ['showroom_owned', 'consigned'],
             default: 'showroom_owned'
         },
-        consignor_name: { type: String },
-        consignor_phone: { type: String },
-        commission_rate: { type: Number, min: 0, max: 100 },
+        consignor: {
+            name: { type: String },
+            phone: { type: String },
+            id_doc: { type: String }
+        },
+        consignor_name: { type: String }, // legacy compatibility
+        consignor_phone: { type: String }, // legacy compatibility
+        revenue_share_rule: {
+            platform_fee_percent: { type: Number, min: 0, max: 100, default: 10 },
+            showroom_share_percent: { type: Number, min: 0, max: 100, default: 90 },
+            consignor_share_percent: { type: Number, min: 0, max: 100, default: 0 }
+        },
+        commission_rate: { type: Number, min: 0, max: 100 }, // legacy compatibility
+        consignment_status: {
+            type: String,
+            enum: ['pending', 'active', 'suspended', 'ended'],
+            default: 'pending'
+        },
     },
     { timestamps: true }
 );
 
+vehicleSchema.index({ vehicle_plate_number: 1 }, { unique: true, sparse: true });
+vehicleSchema.index({ showroom_id: 1, status: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Vehicle', vehicleSchema);

@@ -47,7 +47,7 @@ const getCoordinationMeta = (booking, flowState, paymentStatus) => {
       waitingFor: needsRetry
         ? 'Hệ thống đang chờ bạn tạo lại và hoàn tất phiên thanh toán.'
         : 'Hệ thống đang chờ bạn hoàn tất thanh toán cho booking này.',
-      owner: 'Bên cần xử lý: Bạn',
+      owner: 'Bên cần xử lý: Bạn thuê xe',
       nextStep: 'Sau khi thanh toán thành công, booking sẽ chuyển sang Chờ showroom xử lý.',
       renterAction: needsRetry ? 'Thanh toán lại để tiếp tục quy trình đặt xe.' : 'Hoàn tất thanh toán để showroom tiếp tục xử lý.',
       menuKey: 'pending-payments',
@@ -96,7 +96,7 @@ const getCoordinationMeta = (booking, flowState, paymentStatus) => {
       waitingFor: flowState.hasEnded
         ? 'Hệ thống đang chờ bạn mở quy trình trả xe và lưu bộ hồ sơ đối chiếu.'
         : 'Booking đang ở giai đoạn thuê xe. Bạn chủ động sử dụng xe và báo sự cố nếu cần.',
-      owner: 'Bên cần xử lý: Bạn',
+      owner: 'Bên cần xử lý: Bạn thuê xe',
       nextStep: flowState.hasEnded
         ? 'Mở [Yêu cầu trả xe] xe để upload ảnh trả xe và lưu bộ hồ sơ đối chiếu cho showroom.'
         : 'Khi đến hạn, bạn sẽ mở yêu cầu trả xe để thực hiện bước trả xe.',

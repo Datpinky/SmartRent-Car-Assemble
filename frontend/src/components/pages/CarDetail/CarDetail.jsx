@@ -1,11 +1,9 @@
-﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   FaStar,
   FaMapMarkerAlt,
   FaGasPump,
-  FaHeart,
-  FaRegHeart,
   FaShareAlt,
   FaChevronLeft,
   FaChevronRight,
@@ -17,8 +15,9 @@ import CarLocationMap from '../../Map/CarLocationMap';
 import Modal from '../../common/Modal';
 import vehicleService from '../../../services/vehicleService';
 import vehicleLocationService from '../../../services/vehicleLocationService';
+import userLocationService from '../../../services/userLocationService';
+import mapService from '../../../services/mapService';
 import reviewService from '../../../services/reviewService';
-import favoriteService from '../../../services/favoriteService';
 import bookingService from '../../../services/bookingService';
 import { useAuth } from '../../../contexts/AuthContext';
 import {
@@ -32,7 +31,6 @@ import {
 const ROLE_DEFAULT_PATHS = {
   admin: '/admin/dashboard',
   showroom: '/showroom/dashboard',
-  owner: '/owner/dashboard',
   renter: '/renter/profile',
 };
 
@@ -520,6 +518,7 @@ const BookingCard = ({ car, id, avgRating, navigate, user, initialRentalWindow, 
 
     navigate(`/renter/checkout/${id}${buildRentalWindowQuery(pickupDate, returnDate)}`, {
       state: {
+        fromCarDetailBooking: true,
         car: {
           ...car,
           id: vehicleId,
@@ -700,9 +699,7 @@ const CarDetail = () => {
   const [reviews, setReviews] = useState([]);
   const [reviewsMeta, setReviewsMeta] = useState({ total: 0 });
   const [reviewsLoading, setReviewsLoading] = useState(false);
-  const [liked, setLiked] = useState(false);
-  const [likeLoading, setLikeLoading] = useState(false);
-  const [vehicleLocation, setVehicleLocation] = useState(null);
+  const [pickupMap, setPickupMap] = useState(null);
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [editingReviewId, setEditingReviewId] = useState('');
   const [reviewAccessLoading, setReviewAccessLoading] = useState(false);
@@ -747,25 +744,100 @@ const CarDetail = () => {
     }
   }, [id]);
 
-  const loadVehicleLocation = useCallback(async () => {
-    if (!isMongoId(id) || !localStorage.getItem('smartrent_token')) {
-      setVehicleLocation(null);
+  const loadPickupMap = useCallback(async (carData) => {
+    if (!carData) {
+      setPickupMap(null);
+      return;
+    }
+    const vehicleId = carData.id || carData._id;
+    if (!isMongoId(vehicleId)) {
+      setPickupMap(null);
       return;
     }
 
-    try {
-      const locationData = await vehicleLocationService.getByVehicleId(id);
-      setVehicleLocation(locationData || null);
-    } catch {
-      setVehicleLocation(null);
+    const showroomId = carData.showroomId;
+    const hint = String(carData.showroomAddressHint || '').trim();
+
+    if (showroomId && isMongoId(String(showroomId))) {
+      try {
+        const ul = await userLocationService.getByUserId(String(showroomId));
+        if (
+          ul &&
+          ul.address &&
+          Number.isFinite(Number(ul.latitude)) &&
+          Number.isFinite(Number(ul.longitude))
+        ) {
+          setPickupMap({
+            address: String(ul.address).trim(),
+            latitude: Number(ul.latitude),
+            longitude: Number(ul.longitude),
+            plusCode: ul.plusCode || '',
+            source: 'showroom',
+          });
+          return;
+        }
+      } catch {
+        /* thử bước tiếp */
+      }
     }
-  }, [id]);
+
+    if (hint.length >= 6) {
+      try {
+        const results = await mapService.forwardGeocode(hint, { limit: 1, countrycodes: 'vn' });
+        const first = results?.[0];
+        if (first && Number.isFinite(first.lat) && Number.isFinite(first.lng)) {
+          setPickupMap({
+            address: first.address || hint,
+            latitude: first.lat,
+            longitude: first.lng,
+            plusCode: first.plusCode || '',
+            source: 'geocode',
+          });
+          return;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('smartrent_token')) {
+      try {
+        const vl = await vehicleLocationService.getByVehicleId(vehicleId);
+        if (
+          vl &&
+          vl.address &&
+          Number.isFinite(Number(vl.latitude)) &&
+          Number.isFinite(Number(vl.longitude))
+        ) {
+          setPickupMap({
+            address: String(vl.address).trim(),
+            latitude: Number(vl.latitude),
+            longitude: Number(vl.longitude),
+            plusCode: vl.plus_code || vl.plusCode || '',
+            source: 'vehicle',
+          });
+          return;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    setPickupMap(null);
+  }, []);
 
   useEffect(() => {
     loadCar();
     loadReviews();
-    loadVehicleLocation();
-  }, [loadCar, loadReviews, loadVehicleLocation]);
+  }, [loadCar, loadReviews]);
+
+  useEffect(() => {
+    if (car) {
+      void loadPickupMap(car);
+    } else {
+      setPickupMap(null);
+    }
+  }, [car, loadPickupMap]);
 
   useEffect(() => {
     setActiveImageIndex(0);
@@ -773,43 +845,25 @@ const CarDetail = () => {
     setBrokenImages({});
   }, [car?._id, car?.id]);
 
-  const handleToggleFavorite = async (event) => {
-    event.stopPropagation();
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
-    if (!isMongoId(id)) {
-      setLiked((current) => !current);
-      return;
-    }
-
-    setLikeLoading(true);
-    try {
-      const response = await favoriteService.toggle(id);
-      setLiked(response.favorited);
-    } catch {
-      setLiked((current) => !current);
-    } finally {
-      setLikeLoading(false);
-    }
-  };
-
   const carName = car?.name || '';
   const hue = Math.abs(carName.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)) % 360;
   const avgRating = reviews.length
     ? (reviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) / reviews.length).toFixed(1)
     : Number(car?.rating || 0).toFixed(1);
   const tripCount = reviewsMeta.total || car?.trips || 0;
-  const vehicleAddress = vehicleLocation?.address?.trim() || '';
-  const vehicleLat = Number(vehicleLocation?.latitude);
-  const vehicleLng = Number(vehicleLocation?.longitude);
-  const hasVehicleMapData = Boolean(
-    vehicleAddress && Number.isFinite(vehicleLat) && Number.isFinite(vehicleLng)
+  const showroomMapAddress = pickupMap?.address?.trim() || '';
+  const showroomMapLat = Number(pickupMap?.latitude);
+  const showroomMapLng = Number(pickupMap?.longitude);
+  const hasShowroomMapData = Boolean(
+    showroomMapAddress && Number.isFinite(showroomMapLat) && Number.isFinite(showroomMapLng)
   );
   const displayAddress =
-    vehicleAddress || car?.pickupAddress || car?.address || car?.location || '';
+    car?.showroomAddressHint ||
+    car?.pickupAddress ||
+    car?.address ||
+    car?.location ||
+    showroomMapAddress ||
+    '';
 
   const galleryImages = useMemo(() => {
     const images = Array.isArray(car?.images) ? car.images.filter(Boolean) : [];
@@ -1040,20 +1094,6 @@ const CarDetail = () => {
                 <FaShareAlt size={13} aria-hidden="true" /> Chia sẻ
               </span>
             </button>
-            <button
-              type="button"
-              onClick={handleToggleFavorite}
-              disabled={likeLoading}
-              className={`cursor-pointer rounded-full border bg-white px-4 py-2 text-[0.82rem] transition-colors ${liked
-                ? 'border-red-400 text-red-500 hover:border-red-500'
-                : 'border-gray-200 text-gray-600 hover:border-primary hover:text-primary'
-                }`}
-            >
-              <span className="inline-flex items-center gap-1.5">
-                {liked ? <FaHeart size={13} aria-hidden="true" /> : <FaRegHeart size={13} aria-hidden="true" />}
-                {liked ? 'Đã yêu thích' : 'Yêu thích'}
-              </span>
-            </button>
           </div>
 
           <div className="flex flex-col gap-5 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
@@ -1108,20 +1148,32 @@ const CarDetail = () => {
               </div>
             </div>
 
-            {(hasVehicleMapData || displayAddress) && (
+            {(hasShowroomMapData || car.showroomAddressHint || displayAddress) && (
               <div>
-                <div className={sectionTitle}>Vị trí nhận xe</div>
-                {hasVehicleMapData ? (
+                <div className={sectionTitle}>Vị trí showroom</div>
+                <p className="mb-2 text-[0.78rem] leading-snug text-gray-500">
+                  Bản đồ hiển thị địa điểm showroom cho thuê xe này (điểm nhận xe tham khảo).
+                </p>
+                {hasShowroomMapData ? (
                   <CarLocationMap
-                    locationText={vehicleAddress}
-                    lat={vehicleLat}
-                    lng={vehicleLng}
-                    plusCode={vehicleLocation?.plusCode}
+                    pinLabel="Showroom"
+                    locationText={
+                      car.showroom
+                        ? `${car.showroom} — ${showroomMapAddress}`
+                        : showroomMapAddress
+                    }
+                    lat={showroomMapLat}
+                    lng={showroomMapLng}
+                    plusCode={pickupMap?.plusCode}
                     city=""
                   />
                 ) : (
                   <div className="rounded-2xl border border-gray-200 bg-gray-50 px-5 py-4 text-[0.82rem] text-gray-600">
-                    Địa chỉ nhận xe: {displayAddress}
+                    {car.showroomAddressHint
+                      ? `Địa chỉ showroom: ${car.showroomAddressHint}`
+                      : displayAddress
+                        ? `Địa chỉ tham khảo: ${displayAddress}`
+                        : 'Showroom chưa cập nhật vị trí trên bản đồ. Liên hệ showroom để xác nhận điểm nhận xe.'}
                   </div>
                 )}
               </div>

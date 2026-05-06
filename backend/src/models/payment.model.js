@@ -11,6 +11,11 @@ const paymentSchema = new mongoose.Schema(
             enum: ['stripe', 'Debit/Credit Card', 'Paypal', 'Bank Transfer', 'Cash', 'Bitcoin', 'Ethereum'],
             default: 'stripe'
         },
+        payment_kind: {
+            type: String,
+            enum: ['deposit', 'balance'],
+            default: 'deposit'
+        },
         payment_status: {
             type: String,
             required: true,

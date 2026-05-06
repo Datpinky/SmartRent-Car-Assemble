@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "migrate:owner-merge": "node src/utils/migrate-owner-to-showroom.js",
+    "migrate:owner-merge:dry": "node src/utils/migrate-owner-to-showroom.js --dry-run"
   },
   "keywords": [],
   "author": "",

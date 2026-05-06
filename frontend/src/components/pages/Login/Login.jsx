@@ -12,7 +12,6 @@ import {
 const ROLE_REDIRECTS = {
   admin: '/admin/dashboard',
   showroom: '/showroom/dashboard',
-  owner: '/owner/dashboard',
   renter: '/renter/dashboard',
 };
 
@@ -184,7 +183,6 @@ const Login = () => {
       const allowedPrefix = {
         admin: '/admin',
         showroom: '/showroom',
-        owner: '/owner',
         renter: '/renter',
       }[result.user.role];
 
@@ -452,7 +450,6 @@ const Login = () => {
               <div className="flex flex-col gap-2">
                 {[
                   { value: 'renter', label: 'Thuê xe (khách hàng)' },
-                  { value: 'owner', label: 'Cho thuê xe cá nhân (chủ xe)' },
                 ].map(({ value, label }) => (
                   <label
                     key={value}

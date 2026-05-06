@@ -1,13 +1,11 @@
 const paymentService = require('../services/payment.service');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const PaymentModel = require('../models/payment.model');
 
 class PaymentController {
   async createPaymentForBooking(req, res, next) {
     try {
       const { bookingId } = req.params;
 
-      const payment = await paymentService.createPaymentForBooking(bookingId);
+      const payment = await paymentService.createPaymentForBooking(bookingId, req.user);
 
       return res.status(201).json({
         message: 'Tạo thanh toán thành công',
@@ -31,7 +29,7 @@ class PaymentController {
   async getPaymentDBById(req, res, next) {
     try {
       const { paymentId } = req.params;
-      const payment = await paymentService.getPaymentDBById(paymentId);
+      const payment = await paymentService.getPaymentDBById(paymentId, req.user);
 
       if (!payment) {
         return res.status(404).json({ error: "Không tìm thấy dữ liệu thanh toán" });
@@ -49,6 +47,9 @@ class PaymentController {
     try {
       const { intentId } = req.params;
       const paymentIntent = await paymentService.getPaymentIntentById(intentId);
+      if (paymentIntent?.metadata?.payment_id) {
+        await paymentService.getPaymentDBById(paymentIntent.metadata.payment_id, req.user);
+      }
 
 
       if (!paymentIntent) {
@@ -71,7 +72,7 @@ class PaymentController {
 
   async getListPaymentDB(req, res, next) {
     try {
-      const payments = await paymentService.getListPaymentDB(req.body);
+      const payments = await paymentService.getListPaymentDB(req.body, req.user);
       res.status(200).json({
         message: "Lấy danh sách thanh toán thành công",
         data: payments
@@ -85,7 +86,7 @@ class PaymentController {
     try {
       const { bookingId } = req.params;
 
-      const state = await paymentService.getPaymentState(bookingId);
+      const state = await paymentService.getPaymentState(bookingId, req.user);
 
       return res.status(200).json({
         message: "Lấy trạng thái thanh toán thành công",
@@ -101,7 +102,7 @@ class PaymentController {
     try {
       const { paymentIntentId } = req.body;
 
-      const { intent, paymentStatus, bookingStatus } = await paymentService.syncPaymentIntentWithDB(paymentIntentId);
+      const { intent, paymentStatus, bookingStatus } = await paymentService.syncPaymentIntentWithDB(paymentIntentId, req.user);
 
       // dựng message ngắn gọn
       const statusMessage =

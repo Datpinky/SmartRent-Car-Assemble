@@ -55,6 +55,13 @@ class ReviewService {
             },
         };
     }
+
+    async getMineByVehicleId(vehicleId, userId) {
+        const vehicle = await vehicleModel.findById(vehicleId);
+        if (!vehicle) throwError("Không tìm thấy xe", 404);
+
+        return reviewModel.find({ vehicle_id: vehicleId, user: userId }).sort({ createdAt: -1 }).lean();
+    }
 }
 
 module.exports = new ReviewService();

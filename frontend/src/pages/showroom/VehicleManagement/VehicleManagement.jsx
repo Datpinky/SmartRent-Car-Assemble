@@ -9,9 +9,10 @@ import vehicleService from '../../../services/vehicleService';
 import { useAuth } from '../../../contexts/AuthContext';
 import { formatVndPerDay } from '../../../utils/currencyFormat';
 
-const STATUS_OPTS = ['available', 'active', 'maintenance'];
+const STATUS_OPTS = ['available', 'rented', 'maintenance'];
 const FUEL_OPTS = ['Xăng', 'Dầu', 'Điện', 'Hybrid'];
-const CAT_OPTS = ['Sedan', 'SUV', 'MPV', 'Hatchback', 'Bán tải'];
+/** Khớp `vehicle.model` vehicle_type enum */
+const CAT_OPTS = ['Sedan', 'SUV', 'Wagon', 'Truck', 'Bike', 'Bicycle', 'others'];
 
 const initForm = { name: '', plate: '', brand: '', category: 'SUV', price: '', seats: 5, fuel: 'Xăng', transmission: 'Số tự động', source: 'showroom', status: 'available', consignOwner: '' };
 
@@ -22,9 +23,11 @@ const VehicleManagement = () => {
   const [loadError, setLoadError]     = useState('');
   const [modal, setModal]             = useState(null);
   const [form, setForm]               = useState(initForm);
+  const [imageUrls, setImageUrls]     = useState([]);
   const [editId, setEditId]           = useState(null);
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterSource, setFilterSource] = useState('all');
+  const [uploadKey, setUploadKey] = useState(0);
 
   const fetchVehicles = useCallback(async () => {
     setLoading(true);
@@ -42,7 +45,13 @@ const VehicleManagement = () => {
 
   useEffect(() => { fetchVehicles(); }, [fetchVehicles]);
 
-  const openAdd  = () => { setForm(initForm); setEditId(null); setModal('form'); };
+  const openAdd  = () => {
+    setForm(initForm);
+    setImageUrls([]);
+    setEditId(null);
+    setUploadKey((k) => k + 1);
+    setModal('form');
+  };
   const openEdit = (v) => {
     setForm({
       name: v.name || '', plate: v.plateNumber || '', brand: v.brand || '',
@@ -50,28 +59,46 @@ const VehicleManagement = () => {
       fuel: v.fuel || 'Xăng', transmission: v.transmission || 'Số tự động',
       source: v.companyOwned ? 'showroom' : 'consigned', status: v.status || 'available', consignOwner: '',
     });
+    const existing = Array.isArray(v.images) ? v.images.filter(Boolean) : [];
+    setImageUrls(existing.length ? existing : (v.image ? [v.image] : []));
     setEditId(v._id || v.id);
+    setUploadKey((k) => k + 1);
     setModal('form');
   };
-  const closeModal = () => { setModal(null); setForm(initForm); setEditId(null); };
+  const closeModal = () => {
+    setModal(null);
+    setForm(initForm);
+    setImageUrls([]);
+    setEditId(null);
+  };
 
   const handleSave = async () => {
     try {
+      const apiStatus =
+        form.status === 'active' ? 'rented' : form.status;
+      const plate = String(form.plate || '').trim();
       const payload = {
         vehicle_name: form.name,
-        vehicle_plate_number: form.plate,
+        vehicle_plate_number: plate,
         vehicle_brand: form.brand,
         vehicle_model: form.name,
         vehicle_type: form.category,
+        vehicle_engine_number: plate || 'N/A',
+        vehicle_identification_number: plate || 'N/A',
         vehicle_hire_rate_in_figures: Number(form.price),
         vehicle_hire_rate_currency: 'VND',
         vehicle_hire_charge_per_timing: 'day',
         number_of_seats: Number(form.seats),
         fuel_type: ({ 'Xăng': 'petrol', 'Dầu': 'diesel', 'Điện': 'electric', 'Hybrid': 'hybrid' })[form.fuel] || 'petrol',
         transmission: form.transmission === 'Số sàn' ? 'manual' : 'automatic',
-        status: form.status,
+        status: apiStatus,
         company_owned: form.source === 'showroom',
+        ownership_type: form.source === 'consigned' ? 'consigned' : 'showroom_owned',
+        source: form.source === 'consigned' ? 'consigned' : 'showroom_owned',
       };
+      if (imageUrls.length > 0) {
+        payload.vehicle_images_paths = imageUrls;
+      }
       if (editId) {
         const updated = await vehicleService.update(editId, payload);
         setVehicles(prev => prev.map(v => (v._id || v.id) === editId ? updated : v));
@@ -168,9 +195,9 @@ const VehicleManagement = () => {
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           <span style={{ fontSize: '0.8rem', color: '#6b7280', marginRight: 4 }}>Trạng thái:</span>
-          {['all', 'available', 'active', 'maintenance'].map(s => (
+          {['all', 'available', 'rented', 'maintenance'].map(s => (
             <button key={s} onClick={() => setFilterStatus(s)} style={{ padding: '4px 12px', borderRadius: 50, border: '1.5px solid', borderColor: filterStatus === s ? '#00b14f' : '#e5e7eb', background: filterStatus === s ? '#00b14f' : '#fff', color: filterStatus === s ? '#fff' : '#374151', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' }}>
-              {s === 'all' ? 'Tất cả' : s === 'available' ? 'Sẵn sàng' : s === 'active' ? 'Đang thuê' : 'Bảo dưỡng'}
+              {s === 'all' ? 'Tất cả' : s === 'available' ? 'Sẵn sàng' : s === 'rented' ? 'Đang thuê' : 'Bảo dưỡng'}
             </button>
           ))}
         </div>
@@ -215,8 +242,6 @@ const VehicleManagement = () => {
             ['Phân loại', 'category', CAT_OPTS],
             ['Nhiên liệu', 'fuel', FUEL_OPTS],
             ['Hộp số', 'transmission', ['Số tự động', 'Số sàn']],
-            ['Nguồn xe', 'source', ['showroom', 'consigned']],
-            ['Trạng thái', 'status', STATUS_OPTS],
           ].map(([label, key, opts]) => (
             <div key={key}>
               <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>{label}</label>
@@ -227,15 +252,22 @@ const VehicleManagement = () => {
             </div>
           ))}
         </div>
-        {form.source === 'consigned' && (
-          <div style={{ marginTop: 14 }}>
-            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Tên chủ xe ký gửi</label>
-            <input value={form.consignOwner} onChange={e => setForm(f => ({ ...f, consignOwner: e.target.value }))}
-              style={{ width: '100%', border: '1.5px solid #e5e7eb', borderRadius: 9, padding: '8px 12px', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
-          </div>
-        )}
         <div style={{ marginTop: 14 }}>
-          <FileUpload label="Hình ảnh xe" multiple hint="JPG, PNG – tối đa 5MB mỗi ảnh" />
+          <FileUpload
+            key={`vehicle-upload-${uploadKey}`}
+            label="Hình ảnh xe"
+            multiple
+            hint="Đăng lên Cloudinary qua máy chủ; lưu khi bấm Lưu xe. JPG/PNG tối đa 5MB mỗi ảnh."
+            onUpload={(urls) => {
+              const next = (urls || []).filter(Boolean);
+              if (next.length) setImageUrls((prev) => [...prev, ...next]);
+            }}
+          />
+          {imageUrls.length > 0 && (
+            <p style={{ fontSize: '0.78rem', color: '#059669', marginTop: 8 }}>
+              Đã có {imageUrls.length} ảnh sẽ gửi khi lưu (chỉnh sửa xe có thể bổ sung thêm ảnh mới).
+            </p>
+          )}
         </div>
       </Modal>
     </div>

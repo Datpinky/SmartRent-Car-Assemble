@@ -5,7 +5,6 @@ import { useAuth } from '../../contexts/AuthContext';
 const ROLE_DEFAULT_PATHS = {
   admin: '/admin/dashboard',
   showroom: '/showroom/dashboard',
-  owner: '/owner/dashboard',
   renter: '/renter/dashboard',
 };
 

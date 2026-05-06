@@ -1,14 +1,27 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FaArrowRight, FaCheckCircle, FaEye, FaSpinner, FaTimes } from 'react-icons/fa';
+import {
+  FaArrowRight,
+  FaCalendarAlt,
+  FaCheckCircle,
+  FaEye,
+  FaMapMarkerAlt,
+  FaSpinner,
+  FaStickyNote,
+  FaTimes,
+  FaCar,
+  FaUser,
+} from 'react-icons/fa';
 import DataTable from '../../../components/common/DataTable';
 import Modal from '../../../components/common/Modal';
 import StatusBadge from '../../../components/common/StatusBadge';
 import bookingService from '../../../services/bookingService';
+import { sanitizeVehicleImageUrl } from '../../../services/vehicleService';
+import { sanitizeImageUrl } from '../../../utils/media';
 
 const STATUS_ORDER = [
-  'pending',
   'waiting_payment',
   'paid',
+  'pending',
   'confirmed',
   'waiting_handover',
   'handed_over',
@@ -20,9 +33,9 @@ const STATUS_ORDER = [
 ];
 
 const STATUS_LABELS = {
-  pending: 'Chờ xác nhận',
   waiting_payment: 'Chờ thanh toán',
   paid: 'Đã thanh toán',
+  pending: 'Chờ xác nhận',
   confirmed: 'Đã xác nhận',
   waiting_handover: 'Chờ bàn giao',
   handed_over: 'Đã bàn giao',
@@ -52,6 +65,116 @@ const getVehicleName = (vehicle) =>
   vehicle?.vehicle_name
   || [vehicle?.vehicle_brand || vehicle?.brand, vehicle?.vehicle_model || vehicle?.model].filter(Boolean).join(' ')
   || '—';
+
+const getBookingVehicleImage = (vehicle) => {
+  if (!vehicle || typeof vehicle !== 'object') return '';
+  const paths = [...(vehicle.vehicle_images_paths || []), ...(vehicle.images || [])].filter(Boolean);
+  const first = paths.map((p) => sanitizeVehicleImageUrl(p)).find(Boolean);
+  if (!first || typeof first !== 'string') return '';
+  return sanitizeImageUrl(first.trim());
+};
+
+const getRenterDisplay = (bookingRow) => {
+  const u = bookingRow?.user_id;
+  const fromObj =
+    u && typeof u === 'object'
+      ? {
+          name: u.name || u.full_name || '',
+          email: u.email || '',
+        }
+      : { name: '', email: '' };
+  let rawName = (fromObj.name || bookingRow?.renterName || '').trim();
+  let rawEmail = (fromObj.email || bookingRow?.renterEmail || '').trim();
+  if (rawName === '—') rawName = '';
+  if (rawEmail === '—') rawEmail = '';
+  const name = rawName ? rawName : null;
+  const email = rawEmail ? rawEmail : null;
+  return {
+    name: name || 'Chưa có tên trên hệ thống',
+    email: email || '—',
+    missing: !name,
+  };
+};
+
+function parseNoteSections(note) {
+  const raw = String(note || '').trim();
+  if (!raw || raw === '—') return { deliveryLine: '', otherNote: '' };
+  const m = raw.match(/^Giao xe:\s*(.+)$/i);
+  if (m) {
+    return { deliveryLine: m[1].trim(), otherNote: '' };
+  }
+  return { deliveryLine: '', otherNote: raw };
+}
+
+function BookingDetailHero({ bookingRow }) {
+  const vehicle = bookingRow?.vehicle_id && typeof bookingRow.vehicle_id === 'object' ? bookingRow.vehicle_id : null;
+  const imgSrc = getBookingVehicleImage(vehicle);
+  const [imgFailed, setImgFailed] = useState(false);
+  const showImg = Boolean(imgSrc) && !imgFailed;
+  const plate = vehicle?.vehicle_plate_number ? String(vehicle.vehicle_plate_number).trim() : '';
+  const fromVehicle = getVehicleName(vehicle);
+  const displayName =
+    (bookingRow?.vehicleName && String(bookingRow.vehicleName).trim() && bookingRow.vehicleName !== '—'
+      ? String(bookingRow.vehicleName).trim()
+      : null)
+    || (fromVehicle && fromVehicle !== '—' ? fromVehicle : null)
+    || 'Xe (đang tải hoặc chưa populate vehicle)';
+
+  useEffect(() => {
+    setImgFailed(false);
+  }, [bookingRow?.id, imgSrc]);
+
+  return (
+    <div className="rounded-2xl overflow-hidden border border-gray-200/90 bg-white shadow-[0_4px_24px_rgba(15,23,42,0.06)]">
+      <div className="relative flex flex-col sm:flex-row gap-0 sm:gap-0">
+        <div
+          className={`relative sm:w-[9.5rem] shrink-0 aspect-[4/3] sm:aspect-auto sm:min-h-[8.5rem] flex items-stretch ${
+            showImg ? 'bg-gray-100' : 'bg-gradient-to-br from-primary-light/90 to-emerald-100/80'
+          }`}
+        >
+          {showImg ? (
+            <img
+              src={imgSrc}
+              alt=""
+              className="w-full h-full object-cover"
+              onError={() => setImgFailed(true)}
+            />
+          ) : (
+            <div className="flex flex-1 items-center justify-center text-primary/90">
+              <FaCar className="text-5xl sm:text-4xl opacity-80" aria-hidden />
+            </div>
+          )}
+          <div className="absolute top-2 left-2 sm:hidden">
+            <span className="inline-flex items-center rounded-md bg-black/55 px-2 py-0.5 text-[0.65rem] font-bold tracking-wide text-white backdrop-blur-sm">
+              {`BK${String(bookingRow.id).slice(-6).toUpperCase()}`}
+            </span>
+          </div>
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col justify-center gap-3 px-4 py-4 sm:px-5 sm:py-5 bg-gradient-to-b from-white to-gray-50/80">
+          <div className="hidden sm:flex flex-wrap items-center justify-between gap-2">
+            <span className="code-badge font-mono">{`BK${String(bookingRow.id).slice(-6).toUpperCase()}`}</span>
+            <StatusBadge status={bookingRow.status} customLabel={STATUS_LABELS[bookingRow.status] || bookingRow.status} />
+          </div>
+          <div className="sm:hidden flex justify-end -mt-1">
+            <StatusBadge status={bookingRow.status} customLabel={STATUS_LABELS[bookingRow.status] || bookingRow.status} />
+          </div>
+          <div>
+            <p className="m-0 text-[0.65rem] font-bold uppercase tracking-[0.12em] text-gray-500">Xe đặt</p>
+            <h3 className="m-0 mt-1 text-lg sm:text-xl font-extrabold text-gray-900 leading-tight tracking-tight">
+              {displayName}
+            </h3>
+            {plate ? (
+              <p className="m-0 mt-2 inline-flex items-center gap-1.5 rounded-lg bg-gray-100 px-2.5 py-1 text-[0.75rem] font-semibold tabular-nums text-gray-700">
+                <span className="text-gray-400 font-normal">Biển</span>
+                {plate}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const BookingManagement = () => {
   const [bookings, setBookings] = useState([]);
@@ -338,38 +461,104 @@ const BookingManagement = () => {
         <DataTable columns={columns} data={filteredRows} searchPlaceholder="Tìm theo tên khách, xe…" />
       )}
 
-      <Modal isOpen={!!viewModal} onClose={() => setViewModal(null)} title="Chi tiết đặt xe" width={520}>
+      <Modal isOpen={!!viewModal} onClose={() => setViewModal(null)} title="Chi tiết đặt xe" width={640}>
         {viewModal && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ background: '#f0fdf4', borderRadius: 12, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <span className="code-badge">{`BK${String(viewModal.id).slice(-6).toUpperCase()}`}</span>
-                <div style={{ fontWeight: 700, fontSize: '1rem', color: '#111827', marginTop: 6 }}>{viewModal.vehicleName}</div>
+          <div className="flex flex-col gap-5 text-gray-900 -mx-0.5">
+            <BookingDetailHero key={viewModal.id} bookingRow={viewModal} />
+
+            {(() => {
+              const renter = getRenterDisplay(viewModal);
+              return (
+                <div className="rounded-2xl border border-gray-200/90 bg-white p-4 shadow-sm">
+                  <p className="m-0 mb-3 flex items-center gap-2 text-[0.7rem] font-bold uppercase tracking-[0.1em] text-gray-500">
+                    <FaUser className="text-primary text-sm" aria-hidden />
+                    Khách thuê
+                  </p>
+                  <div className="flex items-start gap-3 rounded-xl bg-gray-50/95 px-3.5 py-3 border border-gray-100">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white border border-gray-200 text-primary shadow-sm">
+                      <FaUser className="text-lg" aria-hidden />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className={`m-0 text-[0.95rem] font-bold leading-snug ${renter.missing ? 'text-gray-500' : 'text-gray-900'}`}>
+                        {renter.name}
+                      </p>
+                      <p className="m-0 mt-1 text-[0.82rem] text-gray-600 break-all">{renter.email}</p>
+                      {renter.missing && (
+                        <p className="m-0 mt-2 rounded-lg bg-amber-50 border border-amber-100 px-2.5 py-2 text-[0.72rem] text-amber-900 leading-snug">
+                          Chưa có thông tin khách từ API. Kiểm tra populate{' '}
+                          <code className="text-[0.68rem] bg-amber-100/80 px-1 rounded">user_id</code> khi trả danh sách
+                          booking.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="rounded-2xl border border-gray-200/90 bg-white p-4 shadow-sm">
+              <p className="m-0 mb-3 flex items-center gap-2 text-[0.7rem] font-bold uppercase tracking-[0.1em] text-gray-500">
+                <FaCalendarAlt className="text-primary text-sm" aria-hidden />
+                Lịch thuê
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 px-3.5 py-3">
+                  <p className="m-0 text-[0.7rem] font-semibold text-emerald-800/80">Nhận xe</p>
+                  <p className="m-0 mt-1 text-sm font-bold text-gray-900 tabular-nums">{viewModal.startDateLabel}</p>
+                </div>
+                <div className="rounded-xl border border-sky-100 bg-sky-50/40 px-3.5 py-3">
+                  <p className="m-0 text-[0.7rem] font-semibold text-sky-800/80">Trả xe</p>
+                  <p className="m-0 mt-1 text-sm font-bold text-gray-900 tabular-nums">{viewModal.endDateLabel}</p>
+                </div>
+                <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/60 px-3.5 py-3">
+                  <div>
+                    <p className="m-0 text-[0.7rem] font-medium text-gray-500">Số ngày thuê</p>
+                    <p className="m-0 mt-0.5 text-base font-bold text-gray-900 tabular-nums">{viewModal.dayCount} ngày</p>
+                  </div>
+                  <div className="text-left sm:text-right">
+                    <p className="m-0 text-[0.7rem] font-medium text-gray-500">Tổng thanh toán</p>
+                    <p className="m-0 mt-0.5 text-xl font-extrabold text-primary tabular-nums tracking-tight">
+                      {viewModal.totalLabel}đ
+                    </p>
+                  </div>
+                </div>
               </div>
-              <StatusBadge status={viewModal.status} customLabel={STATUS_LABELS[viewModal.status] || viewModal.status} />
             </div>
 
-            {[
-              ['Khách thuê', viewModal.renterName],
-              ['Email', viewModal.renterEmail],
-              ['Thời gian nhận', viewModal.startDateLabel],
-              ['Thời gian trả', viewModal.endDateLabel],
-              ['Số ngày', viewModal.dayCount],
-              ['Tổng tiền', `${viewModal.totalLabel}đ`],
-              ['Ghi chú', viewModal.note || '—'],
-            ].map(([label, value]) => (
-              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f3f4f6', paddingBottom: 10, gap: 12 }}>
-                <span style={{ fontSize: '0.82rem', color: '#6b7280' }}>{label}</span>
-                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#111827', textAlign: 'right' }}>{value}</span>
-              </div>
-            ))}
+            {(() => {
+              const { deliveryLine, otherNote } = parseNoteSections(viewModal.note);
+              if (!deliveryLine && (!otherNote || otherNote === '—')) return null;
+              return (
+                <div className="space-y-3">
+                  {deliveryLine ? (
+                    <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary-light/35 to-white px-4 py-3.5 shadow-sm">
+                      <p className="m-0 flex items-center gap-2 text-[0.7rem] font-bold uppercase tracking-wide text-primary">
+                        <FaMapMarkerAlt className="text-base" aria-hidden />
+                        Địa chỉ / hình thức giao xe
+                      </p>
+                      <p className="m-0 mt-2 text-[0.88rem] font-medium text-gray-900 leading-relaxed">{deliveryLine}</p>
+                    </div>
+                  ) : null}
+                  {otherNote ? (
+                    <div className="rounded-2xl border border-amber-200/70 bg-amber-50/80 px-4 py-3.5">
+                      <p className="m-0 flex items-center gap-2 text-[0.7rem] font-bold uppercase tracking-wide text-amber-900/80">
+                        <FaStickyNote aria-hidden />
+                        Ghi chú
+                      </p>
+                      <p className="m-0 mt-2 text-[0.85rem] text-amber-950 leading-relaxed whitespace-pre-wrap break-words">
+                        {otherNote}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })()}
 
-            <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>
+            <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2 border-t border-gray-100">
               {CANCELLABLE_STATUSES.includes(viewModal.status) && (
                 <button
                   type="button"
-                  className="btn-danger"
-                  style={{ flex: 1 }}
+                  className="btn-danger flex-1 rounded-xl py-3 text-[0.9rem] font-semibold shadow-sm transition hover:opacity-95"
                   onClick={() => {
                     setCancelModal(viewModal);
                     setViewModal(null);
@@ -382,20 +571,21 @@ const BookingManagement = () => {
               {PRIMARY_ACTIONS[viewModal.status] && (
                 <button
                   type="button"
-                  className="btn-primary"
-                  style={{ flex: 1 }}
+                  className="btn-primary flex-1 rounded-xl py-3 text-[0.9rem] font-semibold shadow-md inline-flex items-center justify-center gap-2 transition hover:opacity-95"
                   onClick={() => {
                     updateStatus(viewModal.id, PRIMARY_ACTIONS[viewModal.status].nextStatus);
                     setViewModal(null);
                   }}
                 >
-                  {PRIMARY_ACTIONS[viewModal.status].label} <FaCheckCircle aria-hidden="true" />
+                  <span>{PRIMARY_ACTIONS[viewModal.status].label}</span>
+                  <FaCheckCircle aria-hidden="true" className="text-base opacity-90" />
                 </button>
               )}
             </div>
           </div>
         )}
       </Modal>
+
 
       <Modal
         isOpen={!!cancelModal}

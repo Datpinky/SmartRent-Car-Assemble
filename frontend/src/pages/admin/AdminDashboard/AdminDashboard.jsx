@@ -171,7 +171,7 @@ const AdminDashboard = () => {
             <Tooltip content={<CustomTooltip />} />
             <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '0.78rem' }} />
             <Bar dataKey="renters"   name="Khách thuê" fill="#00b14f" radius={[4,4,0,0]} />
-            <Bar dataKey="owners"    name="Chủ xe"     fill="#0891b2" radius={[4,4,0,0]} />
+            <Bar dataKey="consignedVehicles"    name="Xe ký gửi"     fill="#0891b2" radius={[4,4,0,0]} />
             <Bar dataKey="showrooms" name="Showroom"   fill="#6d28d9" radius={[4,4,0,0]} />
           </BarChart>
         </ResponsiveContainer>

@@ -6,7 +6,6 @@ import { useAuth } from '../../contexts/AuthContext';
 const ROLE_DASHBOARD_PATHS = {
   admin: '/admin/dashboard',
   showroom: '/showroom/dashboard',
-  owner: '/owner/dashboard',
   renter: '/renter/profile',
 };
 

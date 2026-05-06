@@ -147,9 +147,6 @@ const PaymentResult = () => {
               <FaCheckCircle style={{ fontSize: '3rem', color: '#059669' }} />
             </div>
             <h2 style={{ fontWeight: 800, fontSize: '1.3rem', color: '#111827', marginBottom: 8 }}>Thanh toán thành công</h2>
-            <p style={{ color: '#6b7280', fontSize: '0.88rem', lineHeight: 1.6, marginBottom: 24 }}>
-              Booking của bạn đã được ghi nhận thanh toán thành công trên hệ thống.
-            </p>
           </>
         ) : isPending ? (
           <>
@@ -179,11 +176,7 @@ const PaymentResult = () => {
             ['Xe', booking?.vehicle?.name || booking?.vehicle_id?.vehicle_name || 'Đang tải...'],
             ['Thời gian thuê', booking ? `${formatDate(booking.start_date)} -> ${formatDate(booking.end_date)}` : 'N/A'],
             ['Tổng tiền', totalPrice],
-            ['Payment method', booking?.payment?.payment_method || 'Chưa có'],
-            ['Payment status', booking?.payment?.payment_status || booking?.paymentState?.paymentStatus || 'pending'],
-            ['Booking status', booking?.paymentState?.bookingStatus || booking?.status || 'N/A'],
             ['Paid at', formatDate(booking?.payment?.paid_at)],
-            ['Transaction code', booking?.payment?.transaction_code || booking?.payment?.stripe_payment_intent_id || 'Chưa có'],
           ].map(([label, value]) => (
             <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 8, fontSize: '0.82rem' }}>
               <span style={{ color: '#9ca3af' }}>{label}</span>

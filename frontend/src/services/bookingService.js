@@ -2,6 +2,10 @@ import apiClient from './apiClient';
 import vehicleService from './vehicleService';
 import paymentService from './paymentService';
 
+const DETAILED_BOOKINGS_CACHE_TTL_MS = 12_000;
+const detailedBookingsCache = new Map();
+const detailedBookingsInflight = new Map();
+
 const readStoredUser = () => {
   try {
     return JSON.parse(localStorage.getItem('smartrent_user') || 'null');
@@ -139,6 +143,33 @@ const extractBookingList = (payload) => {
   return [];
 };
 
+const getDetailedCacheKey = (currentUser) => {
+  const role = currentUser?.backendRole || currentUser?.role || 'guest';
+  const userId = resolveId(currentUser) || 'guest';
+  return `${role}:${userId}`;
+};
+
+const readDetailedCache = (cacheKey) => {
+  const entry = detailedBookingsCache.get(cacheKey);
+  if (!entry) return null;
+  if (Date.now() - entry.at > DETAILED_BOOKINGS_CACHE_TTL_MS) {
+    detailedBookingsCache.delete(cacheKey);
+    return null;
+  }
+  return entry.value;
+};
+
+const writeDetailedCache = (cacheKey, value) => {
+  detailedBookingsCache.set(cacheKey, { at: Date.now(), value });
+};
+
+const invalidateDetailedCacheForCurrentUser = () => {
+  const currentUser = readStoredUser();
+  const cacheKey = getDetailedCacheKey(currentUser);
+  detailedBookingsCache.delete(cacheKey);
+  detailedBookingsInflight.delete(cacheKey);
+};
+
 const toLegacyVehicleShape = (vehicle) => {
   if (!vehicle) {
     return null;
@@ -265,17 +296,10 @@ const enrichBookingsSafely = async (bookings = []) =>
 
 export const bookingService = {
   async createBooking(payload = {}) {
-    const currentUser = readStoredUser();
     const vehicleId = resolveId(payload.vehicle_id) || resolveId(payload.vehicleId);
-    const showroomId =
-      resolveId(payload.showroom_id)
-      || resolveId(payload.showroomId)
-      || resolveId(payload.showroom)
-      || resolveId(payload.car?.addedBy)
-      || resolveId(payload.vehicle?.addedBy);
 
-    if (!vehicleId || !showroomId) {
-      throw new Error('Thieu vehicle_id hoac showroom_id de tao booking.');
+    if (!vehicleId) {
+      throw new Error('Thiếu vehicle_id để tạo booking.');
     }
 
     const deliveryAddress = String(payload.delivery_address || '').trim();
@@ -288,18 +312,18 @@ export const bookingService = {
             : 'Tu den lay')
     ).slice(0, 500);
 
+    /** Backend: user_id từ JWT, showroom_id + total_price suy ra / tính từ xe — không gửi các field đó. */
     const body = {
-      user_id: resolveId(payload.user_id) || resolveId(payload.userId) || resolveId(currentUser),
       vehicle_id: vehicleId,
-      showroom_id: showroomId,
       start_date: payload.start_date,
       end_date: payload.end_date,
-      total_price: Number(payload.total_price || 0),
-      note,
     };
-
+    if (note) {
+      body.note = note;
+    }
 
     const res = await apiClient.post('/api/booking/createBooking', body);
+    invalidateDetailedCacheForCurrentUser();
     return res.data.data;
   },
 
@@ -344,8 +368,30 @@ export const bookingService = {
   },
 
   async getCurrentRoleBookingsDetailed() {
-    const bookings = await this.getCurrentRoleBookings();
-    return enrichBookingsSafely(bookings);
+    const currentUser = readStoredUser();
+    const cacheKey = getDetailedCacheKey(currentUser);
+
+    const cached = readDetailedCache(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const inflight = detailedBookingsInflight.get(cacheKey);
+    if (inflight) {
+      return inflight;
+    }
+
+    const task = (async () => {
+      const bookings = await this.getCurrentRoleBookings();
+      const detailed = await enrichBookingsSafely(bookings);
+      writeDetailedCache(cacheKey, detailed);
+      return detailed;
+    })().finally(() => {
+      detailedBookingsInflight.delete(cacheKey);
+    });
+
+    detailedBookingsInflight.set(cacheKey, task);
+    return task;
   },
 
   async getListBookings(filters = {}) {
@@ -497,6 +543,7 @@ export const bookingService = {
 
   async cancelBooking(id) {
     const res = await apiClient.patch(`/api/booking/updateBookingStatus/${id}`, { status: 'cancelled' });
+    invalidateDetailedCacheForCurrentUser();
     return res.data.data;
   },
 
@@ -533,6 +580,7 @@ export const bookingService = {
 
   async updateBookingStatus(id, status) {
     const res = await apiClient.patch(`/api/booking/updateBookingStatus/${id}`, { status });
+    invalidateDetailedCacheForCurrentUser();
     return res.data.data;
   },
 

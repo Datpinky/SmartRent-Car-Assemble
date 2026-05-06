@@ -1,6 +1,19 @@
 const authService = require("../services/auth.service");
+const ProfileService = require("../services/profile.service");
 
 class AuthController {
+    async getMe(req, res, next) {
+        try {
+            const user = await ProfileService.getProfileById(req.user.userId);
+            if (!user) {
+                return res.status(401).json({ message: "User not found" });
+            }
+            return res.status(200).json({ message: "OK", data: user });
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async register(req, res, next) {
         try {
             const userData = req.body;

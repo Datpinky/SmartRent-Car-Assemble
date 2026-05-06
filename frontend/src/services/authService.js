@@ -4,16 +4,16 @@ const AUTH_CLEARED_EVENT = 'smartrent:auth-cleared';
 
 /**
  * Maps backend role to frontend role used in routing/UI.
- * Backend:  user | owner | showroom | admin
- * Frontend: renter (=user) | owner | showroom | admin
+ * Backend:  user | showroom | admin
+ * Frontend: renter (=user) | showroom | admin
  */
 export const mapBackendRole = (backendRole) => {
+  if (backendRole === 'owner') return 'showroom';
   if (backendRole === 'user') return 'renter';
   return backendRole;
 };
 
 const mapFrontendConsumerRoleToBackend = (frontendRole) => {
-  if (frontendRole === 'owner') return 'owner';
   return 'user';
 };
 
@@ -122,19 +122,23 @@ export const authService = {
   },
 
   async getCurrentUser() {
-    const storedUser = readStoredUser();
-    if (!storedUser) {
-      throw new Error('Khong tim thay thong tin nguoi dung da dang nhap.');
-    }
-    return this.mapUser(storedUser);
+    return this.getMe();
   },
 
+  /** Xac thuc JWT voi server; cap nhat smartrent_user khi thanh cong. */
   async getMe() {
-    const storedUser = readStoredUser();
-    if (!storedUser) {
+    const token = localStorage.getItem('smartrent_token');
+    if (!token) {
       throw new Error('Khong tim thay thong tin nguoi dung da dang nhap.');
     }
-    return this.mapUser(storedUser);
+    const res = await apiClient.get('/api/auth/me');
+    const user = res.data?.data;
+    if (!user) {
+      throw new Error('Phan hoi khong hop le.');
+    }
+    const mapped = this.mapUser(user);
+    localStorage.setItem('smartrent_user', JSON.stringify(mapped));
+    return mapped;
   },
 
   async updateProfile(payload) {

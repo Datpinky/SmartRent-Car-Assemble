@@ -1,5 +1,13 @@
 import apiClient from './apiClient';
 
+const PAYMENT_LIST_CACHE_TTL_MS = 15_000;
+const PAYMENT_STATE_CACHE_TTL_MS = 10_000;
+
+const paymentListCache = new Map();
+const paymentListInflight = new Map();
+const paymentStateCache = new Map();
+const paymentStateInflight = new Map();
+
 const resolveId = (value) => {
   if (!value) return '';
   if (typeof value === 'string') return value;
@@ -29,19 +37,51 @@ const normalizePaymentList = (payload) => {
   return [];
 };
 
+const readCache = (store, key, ttlMs) => {
+  const entry = store.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.at > ttlMs) {
+    store.delete(key);
+    return null;
+  }
+  return entry.value;
+};
+
+const writeCache = (store, key, value) => {
+  store.set(key, { at: Date.now(), value });
+};
+
 const listPaymentsForBooking = async (bookingId, limit = 20) => {
   if (!bookingId) {
     return [];
   }
 
-  const res = await apiClient.post('/api/payment/getListPayments', {
+  const cacheKey = `${bookingId}:${limit}`;
+  const cached = readCache(paymentListCache, cacheKey, PAYMENT_LIST_CACHE_TTL_MS);
+  if (cached) {
+    return cached;
+  }
+
+  const inflight = paymentListInflight.get(cacheKey);
+  if (inflight) {
+    return inflight;
+  }
+
+  const task = apiClient.post('/api/payment/getListPayments', {
     booking_id: bookingId,
     sort_by: -1,
     page: 1,
     limit,
+  }).then((res) => {
+    const normalized = normalizePaymentList(res.data?.data ?? res.data);
+    writeCache(paymentListCache, cacheKey, normalized);
+    return normalized;
+  }).finally(() => {
+    paymentListInflight.delete(cacheKey);
   });
 
-  return normalizePaymentList(res.data?.data ?? res.data);
+  paymentListInflight.set(cacheKey, task);
+  return task;
 };
 
 const getLatestPaymentForBooking = async (bookingId) => {
@@ -110,8 +150,33 @@ const paymentService = {
   },
 
   async getPaymentState(bookingId) {
-    const res = await apiClient.get(`/api/payment/getPaymentState/${bookingId}`);
-    return res.data?.data ?? res.data;
+    const cacheKey = String(bookingId || '');
+    if (!cacheKey) {
+      return null;
+    }
+
+    const cached = readCache(paymentStateCache, cacheKey, PAYMENT_STATE_CACHE_TTL_MS);
+    if (cached) {
+      return cached;
+    }
+
+    const inflight = paymentStateInflight.get(cacheKey);
+    if (inflight) {
+      return inflight;
+    }
+
+    const task = apiClient.get(`/api/payment/getPaymentState/${bookingId}`)
+      .then((res) => {
+        const normalized = res.data?.data ?? res.data;
+        writeCache(paymentStateCache, cacheKey, normalized);
+        return normalized;
+      })
+      .finally(() => {
+        paymentStateInflight.delete(cacheKey);
+      });
+
+    paymentStateInflight.set(cacheKey, task);
+    return task;
   },
 
   async getMyPaymentState(bookingId) {

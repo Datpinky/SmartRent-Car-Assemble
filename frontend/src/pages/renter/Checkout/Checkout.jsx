@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
+import { useLocation, useNavigate, useParams, Link } from 'react-router-dom';
 import { loadStripe } from '@stripe/stripe-js';
 import {
   Elements,
@@ -28,6 +28,7 @@ import { formatVnd, formatVndPerDay } from '../../../utils/currencyFormat';
 import {
   buildDefaultPickupDate,
   buildDefaultRentalWindow,
+  buildRentalWindowQuery,
   isSameCalendarDate,
   resolveRentalWindow,
 } from '../../../utils/rentalWindow';
@@ -122,10 +123,20 @@ function normalizeIncomingRentalWindow(pickupValue, returnValue, minPickupValue)
     return null;
   }
 
-  const safePickup = incomingPickup < minPickup ? new Date(minPickup) : new Date(incomingPickup);
-  const safeReturn = incomingReturn <= safePickup || isSameCalendarDate(incomingReturn, safePickup)
-    ? new Date(safePickup.getTime() + 24 * 60 * 60 * 1000)
-    : new Date(incomingReturn);
+  const durationMs = incomingReturn.getTime() - incomingPickup.getTime();
+  const minDuration = 24 * 60 * 60 * 1000;
+
+  let safePickup = new Date(incomingPickup);
+  let safeReturn = new Date(incomingReturn);
+
+  if (safePickup < minPickup) {
+    safePickup = new Date(minPickup);
+    safeReturn = new Date(safePickup.getTime() + Math.max(durationMs, minDuration));
+  }
+
+  if (safeReturn <= safePickup || isSameCalendarDate(safeReturn, safePickup)) {
+    safeReturn = new Date(safePickup.getTime() + Math.max(durationMs, minDuration));
+  }
 
   return {
     pickupDate: toLocalInputValue(safePickup),
@@ -157,7 +168,17 @@ const CALENDAR_MONTHS = [
   'Tháng 12',
 ];
 
-function DateTimeField({ id, label, value, minValue, onChange, isDayDisabled, dayClassName }) {
+function DateTimeField({
+  id,
+  label,
+  value,
+  minValue,
+  onChange,
+  isDayDisabled,
+  dayClassName,
+  readOnly = false,
+  readOnlyHint,
+}) {
   const rootRef = useRef(null);
   const [open, setOpen] = useState(false);
   const selectedDate = parseLocalDateTime(value) || new Date();
@@ -224,6 +245,26 @@ function DateTimeField({ id, label, value, minValue, onChange, isDayDisabled, da
     next.setHours(nextAmPm === 'CH' ? h12 + 12 : h12);
     applyDate(next);
   };
+
+  if (readOnly) {
+    return (
+      <div className="relative">
+        <label htmlFor={id} className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 mb-2">
+          <FaCalendarAlt aria-hidden="true" className="text-primary/80" />
+          {label}
+        </label>
+        <div
+          id={id}
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-gray-50 text-gray-900 font-medium"
+        >
+          {formatDateTimeInputLabel(value)}
+        </div>
+        {readOnlyHint ? (
+          <p className="mt-1.5 text-[0.7rem] text-gray-500 leading-snug m-0">{readOnlyHint}</p>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div className="relative" ref={rootRef}>
@@ -494,6 +535,20 @@ function OrderSummaryPanel({
   deliveryFee,
   total,
 }) {
+  const primaryImage = (vehicle?.image || vehicle?.images?.[0] || '').trim();
+  const subtitle =
+    (vehicle?.listingSubtitle && String(vehicle.listingSubtitle).trim())
+    || (vehicle?.showroom && String(vehicle.showroom).trim())
+    || (vehicle?.listerProfile?.displayName && String(vehicle.listerProfile.displayName).trim())
+    || 'SmartRent';
+
+  const [imgFailed, setImgFailed] = useState(false);
+  const showPhoto = Boolean(primaryImage) && !imgFailed;
+
+  useEffect(() => {
+    setImgFailed(false);
+  }, [primaryImage, vehicle?._id, vehicle?.id]);
+
   return (
     <aside className="lg:sticky lg:top-24 h-fit">
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -503,14 +558,27 @@ function OrderSummaryPanel({
 
         <div className="p-5 space-y-4">
           <div className="flex items-start gap-3 rounded-xl bg-gray-100/90 px-3 py-3 border border-gray-100">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-light text-primary">
-              <FaCar aria-hidden="true" className="text-lg" />
-            </span>
+            <div
+              className={`h-10 w-10 shrink-0 rounded-lg overflow-hidden border border-gray-200 flex items-center justify-center ${
+                showPhoto ? 'bg-white' : 'bg-primary-light text-primary'
+              }`}
+            >
+              {showPhoto ? (
+                <img
+                  src={primaryImage}
+                  alt=""
+                  className="h-full w-full object-cover"
+                  onError={() => setImgFailed(true)}
+                />
+              ) : (
+                <FaCar aria-hidden="true" className="text-lg" />
+              )}
+            </div>
             <div className="min-w-0 flex-1">
               <p className="font-semibold text-gray-900 text-[0.88rem] leading-snug line-clamp-2">
                 {vehicle.name}
               </p>
-              <p className="text-[0.72rem] text-gray-500 mt-0.5">SmartRent</p>
+              <p className="text-[0.72rem] text-gray-500 mt-0.5 line-clamp-1">{subtitle}</p>
             </div>
           </div>
 
@@ -616,10 +684,17 @@ const Checkout = () => {
   const [deliverySuggestions, setDeliverySuggestions] = useState([]);
   const [loadingDeliverySuggestions, setLoadingDeliverySuggestions] = useState(false);
   const [loadingDeliveryLocation, setLoadingDeliveryLocation] = useState(false);
+  const deliveryAddressRef = useRef('');
+  deliveryAddressRef.current = deliveryAddress;
   const minPickupDateTime = useMemo(() => buildDefaultPickupDate(), []);
   const incomingRentalWindow = useMemo(
     () => resolveRentalWindow({ state: location.state, search: location.search }),
     [location.search, location.state]
+  );
+
+  /** Có pickup+return từ CarDetail (state/query) → giữ khớp trang xe, không cho sửa trên checkout. */
+  const isRentalWindowLocked = Boolean(
+    incomingRentalWindow.pickupDate && incomingRentalWindow.returnDate
   );
 
   const [clientSecret, setClientSecret] = useState('');
@@ -701,7 +776,7 @@ const Checkout = () => {
     };
   }, [carId, vehicle?._id, vehicle?.id]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!incomingRentalWindow.pickupDate || !incomingRentalWindow.returnDate) {
       return;
     }
@@ -721,6 +796,9 @@ const Checkout = () => {
   }, [incomingRentalWindow.pickupDate, incomingRentalWindow.returnDate, minPickupDateTime]);
 
   useEffect(() => {
+    if (isRentalWindowLocked) {
+      return;
+    }
     const pick = parseLocalDateTime(pickupDate);
     const ret = parseLocalDateTime(returnDate);
     if (pick && ret && (ret <= pick || isSameCalendarDate(pick, ret))) {
@@ -728,7 +806,7 @@ const Checkout = () => {
       nextReturn.setDate(nextReturn.getDate() + 1);
       setReturnDate(toLocalInputValue(nextReturn));
     }
-  }, [pickupDate, returnDate]);
+  }, [pickupDate, returnDate, isRentalWindowLocked]);
 
   const isBookedDay = useCallback(
     (date) => bookingService.isDateBooked(date, bookedIntervals),
@@ -795,6 +873,47 @@ const Checkout = () => {
     };
   }, [deliveryAddress, deliveryLocation?.address, pickupMethod]);
 
+  /** Gõ địa chỉ đầy đủ (không bắt buộc chọn gợi ý): geocode cả câu để có pin bản đồ; chuỗi gửi booking vẫn là đúng nội dung ô nhập. */
+  useEffect(() => {
+    if (pickupMethod !== 'delivery') {
+      return undefined;
+    }
+    const trimmed = String(deliveryAddress || '').trim();
+    if (parseCoordinateInput(trimmed)) {
+      return undefined;
+    }
+    if (trimmed.length < 8) {
+      setDeliveryLocation(null);
+      return undefined;
+    }
+
+    const snapshot = trimmed;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (String(deliveryAddressRef.current || '').trim() !== snapshot) return;
+      mapService
+        .directForwardGeocode(snapshot, { limit: 1 })
+        .then((results) => {
+          if (cancelled) return;
+          if (String(deliveryAddressRef.current || '').trim() !== snapshot) return;
+          const best = results[0];
+          if (!best) return;
+          setDeliveryLocation({
+            address: snapshot,
+            latitude: best.lat,
+            longitude: best.lng,
+            plusCode: best.plusCode || '',
+          });
+        })
+        .catch(() => {});
+    }, 550);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [deliveryAddress, pickupMethod]);
+
   const days = Math.max(
     1,
     Math.round((new Date(returnDate) - new Date(pickupDate)) / 86400000)
@@ -844,7 +963,7 @@ const Checkout = () => {
       setClientSecret('');
       setProcessing(false);
       setStep(2);
-      setStripeSessionError('Phien thanh toan cu da bi huy tren Stripe. Vui long tao lai phien thanh toan moi.');
+      setStripeSessionError('Phiên thanh toán cũ đã bị hủy trên Stripe. Vui lòng tạo lại phiên thanh toán mới.');
       return true;
     }
 
@@ -868,7 +987,7 @@ const Checkout = () => {
 
   const handleUseCurrentDeliveryLocation = () => {
     if (!navigator.geolocation) {
-      setPrepError('Trinh duyet khong ho tro lay vi tri hien tai.');
+      setPrepError('Trình duyệt không hỗ trợ lấy vị trí hiện tại.');
       return;
     }
 
@@ -893,7 +1012,7 @@ const Checkout = () => {
       },
       () => {
         setLoadingDeliveryLocation(false);
-        setPrepError('Khong the lay vi tri hien tai. Hay kiem tra quyen truy cap vi tri.');
+        setPrepError('Không thể lấy vị trí hiện tại. Vui lòng kiểm tra quyền truy cập vị trí.');
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
@@ -988,7 +1107,7 @@ const Checkout = () => {
 
   const handleRecreatePaymentSession = async () => {
     if (!bookingId) {
-      setStripeSessionError('Khong tim thay booking de tao lai phien thanh toan.');
+      setStripeSessionError('Khong tim thay booking đ tao lai phien thanh toan.');
       return;
     }
 
@@ -1014,7 +1133,7 @@ const Checkout = () => {
 
       const nextSecret = paymentData?.client_secret || paymentData?.clientSecret || '';
       if (!nextSecret) {
-        throw new Error('Khong nhan duoc client secret moi tu server.');
+        throw new Error('Không nhận được client secret mới từ server.');
       }
 
       if (await handleTerminalClientSecret(nextSecret, bookingId)) {
@@ -1027,7 +1146,7 @@ const Checkout = () => {
       setStripeSessionError(
         error?.response?.data?.message
         || error?.message
-        || 'Khong the tao lai phien thanh toan Stripe. Vui long thu lai.'
+        || 'Không thể tạo lại phiên thanh toán Stripe. Vui lòng thử lại.'
       );
     } finally {
       setRepairingSession(false);
@@ -1188,6 +1307,19 @@ const Checkout = () => {
                 </div>
 
                 <p className="text-[0.8rem] font-semibold text-gray-800 mb-3">Thời gian thuê</p>
+                {isRentalWindowLocked && carId ? (
+                  <div className="mb-3 flex flex-wrap items-center gap-2 text-[0.78rem]">
+                    <span className="text-gray-600">
+                      Thời gian cố định theo lựa chọn tại trang chi tiết xe.
+                    </span>
+                    <Link
+                      to={`/xe/${carId}${buildRentalWindowQuery(pickupDate, returnDate)}`}
+                      className="font-semibold text-primary underline underline-offset-2 hover:no-underline"
+                    >
+                      Đổi lịch trên trang xe
+                    </Link>
+                  </div>
+                ) : null}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
                   <DateTimeField
                     id="pickup-date"
@@ -1195,6 +1327,10 @@ const Checkout = () => {
                     value={pickupDate}
                     minValue={minPickupDateTime}
                     onChange={setPickupDate}
+                    readOnly={isRentalWindowLocked}
+                    readOnlyHint={
+                      isRentalWindowLocked ? 'Khớp với bước Đặt xe ở trang chi tiết.' : undefined
+                    }
                     isDayDisabled={isBookedDay}
                     dayClassName={(date) =>
                       isBookedDay(date)
@@ -1208,6 +1344,10 @@ const Checkout = () => {
                     value={returnDate}
                     minValue={pickupDate}
                     onChange={setReturnDate}
+                    readOnly={isRentalWindowLocked}
+                    readOnlyHint={
+                      isRentalWindowLocked ? 'Khớp với bước Đặt xe ở trang chi tiết.' : undefined
+                    }
                     isDayDisabled={(date) => isSameCalendarDate(date, pickupDate) || isBookedDay(date)}
                     dayClassName={(date) =>
                       isSameCalendarDate(date, pickupDate)
@@ -1218,9 +1358,12 @@ const Checkout = () => {
                     }
                   />
                 </div>
-                <div className="mb-4 text-[0.75rem] text-gray-500">
-                  Ngày <span className="font-bold text-orange-600">cam</span> trong lịch trả xe là ngày trùng với ngày nhận xe và không được chọn.
-                </div>
+                {!isRentalWindowLocked ? (
+                  <div className="mb-4 text-[0.75rem] text-gray-500">
+                    Ngày được tô <span className="font-bold text-orange-600">màu cam</span> trong lịch trả xe là
+                    ngày trùng với ngày nhận xe (không được chọn làm ngày trả).
+                  </div>
+                ) : null}
                 {loadingBookedDates && (
                   <div className="mb-3 text-[0.75rem] text-gray-400">Dang tai lich da dat...</div>
                 )}
@@ -1279,32 +1422,41 @@ const Checkout = () => {
                 {pickupMethod === 'delivery' && (
                   <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
                     <label className="mb-2 block text-[0.8rem] font-semibold text-gray-800" htmlFor="delivery-address">
-                      Dia chi giao xe
+                      Địa chỉ giao xe
                     </label>
+                    <p className="mb-2 text-[0.72rem] leading-snug text-gray-500">
+                      Gõ đủ địa chỉ (số nhà, đường, phường/quận, tỉnh/thành). Không bắt buộc chọn từ danh sách — có thể chỉnh tiếp sau khi chọn gợi ý gần đúng. Bản đồ cập nhật theo câu bạn nhập.
+                    </p>
                     <div className="relative">
                       <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-slate-50 px-3 py-2.5">
                         <MdLocationOn aria-hidden="true" className="shrink-0 text-primary" />
                         <input
                           id="delivery-address"
                           type="text"
+                          autoComplete="street-address"
                           value={deliveryAddress}
                           onChange={(event) => {
                             const nextAddress = event.target.value;
                             const parsedCoordinates = parseCoordinateInput(nextAddress);
                             setDeliveryAddress(nextAddress);
-                            setDeliveryLocation(parsedCoordinates
-                              ? {
+                            if (parsedCoordinates) {
+                              setDeliveryLocation({
                                 address: nextAddress,
                                 latitude: parsedCoordinates.latitude,
                                 longitude: parsedCoordinates.longitude,
                                 plusCode: '',
-                              }
-                              : null);
-                            if (parsedCoordinates) {
+                              });
                               setDeliverySuggestions([]);
+                              return;
                             }
+                            setDeliveryLocation((prev) => {
+                              if (prev && String(nextAddress).trim() === String(prev.address || '').trim()) {
+                                return prev;
+                              }
+                              return null;
+                            });
                           }}
-                          placeholder="Nhap dia chi nhan xe"
+                          placeholder="Ví dụ: 140 Nguyễn Đình Chiểu, Quận 1, TP.Hồ Chí Minh"
                           className="min-w-0 flex-1 bg-transparent text-sm text-gray-800 outline-none"
                         />
                         <button
@@ -1330,6 +1482,7 @@ const Checkout = () => {
                               key={`${suggestion.lat}-${suggestion.lng}-${suggestion.address}`}
                               type="button"
                               className="block w-full px-3 py-2 text-left text-[0.8rem] text-gray-700 hover:bg-primary-light focus:bg-primary-light focus:outline-none"
+                              onMouseDown={(e) => e.preventDefault()}
                               onClick={() => handleSelectDeliverySuggestion(suggestion)}
                             >
                               {suggestion.address}
@@ -1338,9 +1491,14 @@ const Checkout = () => {
                         </div>
                       )}
                     </div>
-                    {deliveryLocation?.address && (
+                    {hasCoordinates(deliveryLocation) && (
                       <p className="mt-2 text-[0.75rem] text-primary">
-                        Da xac dinh toa do giao xe.
+                        Đã căn vị trí trên bản đồ theo địa chỉ bạn nhập (có thể là điểm gần đúng nếu số nhà chưa có trên bản đồ).
+                      </p>
+                    )}
+                    {!hasCoordinates(deliveryLocation) && String(deliveryAddress || '').trim().length >= 6 && (
+                      <p className="mt-2 text-[0.75rem] text-amber-700">
+                        Đang xác định vị trí… hoặc tiếp tục gõ đủ địa chỉ; showroom vẫn nhận đúng nội dung ô nhập khi bạn thanh toán.
                       </p>
                     )}
                     {hasCoordinates(deliveryLocation) && (

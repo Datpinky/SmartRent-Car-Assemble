@@ -19,10 +19,23 @@ export const AuthProvider = ({ children }) => {
       return null;
     }
 
-    const apiUser = await authService.getCurrentUser();
-    persistUser(apiUser);
-    return apiUser;
+    try {
+      const apiUser = await authService.getMe();
+      persistUser(apiUser);
+      return apiUser;
+    } catch {
+      setUser(null);
+      return null;
+    }
   }, [persistUser]);
+
+  useEffect(() => {
+    const onAuthCleared = () => {
+      setUser(null);
+    };
+    window.addEventListener('smartrent:auth-cleared', onAuthCleared);
+    return () => window.removeEventListener('smartrent:auth-cleared', onAuthCleared);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -76,8 +89,14 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       const { user: apiUser } = await authService.login(email, password);
-      persistUser(apiUser);
-      return { success: true, user: apiUser };
+      try {
+        const fullUser = await authService.getMe();
+        persistUser(fullUser);
+        return { success: true, user: fullUser };
+      } catch {
+        persistUser(apiUser);
+        return { success: true, user: apiUser };
+      }
     } catch (err) {
       const message = err.status === 401
         ? 'Email hoac mat khau khong dung.'

@@ -6,8 +6,8 @@ import { FaEye, FaLock, FaUnlock, FaSpinner } from 'react-icons/fa';
 import adminService from '../../../services/adminService';
 import { useAuth } from '../../../contexts/AuthContext';
 
-const ROLE_LABELS = { admin: 'Quản trị viên', showroom: 'Showroom', owner: 'Chủ xe', renter: 'Khách thuê' };
-const ROLE_COLORS = { admin: '#6d28d9', showroom: '#00b14f', owner: '#0891b2', renter: '#d97706' };
+const ROLE_LABELS = { admin: 'Quản trị viên', showroom: 'Showroom', renter: 'Khách thuê' };
+const ROLE_COLORS = { admin: '#6d28d9', showroom: '#00b14f', renter: '#d97706' };
 
 const initialsFromName = (name) => {
   if (!name || typeof name !== 'string') return '?';

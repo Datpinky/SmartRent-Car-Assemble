@@ -235,7 +235,7 @@ const adminService = {
       return {
         month,
         renters: rows.filter((user) => user.role === 'user').length,
-        owners: rows.filter((user) => user.role === 'owner').length,
+        consignedVehicles: vehicles.filter((vehicle) => vehicle.ownership_type === 'consigned').length,
         showrooms: rows.filter((user) => user.role === 'showroom').length,
       };
     });

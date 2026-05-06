@@ -1,13 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BsLightningChargeFill } from 'react-icons/bs';
-import { FaGasPump, FaHeart, FaMapMarkerAlt, FaRegHeart, FaStar, FaStore } from 'react-icons/fa';
+import { FaGasPump, FaMapMarkerAlt, FaStar, FaStore } from 'react-icons/fa';
 import { MdDirectionsCar, MdPeople, MdSettings } from 'react-icons/md';
-import { useAuth } from '../../contexts/AuthContext';
-import favoriteService from '../../services/favoriteService';
 import { buildRentalWindowQuery } from '../../utils/rentalWindow';
-
-const isMongoId = (value) => /^[a-f\d]{24}$/i.test(String(value || ''));
 
 const normalizeText = (value) =>
   String(value || '')
@@ -49,56 +45,8 @@ const StarRating = ({ rating }) => (
   </div>
 );
 
-let favoriteIdsCache = null;
-let favoriteIdsPromise = null;
-
-const extractFavoriteIds = (payload) => {
-  const items = Array.isArray(payload?.data)
-    ? payload.data
-    : Array.isArray(payload?.data?.data)
-      ? payload.data.data
-      : [];
-
-  return new Set(
-    items
-      .map((item) => item?.vehicle_id?._id || item?.vehicle_id?.id || item?.vehicle_id)
-      .filter(Boolean)
-      .map(String)
-  );
-};
-
-const loadFavoriteIds = async () => {
-  if (favoriteIdsCache) {
-    return favoriteIdsCache;
-  }
-
-  if (!favoriteIdsPromise) {
-    favoriteIdsPromise = favoriteService
-      .getMyFavorites({ page: 1, limit: 100 })
-      .then((payload) => {
-        favoriteIdsCache = extractFavoriteIds(payload);
-        return favoriteIdsCache;
-      })
-      .catch(() => {
-        favoriteIdsCache = new Set();
-        return favoriteIdsCache;
-      })
-      .finally(() => {
-        favoriteIdsPromise = null;
-      });
-  }
-
-  return favoriteIdsPromise;
-};
-
 const CarCard = ({ car, rentalSearch = null }) => {
   const navigate = useNavigate();
-  const { user } = useAuth();
-
-  const [liked, setLiked] = useState(
-    typeof car?.isFavorited === 'boolean' ? car.isFavorited : null
-  );
-  const [likeLoading, setLikeLoading] = useState(false);
   const [imgError, setImgError] = useState(false);
 
   const carId = car.id || car._id;
@@ -116,59 +64,8 @@ const CarCard = ({ car, rentalSearch = null }) => {
   const rentalWindow = sanitizeRentalWindow(rentalSearch?.pickupDate, rentalSearch?.returnDate);
 
   useEffect(() => {
-    if (typeof car?.isFavorited === 'boolean') {
-      setLiked(car.isFavorited);
-      return;
-    }
-
-    if (!user || user.role !== 'renter' || !isMongoId(carId)) {
-      setLiked(false);
-      return;
-    }
-
-    let mounted = true;
-    loadFavoriteIds().then((ids) => {
-      if (!mounted) {
-        return;
-      }
-      setLiked(ids.has(String(carId)));
-    });
-
-    return () => {
-      mounted = false;
-    };
-  }, [car?.isFavorited, carId, user]);
-
-  const handleLike = async (event) => {
-    event.stopPropagation();
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
-    if (!isMongoId(carId)) {
-      setLiked((current) => !current);
-      return;
-    }
-
-    setLikeLoading(true);
-    try {
-      const result = await favoriteService.toggle(carId);
-      setLiked(result.favorited);
-      if (!favoriteIdsCache) {
-        favoriteIdsCache = new Set();
-      }
-      if (result.favorited) {
-        favoriteIdsCache.add(String(carId));
-      } else {
-        favoriteIdsCache.delete(String(carId));
-      }
-    } catch {
-      setLiked((current) => current);
-    } finally {
-      setLikeLoading(false);
-    }
-  };
+    setImgError(false);
+  }, [carId, imageUrl]);
 
   return (
     <article
@@ -195,17 +92,6 @@ const CarCard = ({ car, rentalSearch = null }) => {
         )}
 
         <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-[60px] bg-gradient-to-t from-black/30 to-transparent" />
-
-        <button
-          type="button"
-          className={`absolute right-3 top-3 z-[2] flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-transform hover:scale-110 ${liked === true ? 'text-red-500' : liked === false ? 'text-gray-400' : 'text-gray-300'
-            } ${likeLoading ? 'cursor-wait opacity-50' : ''}`}
-          onClick={handleLike}
-          disabled={likeLoading}
-          aria-label="Yêu thích"
-        >
-          {liked ? <FaHeart size={14} /> : <FaRegHeart size={14} />}
-        </button>
 
         {(car.category || car.type) && (
           <span className="absolute bottom-2.5 right-2.5 z-[2] flex items-center gap-1 rounded-full border border-white/15 bg-black/65 px-2.5 py-[5px] text-[0.7rem] font-medium text-white backdrop-blur-sm">
@@ -251,7 +137,6 @@ const CarCard = ({ car, rentalSearch = null }) => {
         <div className="text-[0.75rem] text-gray-500 -mt-0.5">2 ngày 4 giờ</div>
         <div className="text-[0.68rem] text-primary italic -mt-0.5">Giá tạm tính chưa bao gồm VAT</div>
 
-        {/* Specs */}
         <div className="flex items-center border-t border-gray-100 mt-2 pt-2.5">
           {[
             { icon: <MdPeople size={18} />, label: `${car.seats || 0} chỗ` },

@@ -15,7 +15,6 @@ import {
   Home,
   LayoutDashboard,
   LogOut,
-  MapPin,
   Menu,
   Store,
   TrendingUp,
@@ -52,13 +51,6 @@ const MENUS = {
     { label: 'Kiểm tra AI', path: '/showroom/ai-inspection', icon: Bot },
   ],
 
-  owner: [
-    { label: 'Tổng quan', path: '/owner/dashboard', icon: LayoutDashboard },
-    { label: 'Xe của tôi', path: '/owner/vehicles', icon: Car },
-    { label: 'Theo dõi xe', path: '/owner/tracking', icon: MapPin },
-    { label: 'Doanh thu & Rút tiền', path: '/owner/revenue', icon: TrendingUp },
-  ],
-
   renter: [
     { label: 'Tổng quan tài chính', path: '/renter/dashboard', icon: LayoutDashboard },
     {
@@ -81,14 +73,12 @@ const MENUS = {
 const ROLE_CONFIG = {
   admin:    { label: 'Quản trị viên', color: '#6d28d9', bg: '#f5f3ff' },
   showroom: { label: 'Showroom',       color: '#00b14f', bg: '#f0fdf4' },
-  owner:    { label: 'Chủ xe',         color: '#0891b2', bg: '#ecfeff' },
   renter:   { label: 'Khách thuê',     color: '#d97706', bg: '#fffbeb' },
 };
 
 const PROFILE_PATHS = {
   admin:    '/admin/profile',
   showroom: '/showroom/profile',
-  owner:    '/owner/profile',
   renter:   '/renter/profile',
 };
 

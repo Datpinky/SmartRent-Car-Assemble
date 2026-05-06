@@ -8,7 +8,6 @@ import profileService from '../../../services/profileService';
 
 const ROLE_LABELS = {
   renter: 'Khách thuê',
-  owner: 'Chủ xe',
   showroom: 'Showroom',
   admin: 'Quản trị',
 };

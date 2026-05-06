@@ -45,7 +45,7 @@ const Modal = ({ isOpen, onClose, title, children, width = 520, footer }) => {
         </div>
         <div className="px-6 py-5 overflow-y-auto flex-1 overscroll-contain">{children}</div>
         {footer && (
-          <div className="px-6 py-3.5 border-t border-[#f0f0f0] flex gap-2.5 justify-end shrink-0">
+          <div className="px-6 py-3.5 border-t border-[#f0f0f0] shrink-0 w-full">
             {footer}
           </div>
         )}

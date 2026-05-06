@@ -105,9 +105,10 @@ export function mapVehicle(v) {
   const lat = latRaw !== undefined && latRaw !== null && latRaw !== '' ? Number(latRaw) : null;
   const lng = lngRaw !== undefined && lngRaw !== null && lngRaw !== '' ? Number(lngRaw) : null;
 
-  const lister = mapListerProfile(
-    v.added_by && typeof v.added_by === 'object' ? v.added_by : null
-  );
+  const showroomRef =
+    v.showroom_id && typeof v.showroom_id === 'object' ? v.showroom_id : null;
+  const addedRef = v.added_by && typeof v.added_by === 'object' ? v.added_by : null;
+  const lister = mapListerProfile(showroomRef || addedRef);
   const showroomDisplay = v.showroom || lister.displayName || '';
 
   const amenitiesRaw = v.amenities;
@@ -156,7 +157,26 @@ export function mapVehicle(v) {
     plateNumber: v.vehicle_plate_number || '',
     engineNumber: v.vehicle_engine_number || '',
     vinNumber: v.vehicle_identification_number || '',
-    addedBy: v.added_by || null,
+    addedBy:
+      v.added_by == null
+        ? null
+        : typeof v.added_by === 'object'
+          ? v.added_by._id || v.added_by.id || null
+          : v.added_by,
+    showroomId: (() => {
+      if (v.showroom_id != null) {
+        return typeof v.showroom_id === 'object'
+          ? v.showroom_id._id || v.showroom_id.id
+          : v.showroom_id;
+      }
+      if (v.added_by != null) {
+        return typeof v.added_by === 'object' ? v.added_by._id || v.added_by.id : v.added_by;
+      }
+      return null;
+    })(),
+    showroomAddressHint: String(
+      (showroomRef?.showroom_address || showroomRef?.address || addedRef?.showroom_address || addedRef?.address || '')
+    ).trim(),
     verified: v.verified || null,
     active: v.active !== false,
     companyOwned: v.company_owned || false,
@@ -209,7 +229,7 @@ export const vehicleService = {
   },
 
   /**
-   * Update a vehicle (requires auth; only the owner can update).
+   * Update a vehicle (requires auth; only same-showroom or admin can update).
    * payload fields: vehicle_brand, vehicle_model, vehicle_type, vehicle_plate_number,
    *   number_of_seats, transmission, fuel_type, vehicle_hire_rate_in_figures,
    *   vehicle_images_paths, description, vehicle_engine_number, vehicle_identification_number
@@ -220,7 +240,7 @@ export const vehicleService = {
   },
 
   /**
-   * Delete a vehicle by id (requires auth; currently no role guard in backend).
+   * Delete a vehicle by id (requires auth; scoped by showroom/admin backend checks).
    */
   async deleteById(vehicleId) {
     const res = await apiClient.delete(`/api/vehicles/deleteVehicleById/${vehicleId}`);
