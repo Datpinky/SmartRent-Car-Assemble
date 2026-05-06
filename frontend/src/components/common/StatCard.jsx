@@ -1,4 +1,46 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
+
+const AutoFitStatValue = ({ value }) => {
+  const wrapRef = useRef(null);
+  const textRef = useRef(null);
+  const [fontSize, setFontSize] = useState(26);
+
+  useLayoutEffect(() => {
+    const wrapEl = wrapRef.current;
+    const textEl = textRef.current;
+    if (!wrapEl || !textEl) return;
+
+    const fit = () => {
+      const maxPx = 26;
+      const minPx = 14;
+      let next = maxPx;
+      textEl.style.fontSize = `${maxPx}px`;
+
+      while (textEl.scrollWidth > wrapEl.clientWidth && next > minPx) {
+        next -= 1;
+        textEl.style.fontSize = `${next}px`;
+      }
+      setFontSize(next);
+    };
+
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(wrapEl);
+    return () => ro.disconnect();
+  }, [value]);
+
+  return (
+    <div ref={wrapRef} className="w-full min-w-0">
+      <div
+        ref={textRef}
+        className="font-extrabold text-gray-900 leading-none tabular-nums whitespace-nowrap"
+        style={{ fontSize }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+};
 
 const StatCard = ({ title, value, subtext, icon, color = '#00b14f', trend, trendLabel }) => {
   return (
@@ -11,7 +53,7 @@ const StatCard = ({ title, value, subtext, icon, color = '#00b14f', trend, trend
         {icon}
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="text-[1.6rem] font-extrabold text-gray-900 leading-none tabular-nums">{value}</div>
+        <AutoFitStatValue value={value} />
         <div className="text-[0.82rem] text-gray-500 mt-0.5 font-medium">{title}</div>
         {(trend !== undefined || subtext || trendLabel) && (
           <div className="flex flex-nowrap items-center gap-1.5 mt-1 min-w-0">
