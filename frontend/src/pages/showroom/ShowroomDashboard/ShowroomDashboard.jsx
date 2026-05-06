@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
@@ -27,6 +27,7 @@ import {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 const fmtNum = (v) => Number(v).toLocaleString('vi-VN');
+const noBreakVnd = (value) => String(value || '').replace(' VNĐ', '\u00A0VNĐ');
 
 const PERIODS = ['Tháng 3', 'Quý 1', '6 tháng', 'Năm 2026'];
 const PERIOD_SLICES = { 'Tháng 3': 1, 'Quý 1': 3, '6 tháng': 6, 'Năm 2026': 12 };
@@ -55,6 +56,48 @@ const ChartTooltip = ({ active, payload, label }) => {
   );
 };
 
+const AutoFitValue = ({ value, className = '' }) => {
+  const wrapRef = useRef(null);
+  const textRef = useRef(null);
+  const [fontSize, setFontSize] = useState(18);
+
+  useLayoutEffect(() => {
+    const wrapEl = wrapRef.current;
+    const textEl = textRef.current;
+    if (!wrapEl || !textEl) return;
+
+    const fit = () => {
+      const maxPx = 18;
+      const minPx = 12;
+      let next = maxPx;
+      textEl.style.fontSize = `${maxPx}px`;
+
+      while (textEl.scrollWidth > wrapEl.clientWidth && next > minPx) {
+        next -= 1;
+        textEl.style.fontSize = `${next}px`;
+      }
+      setFontSize(next);
+    };
+
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(wrapEl);
+    return () => ro.disconnect();
+  }, [value]);
+
+  return (
+    <div ref={wrapRef} className="w-full min-w-0">
+      <p
+        ref={textRef}
+        className={`font-extrabold text-gray-900 leading-tight tabular-nums whitespace-nowrap ${className}`}
+        style={{ fontSize }}
+      >
+        {value}
+      </p>
+    </div>
+  );
+};
+
 // ─── SummaryBar ────────────────────────────────────────────────────────────────
 const SummaryBar = ({ period, monthlySeries, bookingRows, bookings }) => {
   const sliceN = PERIOD_SLICES[period] || 12;
@@ -65,9 +108,9 @@ const SummaryBar = ({ period, monthlySeries, bookingRows, bookings }) => {
   const newCustomers = countUniqueRenters(bookings || []);
 
   const kpis = [
-    { label: 'Doanh thu', value: formatVnd(totalRevenue * 1_000_000), trend: 0, up: true, icon: <DollarSign size={14} aria-hidden="true" /> },
+    { label: 'Doanh thu', value: noBreakVnd(formatVnd(totalRevenue * 1_000_000)), trend: 0, up: true, icon: <DollarSign size={14} aria-hidden="true" /> },
     { label: 'Tổng đặt xe', value: fmtNum(totalBookings), trend: 0, up: true, icon: <CalendarCheck size={14} aria-hidden="true" /> },
-    { label: 'Giá trị TB/đơn', value: formatVnd(avgOrder), trend: 0, up: true, icon: <BarChart2 size={14} aria-hidden="true" /> },
+    { label: 'Giá trị TB/đơn', value: noBreakVnd(formatVnd(avgOrder)), trend: 0, up: true, icon: <BarChart2 size={14} aria-hidden="true" /> },
     { label: 'Khách (theo booking)', value: fmtNum(newCustomers), trend: 0, up: true, icon: <Users size={14} aria-hidden="true" /> },
   ];
 
@@ -80,7 +123,7 @@ const SummaryBar = ({ period, monthlySeries, bookingRows, bookings }) => {
           </span>
           <div className="min-w-0">
             <p className="text-xs text-gray-400 font-medium">{k.label}</p>
-            <p className="text-[1.1rem] font-extrabold text-gray-900 leading-tight tabular-nums">{k.value}</p>
+            <AutoFitValue value={k.value} />
             <span className={`inline-flex items-center gap-0.5 text-[0.65rem] font-bold px-1.5 py-px rounded-full ${k.up ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-500'}`}>
               {k.up ? <TrendingUp size={9} aria-hidden="true" /> : <TrendingDown size={9} aria-hidden="true" />}
               <span className="tabular-nums">{Math.abs(k.trend)}%</span>
@@ -125,11 +168,11 @@ const Variant1Layout = ({ period, navigate, monthlySeries, vehicles, bookingRows
   return (
     <div className="flex flex-col gap-5">
       {/* Stat cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         <StatCard title="Tổng xe"         value={totalVehicles}  icon={<Car size={18} />}          color="#00b14f" trend={6.7}  trendLabel="so T2" />
         <StatCard title="Đang cho thuê"   value={activeVehicles} icon={<Activity size={18} />}     color="#2563eb" trend={9.1}  trendLabel="so T2" />
         <StatCard title="Booking chờ"     value={pendingBookings} icon={<Clock size={18} />}         color="#d97706" subtext="cần xử lý" />
-        <StatCard title="Doanh thu T3"    value={formatVnd(monthRevenue * 1_000_000)} icon={<DollarSign size={18} />} color="#dc2626" trend={14.2} trendLabel="so T2" />
+        <StatCard title="Doanh thu T3"    value={noBreakVnd(formatVnd(monthRevenue * 1_000_000))} icon={<DollarSign size={18} />} color="#dc2626" trend={14.2} trendLabel="so T2" />
         <StatCard title="Khách (booking)" value={fmtNum(new Set(bookingRows.map((b) => b.renter)).size)} icon={<Users size={18} />} color="#7c3aed" />
       </div>
 
