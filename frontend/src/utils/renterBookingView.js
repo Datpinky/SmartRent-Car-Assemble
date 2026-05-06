@@ -16,6 +16,37 @@ export const PAYMENT_LABELS = {
   failed: 'Thất bại',
 };
 
+/**
+ * Hai badge (booking + payment) đôi khi lặp cùng ý: vd. «Chờ thanh toán» × 2,
+ * hoặc «Đã thanh toán» + «Thành công». Ẩn badge payment khi không thêm thông tin.
+ */
+export const isPaymentStatusBadgeRedundant = (bookingStatus, paymentStatus) => {
+  const ps = paymentStatus || '';
+  const bs = bookingStatus || '';
+
+  if (!ps) return true;
+  if (ps === 'refunded') return false;
+  if (['failed', 'declined'].includes(ps)) return false;
+
+  if (ps === 'pending') {
+    return bs === 'waiting_payment';
+  }
+
+  if (ps === 'successful') {
+    return [
+      'confirmed',
+      'paid',
+      'waiting_handover',
+      'handed_over',
+      'in_use',
+      'waiting_return_confirmation',
+      'completed',
+    ].includes(bs);
+  }
+
+  return false;
+};
+
 const RETRY_PAYMENT_BOOKING_STATUSES = ['pending', 'waiting_payment'];
 
 export const formatDateTime = (value) => {
@@ -38,7 +69,7 @@ const getLocationLabel = (note) => {
 };
 
 const getCoordinationMeta = (booking, flowState, paymentStatus) => {
-  const startLabel = flowState.hasStarted ? 'Da den gio nhan xe' : 'Chua den gio nhan xe';
+  const startLabel = flowState.hasStarted ? 'Đã đến giờ nhận xe' : 'Chưa đến giờ nhận xe';
 
   if (flowState.isAwaitingPayment) {
     const needsRetry = ['failed', 'declined'].includes(paymentStatus);

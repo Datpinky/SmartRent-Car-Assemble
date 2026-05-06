@@ -9,7 +9,6 @@ import {
   FaStickyNote,
   FaTimes,
   FaCar,
-  FaUser,
 } from 'react-icons/fa';
 import DataTable from '../../../components/common/DataTable';
 import Modal from '../../../components/common/Modal';
@@ -19,12 +18,14 @@ import { sanitizeVehicleImageUrl } from '../../../services/vehicleService';
 import { sanitizeImageUrl } from '../../../utils/media';
 
 const STATUS_ORDER = [
-  'waiting_payment',
-  'paid',
   'pending',
   'confirmed',
+  'waiting_payment',
+  'paid',
+  'payment_failed',
   'waiting_handover',
   'handed_over',
+  'in_use',
   'waiting_return_confirmation',
   'completed',
   'cancel_pending',
@@ -32,11 +33,15 @@ const STATUS_ORDER = [
   'cancelled',
 ];
 
+/** Không hiển thị trên phễu / nút lọc (booking đó vẫn xem trong «Tất cả»). */
+const FUNNEL_EXCLUDED = new Set(['pending', 'confirmed', 'payment_failed']);
+const FUNNEL_STATUS_ORDER = STATUS_ORDER.filter((s) => !FUNNEL_EXCLUDED.has(s));
+
 const STATUS_LABELS = {
+  pending: 'Chờ xác nhận đơn',
+  confirmed: 'Đã xác nhận — chờ TT',
   waiting_payment: 'Chờ thanh toán',
   paid: 'Đã thanh toán',
-  pending: 'Chờ xác nhận',
-  confirmed: 'Đã xác nhận',
   waiting_handover: 'Chờ bàn giao',
   handed_over: 'Đã bàn giao',
   waiting_return_confirmation: 'Chờ xác nhận trả',
@@ -44,16 +49,20 @@ const STATUS_LABELS = {
   cancel_pending: 'Đang xử lý hủy/hoàn tiền',
   cancel_failed: 'Hủy/hoàn tiền lỗi',
   cancelled: 'Đã hủy',
+  payment_failed: 'Thanh toán thất bại',
+  in_use: 'Đang thuê',
 };
 
 const PRIMARY_ACTIONS = {
+  /** Backend: pending → confirmed | waiting_payment | cancelled */
   pending: { nextStatus: 'confirmed', label: 'Xác nhận đơn' },
-  paid: { nextStatus: 'confirmed', label: 'Xác nhận đơn' },
-  confirmed: { nextStatus: 'waiting_handover', label: 'Chuyển sang chờ bàn giao' },
+  /** Backend: paid → waiting_handover | cancelled */
+  paid: { nextStatus: 'waiting_handover', label: 'Chuyển sang chờ bàn giao' },
   waiting_handover: { nextStatus: 'handed_over', label: 'Xác nhận đã bàn giao' },
   waiting_return_confirmation: { nextStatus: 'completed', label: 'Xác nhận trả xe' },
 };
 
+/** Vẫn cho phép hủy kể cả đơn còn ở trạng thái backend pending/confirmed (không hiển thị trên phễu). */
 const CANCELLABLE_STATUSES = ['pending', 'waiting_payment', 'paid', 'confirmed', 'waiting_handover'];
 
 const fmtDate = (value) =>
@@ -61,10 +70,43 @@ const fmtDate = (value) =>
     ? new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(value))
     : '—';
 
-const getVehicleName = (vehicle) =>
-  vehicle?.vehicle_name
-  || [vehicle?.vehicle_brand || vehicle?.brand, vehicle?.vehicle_model || vehicle?.model].filter(Boolean).join(' ')
-  || '—';
+const getVehicleName = (vehicleOrId) => {
+  if (vehicleOrId == null || vehicleOrId === '') return '—';
+  if (typeof vehicleOrId === 'string') {
+    const id = vehicleOrId;
+    return id.length > 8 ? `Xe (…${id.slice(-6)})` : `Xe (${id})`;
+  }
+  const vehicle = vehicleOrId;
+  return (
+    vehicle?.vehicle_name
+    || [vehicle?.vehicle_brand || vehicle?.brand, vehicle?.vehicle_model || vehicle?.model].filter(Boolean).join(' ')
+    || '—'
+  );
+};
+
+const getVehiclePlate = (vehicleOrId) => {
+  if (!vehicleOrId || typeof vehicleOrId !== 'object') return '';
+  const plate = vehicleOrId.vehicle_plate_number;
+  return plate ? String(plate).trim() : '';
+};
+
+/** Trạng thái booking không còn «xác nhận đơn» có nghĩa (đã hủy / đang hủy). */
+const ORDER_CONFIRM_EXCLUDED = new Set(['cancelled', 'cancel_pending', 'cancel_failed']);
+
+/** Đơn showroom đã xử lý qua bước nhận đơn (không còn chờ duyệt pending). */
+const isShowroomConfirmedOrder = (status) =>
+  status !== 'pending' && !ORDER_CONFIRM_EXCLUDED.has(status);
+
+/** Đơn đã qua bước showroom xác nhận (pending = khách vừa đặt, chờ showroom duyệt). */
+const getOrderConfirmationMeta = (status) => {
+  if (status === 'pending') {
+    return { label: 'Chưa xác nhận', hint: 'Showroom chưa nhận đơn', variant: 'pending' };
+  }
+  if (ORDER_CONFIRM_EXCLUDED.has(status)) {
+    return { label: '—', hint: '', variant: 'muted' };
+  }
+  return { label: 'Đã xác nhận', hint: 'Showroom đã xác nhận đơn', variant: 'ok' };
+};
 
 const getBookingVehicleImage = (vehicle) => {
   if (!vehicle || typeof vehicle !== 'object') return '';
@@ -90,10 +132,36 @@ const getRenterDisplay = (bookingRow) => {
   const name = rawName ? rawName : null;
   const email = rawEmail ? rawEmail : null;
   return {
-    name: name || 'Chưa có tên trên hệ thống',
-    email: email || '—',
+    name: name || 'Chưa cập nhật tên',
+    email,
     missing: !name,
   };
+};
+
+const mergeBookingAfterStatusUpdate = (currentBooking, updatedBooking = {}) => {
+  if (!updatedBooking || typeof updatedBooking !== 'object') {
+    return currentBooking;
+  }
+
+  const merged = { ...currentBooking, ...updatedBooking };
+
+  const updatedUserObj =
+    updatedBooking.user_id && typeof updatedBooking.user_id === 'object'
+      ? updatedBooking.user_id
+      : null;
+  const hasUpdatedUserDisplay = Boolean(
+    (updatedUserObj?.name && String(updatedUserObj.name).trim())
+      || (updatedUserObj?.full_name && String(updatedUserObj.full_name).trim())
+      || (updatedBooking.renterName && String(updatedBooking.renterName).trim() && updatedBooking.renterName !== '—')
+  );
+
+  if (!hasUpdatedUserDisplay) {
+    merged.user_id = currentBooking.user_id;
+    merged.renterName = currentBooking.renterName;
+    merged.renterEmail = currentBooking.renterEmail;
+  }
+
+  return merged;
 };
 
 function parseNoteSections(note) {
@@ -118,59 +186,39 @@ function BookingDetailHero({ bookingRow }) {
       ? String(bookingRow.vehicleName).trim()
       : null)
     || (fromVehicle && fromVehicle !== '—' ? fromVehicle : null)
-    || 'Xe (đang tải hoặc chưa populate vehicle)';
+    || 'Chưa có thông tin xe';
 
   useEffect(() => {
     setImgFailed(false);
   }, [bookingRow?.id, imgSrc]);
 
   return (
-    <div className="rounded-2xl overflow-hidden border border-gray-200/90 bg-white shadow-[0_4px_24px_rgba(15,23,42,0.06)]">
-      <div className="relative flex flex-col sm:flex-row gap-0 sm:gap-0">
-        <div
-          className={`relative sm:w-[9.5rem] shrink-0 aspect-[4/3] sm:aspect-auto sm:min-h-[8.5rem] flex items-stretch ${
-            showImg ? 'bg-gray-100' : 'bg-gradient-to-br from-primary-light/90 to-emerald-100/80'
-          }`}
-        >
-          {showImg ? (
-            <img
-              src={imgSrc}
-              alt=""
-              className="w-full h-full object-cover"
-              onError={() => setImgFailed(true)}
-            />
-          ) : (
-            <div className="flex flex-1 items-center justify-center text-primary/90">
-              <FaCar className="text-5xl sm:text-4xl opacity-80" aria-hidden />
-            </div>
-          )}
-          <div className="absolute top-2 left-2 sm:hidden">
-            <span className="inline-flex items-center rounded-md bg-black/55 px-2 py-0.5 text-[0.65rem] font-bold tracking-wide text-white backdrop-blur-sm">
-              {`BK${String(bookingRow.id).slice(-6).toUpperCase()}`}
-            </span>
+    <div className="flex gap-3 sm:gap-4">
+      <div
+        className="relative h-16 w-20 shrink-0 overflow-hidden rounded-xl bg-gray-100 sm:h-[4.5rem] sm:w-[5.5rem]"
+      >
+        {showImg ? (
+          <img
+            src={imgSrc}
+            alt=""
+            className="h-full w-full object-cover"
+            onError={() => setImgFailed(true)}
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-gray-400">
+            <FaCar className="text-2xl" aria-hidden />
           </div>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2 gap-y-1">
+          <span className="font-mono text-[0.72rem] text-gray-500 tabular-nums">{`BK${String(bookingRow.id).slice(-6).toUpperCase()}`}</span>
+          <StatusBadge status={bookingRow.status} customLabel={STATUS_LABELS[bookingRow.status]} />
         </div>
-        <div className="flex min-w-0 flex-1 flex-col justify-center gap-3 px-4 py-4 sm:px-5 sm:py-5 bg-gradient-to-b from-white to-gray-50/80">
-          <div className="hidden sm:flex flex-wrap items-center justify-between gap-2">
-            <span className="code-badge font-mono">{`BK${String(bookingRow.id).slice(-6).toUpperCase()}`}</span>
-            <StatusBadge status={bookingRow.status} customLabel={STATUS_LABELS[bookingRow.status] || bookingRow.status} />
-          </div>
-          <div className="sm:hidden flex justify-end -mt-1">
-            <StatusBadge status={bookingRow.status} customLabel={STATUS_LABELS[bookingRow.status] || bookingRow.status} />
-          </div>
-          <div>
-            <p className="m-0 text-[0.65rem] font-bold uppercase tracking-[0.12em] text-gray-500">Xe đặt</p>
-            <h3 className="m-0 mt-1 text-lg sm:text-xl font-extrabold text-gray-900 leading-tight tracking-tight">
-              {displayName}
-            </h3>
-            {plate ? (
-              <p className="m-0 mt-2 inline-flex items-center gap-1.5 rounded-lg bg-gray-100 px-2.5 py-1 text-[0.75rem] font-semibold tabular-nums text-gray-700">
-                <span className="text-gray-400 font-normal">Biển</span>
-                {plate}
-              </p>
-            ) : null}
-          </div>
-        </div>
+        <p className="m-0 mt-1 text-base font-semibold text-gray-900 leading-snug line-clamp-2">{displayName}</p>
+        {plate ? (
+          <p className="m-0 mt-0.5 text-sm text-gray-600 tabular-nums">{plate}</p>
+        ) : null}
       </div>
     </div>
   );
@@ -183,6 +231,7 @@ const BookingManagement = () => {
   const [viewModal, setViewModal] = useState(null);
   const [cancelModal, setCancelModal] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [confirmFilter, setConfirmFilter] = useState('all');
   const [updatingId, setUpdatingId] = useState('');
 
   const fetchBookings = useCallback(async () => {
@@ -206,15 +255,22 @@ const BookingManagement = () => {
 
   const updateStatus = async (bookingId, nextStatus) => {
     setUpdatingId(bookingId);
+    setLoadError('');
 
     try {
-      const updated = await bookingService.updateBookingStatus(bookingId, nextStatus);
+      const id = String(bookingId);
+      const updated = await bookingService.updateBookingStatus(id, nextStatus);
       setBookings((current) =>
-        current.map((booking) => ((booking._id || booking.id) === bookingId ? { ...booking, ...updated } : booking))
+        current.map((booking) =>
+          String(booking._id || booking.id) === id ? mergeBookingAfterStatusUpdate(booking, updated) : booking
+        )
       );
       setViewModal((current) =>
-        current && (current._id || current.id) === bookingId
-          ? { ...current, ...(updated || {}), status: updated?.status || nextStatus }
+        current && String(current._id || current.id) === id
+          ? {
+            ...mergeBookingAfterStatusUpdate(current, updated),
+            status: updated?.status || nextStatus,
+          }
           : current
       );
     } catch (err) {
@@ -257,14 +313,23 @@ const BookingManagement = () => {
     () =>
       bookings.map((booking) => {
         const renter = booking.user_id || {};
-        const vehicle = booking.vehicle_id || {};
+        const rawVehicle = booking.vehicle_id;
+        const vehicle = rawVehicle && typeof rawVehicle === 'object' ? rawVehicle : null;
 
         return {
           ...booking,
           id: booking._id || booking.id,
           renterName: renter.name || renter.full_name || renter.email || '—',
           renterEmail: renter.email || '—',
-          vehicleName: getVehicleName(vehicle),
+          vehicleName: getVehicleName(vehicle || rawVehicle),
+          vehiclePlate: getVehiclePlate(vehicle || {}),
+          orderConfirm: getOrderConfirmationMeta(booking.status),
+          confirmationSort:
+            booking.status === 'pending'
+              ? 0
+              : ORDER_CONFIRM_EXCLUDED.has(booking.status)
+                ? 2
+                : 1,
           startDateLabel: fmtDate(booking.start_date),
           endDateLabel: fmtDate(booking.end_date),
           totalLabel: Number(booking.total_price || 0).toLocaleString('vi-VN'),
@@ -275,9 +340,22 @@ const BookingManagement = () => {
     [bookings]
   );
 
-  const filteredRows = useMemo(
-    () => (statusFilter === 'all' ? rows : rows.filter((row) => row.status === statusFilter)),
-    [rows, statusFilter]
+  const filteredRows = useMemo(() => {
+    let list = statusFilter === 'all' ? rows : rows.filter((row) => row.status === statusFilter);
+    if (confirmFilter === 'unconfirmed') {
+      list = list.filter((row) => row.status === 'pending');
+    } else if (confirmFilter === 'confirmed') {
+      list = list.filter((row) => isShowroomConfirmedOrder(row.status));
+    }
+    return list;
+  }, [rows, statusFilter, confirmFilter]);
+
+  const confirmationCounts = useMemo(
+    () => ({
+      unconfirmed: rows.filter((row) => row.status === 'pending').length,
+      confirmed: rows.filter((row) => isShowroomConfirmedOrder(row.status)).length,
+    }),
+    [rows]
   );
 
   const countsByStatus = useMemo(
@@ -311,10 +389,60 @@ const BookingManagement = () => {
       key: 'vehicleName',
       label: 'Xe',
       render: (row) => (
-        <span style={{ fontSize: '0.8rem', maxWidth: 180, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {row.vehicleName}
-        </span>
+        <div style={{ maxWidth: 200 }}>
+          <span
+            style={{
+              fontSize: '0.8rem',
+              fontWeight: 600,
+              color: '#111827',
+              display: 'block',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {row.vehicleName}
+          </span>
+          {row.vehiclePlate ? (
+            <span className="tabular-nums" style={{ fontSize: '0.72rem', color: '#6b7280' }}>
+              BKS {row.vehiclePlate}
+            </span>
+          ) : null}
+        </div>
       ),
+    },
+    {
+      key: 'orderConfirm',
+      label: 'Trạng thái xác nhận',
+      render: (row) => {
+        const { label, hint, variant } = row.orderConfirm || getOrderConfirmationMeta(row.status);
+        if (variant === 'muted') {
+          return <span style={{ fontSize: '0.78rem', color: '#9ca3af' }}>—</span>;
+        }
+        const bg = variant === 'pending' ? '#fffbeb' : '#ecfdf5';
+        const border = variant === 'pending' ? '#fcd34d' : '#86efac';
+        const color = variant === 'pending' ? '#b45309' : '#166534';
+        return (
+          <span
+            title={hint}
+            style={{
+              display: 'inline-block',
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              padding: '4px 10px',
+              borderRadius: 999,
+              background: bg,
+              border: `1px solid ${border}`,
+              color,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {label}
+          </span>
+        );
+      },
+      sortable: true,
+      accessor: 'confirmationSort',
     },
     { key: 'startDateLabel', label: 'Nhận xe', accessor: 'startDateLabel' },
     { key: 'endDateLabel', label: 'Trả xe', accessor: 'endDateLabel' },
@@ -333,7 +461,7 @@ const BookingManagement = () => {
     {
       key: 'status',
       label: 'Trạng thái',
-      render: (row) => <StatusBadge status={row.status} customLabel={STATUS_LABELS[row.status] || row.status} />,
+      render: (row) => <StatusBadge status={row.status} customLabel={STATUS_LABELS[row.status]} />,
     },
     {
       key: 'actions',
@@ -394,16 +522,11 @@ const BookingManagement = () => {
           <h1 className="page-title">Quản lý đặt xe</h1>
           <p className="page-subtitle">Theo dõi và xử lý các booking của showroom theo đúng trạng thái backend.</p>
         </div>
-        {countsByStatus.pending > 0 && (
-          <div style={{ background: '#fef3c7', color: '#d97706', padding: '6px 14px', borderRadius: 8, fontSize: '0.82rem', fontWeight: 600 }}>
-            {countsByStatus.pending} booking chờ xác nhận
-          </div>
-        )}
       </div>
 
       <div style={{ background: '#fff', borderRadius: 14, padding: 16, marginBottom: 16, border: '1px solid #f0f0f0', overflowX: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 0, minWidth: 820 }}>
-          {STATUS_ORDER.map((status, index) => (
+          {FUNNEL_STATUS_ORDER.map((status, index) => (
             <React.Fragment key={status}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1 }}>
                 <div style={{ width: 10, height: 10, borderRadius: '50%', background: countsByStatus[status] ? '#00b14f' : '#e5e7eb' }} />
@@ -414,14 +537,47 @@ const BookingManagement = () => {
                   {countsByStatus[status]}
                 </span>
               </div>
-              {index < STATUS_ORDER.length - 1 && <div style={{ height: 1, background: '#e5e7eb', flex: 1.4 }} />}
+              {index < FUNNEL_STATUS_ORDER.length - 1 && <div style={{ height: 1, background: '#e5e7eb', flex: 1.4 }} />}
             </React.Fragment>
           ))}
         </div>
       </div>
 
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+        <span style={{ fontSize: '0.74rem', color: '#6b7280', fontWeight: 700 }}>Xác nhận đơn:</span>
+        {[
+          { key: 'all', label: 'Tất cả' },
+          { key: 'unconfirmed', label: 'Chưa xác nhận', count: confirmationCounts.unconfirmed },
+          { key: 'confirmed', label: 'Đã xác nhận', count: confirmationCounts.confirmed },
+        ].map((item) => (
+          <button
+            type="button"
+            key={item.key}
+            onClick={() => setConfirmFilter(item.key)}
+            style={{
+              padding: '5px 12px',
+              borderRadius: 50,
+              border: '1.5px solid',
+              borderColor: confirmFilter === item.key ? '#2563eb' : '#e5e7eb',
+              background: confirmFilter === item.key ? '#eff6ff' : '#fff',
+              color: confirmFilter === item.key ? '#1d4ed8' : '#374151',
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            {item.label}
+            {item.count != null && (
+              <span className="tabular-nums" style={{ marginLeft: 5, opacity: 0.75 }}>
+                ({item.count})
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-        {['all', ...STATUS_ORDER].map((status) => (
+        {['all', ...FUNNEL_STATUS_ORDER].map((status) => (
           <button
             type="button"
             key={status}
@@ -461,104 +617,75 @@ const BookingManagement = () => {
         <DataTable columns={columns} data={filteredRows} searchPlaceholder="Tìm theo tên khách, xe…" />
       )}
 
-      <Modal isOpen={!!viewModal} onClose={() => setViewModal(null)} title="Chi tiết đặt xe" width={640}>
+      <Modal isOpen={!!viewModal} onClose={() => setViewModal(null)} title="Chi tiết đặt xe" width={480}>
         {viewModal && (
-          <div className="flex flex-col gap-5 text-gray-900 -mx-0.5">
+          <div className="flex flex-col gap-0 text-gray-900">
             <BookingDetailHero key={viewModal.id} bookingRow={viewModal} />
 
-            {(() => {
-              const renter = getRenterDisplay(viewModal);
-              return (
-                <div className="rounded-2xl border border-gray-200/90 bg-white p-4 shadow-sm">
-                  <p className="m-0 mb-3 flex items-center gap-2 text-[0.7rem] font-bold uppercase tracking-[0.1em] text-gray-500">
-                    <FaUser className="text-primary text-sm" aria-hidden />
-                    Khách thuê
-                  </p>
-                  <div className="flex items-start gap-3 rounded-xl bg-gray-50/95 px-3.5 py-3 border border-gray-100">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white border border-gray-200 text-primary shadow-sm">
-                      <FaUser className="text-lg" aria-hidden />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className={`m-0 text-[0.95rem] font-bold leading-snug ${renter.missing ? 'text-gray-500' : 'text-gray-900'}`}>
-                        {renter.name}
-                      </p>
-                      <p className="m-0 mt-1 text-[0.82rem] text-gray-600 break-all">{renter.email}</p>
-                      {renter.missing && (
-                        <p className="m-0 mt-2 rounded-lg bg-amber-50 border border-amber-100 px-2.5 py-2 text-[0.72rem] text-amber-900 leading-snug">
-                          Chưa có thông tin khách từ API. Kiểm tra populate{' '}
-                          <code className="text-[0.68rem] bg-amber-100/80 px-1 rounded">user_id</code> khi trả danh sách
-                          booking.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-
-            <div className="rounded-2xl border border-gray-200/90 bg-white p-4 shadow-sm">
-              <p className="m-0 mb-3 flex items-center gap-2 text-[0.7rem] font-bold uppercase tracking-[0.1em] text-gray-500">
-                <FaCalendarAlt className="text-primary text-sm" aria-hidden />
-                Lịch thuê
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 px-3.5 py-3">
-                  <p className="m-0 text-[0.7rem] font-semibold text-emerald-800/80">Nhận xe</p>
-                  <p className="m-0 mt-1 text-sm font-bold text-gray-900 tabular-nums">{viewModal.startDateLabel}</p>
-                </div>
-                <div className="rounded-xl border border-sky-100 bg-sky-50/40 px-3.5 py-3">
-                  <p className="m-0 text-[0.7rem] font-semibold text-sky-800/80">Trả xe</p>
-                  <p className="m-0 mt-1 text-sm font-bold text-gray-900 tabular-nums">{viewModal.endDateLabel}</p>
-                </div>
-                <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/60 px-3.5 py-3">
+            <div className="mt-5 space-y-4 border-t border-gray-100 pt-5">
+              {(() => {
+                const renter = getRenterDisplay(viewModal);
+                return (
                   <div>
-                    <p className="m-0 text-[0.7rem] font-medium text-gray-500">Số ngày thuê</p>
-                    <p className="m-0 mt-0.5 text-base font-bold text-gray-900 tabular-nums">{viewModal.dayCount} ngày</p>
-                  </div>
-                  <div className="text-left sm:text-right">
-                    <p className="m-0 text-[0.7rem] font-medium text-gray-500">Tổng thanh toán</p>
-                    <p className="m-0 mt-0.5 text-xl font-extrabold text-primary tabular-nums tracking-tight">
-                      {viewModal.totalLabel}đ
+                    <p className="m-0 text-xs font-medium text-gray-500">Khách thuê</p>
+                    <p className={`m-0 mt-0.5 text-sm font-semibold ${renter.missing ? 'text-gray-500' : 'text-gray-900'}`}>
+                      {renter.name}
                     </p>
+                    {renter.email ? (
+                      <p className="m-0 mt-0.5 text-sm text-gray-600 break-all">{renter.email}</p>
+                    ) : null}
                   </div>
-                </div>
+                );
+              })()}
+
+              <div>
+                <p className="m-0 flex items-center gap-1.5 text-xs font-medium text-gray-500">
+                  <FaCalendarAlt className="text-gray-400" aria-hidden />
+                  Lịch thuê
+                </p>
+                <p className="m-0 mt-1.5 text-sm text-gray-900">
+                  <span className="tabular-nums font-medium">{viewModal.startDateLabel}</span>
+                  <span className="mx-2 text-gray-300">→</span>
+                  <span className="tabular-nums font-medium">{viewModal.endDateLabel}</span>
+                  <span className="mx-2 text-gray-300">·</span>
+                  <span className="tabular-nums text-gray-600">{viewModal.dayCount} ngày</span>
+                </p>
+                <p className="m-0 mt-2 text-lg font-bold tabular-nums text-primary">{viewModal.totalLabel}đ</p>
               </div>
+
+              {(() => {
+                const { deliveryLine, otherNote } = parseNoteSections(viewModal.note);
+                if (!deliveryLine && (!otherNote || otherNote === '—')) return null;
+                return (
+                  <div className="space-y-3">
+                    {deliveryLine ? (
+                      <div>
+                        <p className="m-0 flex items-center gap-1.5 text-xs font-medium text-gray-500">
+                          <FaMapMarkerAlt className="text-gray-400" aria-hidden />
+                          Địa chỉ / giao xe
+                        </p>
+                        <p className="m-0 mt-1 text-sm text-gray-800 leading-relaxed">{deliveryLine}</p>
+                      </div>
+                    ) : null}
+                    {otherNote ? (
+                      <div>
+                        <p className="m-0 flex items-center gap-1.5 text-xs font-medium text-gray-500">
+                          <FaStickyNote className="text-gray-400" aria-hidden />
+                          Ghi chú
+                        </p>
+                        <p className="m-0 mt-1 text-sm text-gray-700 whitespace-pre-wrap break-words">{otherNote}</p>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })()}
             </div>
 
-            {(() => {
-              const { deliveryLine, otherNote } = parseNoteSections(viewModal.note);
-              if (!deliveryLine && (!otherNote || otherNote === '—')) return null;
-              return (
-                <div className="space-y-3">
-                  {deliveryLine ? (
-                    <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary-light/35 to-white px-4 py-3.5 shadow-sm">
-                      <p className="m-0 flex items-center gap-2 text-[0.7rem] font-bold uppercase tracking-wide text-primary">
-                        <FaMapMarkerAlt className="text-base" aria-hidden />
-                        Địa chỉ / hình thức giao xe
-                      </p>
-                      <p className="m-0 mt-2 text-[0.88rem] font-medium text-gray-900 leading-relaxed">{deliveryLine}</p>
-                    </div>
-                  ) : null}
-                  {otherNote ? (
-                    <div className="rounded-2xl border border-amber-200/70 bg-amber-50/80 px-4 py-3.5">
-                      <p className="m-0 flex items-center gap-2 text-[0.7rem] font-bold uppercase tracking-wide text-amber-900/80">
-                        <FaStickyNote aria-hidden />
-                        Ghi chú
-                      </p>
-                      <p className="m-0 mt-2 text-[0.85rem] text-amber-950 leading-relaxed whitespace-pre-wrap break-words">
-                        {otherNote}
-                      </p>
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })()}
-
-            <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2 border-t border-gray-100">
+            <div className="mt-6 flex flex-col-reverse gap-2 border-t border-gray-100 pt-5 sm:flex-row sm:gap-3">
               {CANCELLABLE_STATUSES.includes(viewModal.status) && (
                 <button
                   type="button"
-                  className="btn-danger flex-1 rounded-xl py-3 text-[0.9rem] font-semibold shadow-sm transition hover:opacity-95"
+                  className="btn-danger flex-1 rounded-lg py-2.5 text-sm font-semibold"
                   onClick={() => {
                     setCancelModal(viewModal);
                     setViewModal(null);
@@ -571,14 +698,14 @@ const BookingManagement = () => {
               {PRIMARY_ACTIONS[viewModal.status] && (
                 <button
                   type="button"
-                  className="btn-primary flex-1 rounded-xl py-3 text-[0.9rem] font-semibold shadow-md inline-flex items-center justify-center gap-2 transition hover:opacity-95"
+                  className="btn-primary flex-1 rounded-lg py-2.5 text-sm font-semibold inline-flex items-center justify-center gap-2"
                   onClick={() => {
                     updateStatus(viewModal.id, PRIMARY_ACTIONS[viewModal.status].nextStatus);
                     setViewModal(null);
                   }}
                 >
                   <span>{PRIMARY_ACTIONS[viewModal.status].label}</span>
-                  <FaCheckCircle aria-hidden="true" className="text-base opacity-90" />
+                  <FaCheckCircle aria-hidden className="text-sm opacity-90" />
                 </button>
               )}
             </div>

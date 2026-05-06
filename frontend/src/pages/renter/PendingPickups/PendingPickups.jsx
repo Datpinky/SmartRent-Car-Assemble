@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   FaCalendarAlt,
@@ -15,6 +15,7 @@ import {
   PAYMENT_LABELS,
   formatDateTime,
   formatMoney,
+  isPaymentStatusBadgeRedundant,
   mapRenterBooking,
 } from '../../../utils/renterBookingView';
 import { RENTAL_CONTRACT_UI } from '../../../constants/rentalContractTemplate';
@@ -42,10 +43,10 @@ const PendingPickups = () => {
   const [detailModal, setDetailModal] = useState(null);
   const [contractBookingId, setContractBookingId] = useState(null);
 
-  const loadBookings = async () => {
-    setLoading(true);
+  const loadBookings = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
-      const data = await bookingService.getCurrentRoleBookingsDetailed();
+      const data = await bookingService.getCurrentRoleBookingsDetailed({ bypassCache: true });
       const mapped = (data || [])
         .map(mapRenterBooking)
         .filter((booking) => booking.isAwaitingPickup);
@@ -55,13 +56,22 @@ const PendingPickups = () => {
       setBookings([]);
       setError(err.message || 'Không thể tải danh sách chờ nhận xe.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadBookings();
-  }, []);
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void loadBookings({ silent: true });
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [loadBookings]);
 
   useEffect(() => {
     if (!highlightedBookingId || loading || bookings.length === 0) {
@@ -112,16 +122,13 @@ const PendingPickups = () => {
     [bookings]
   );
 
-  const waitingLabel = 'Đang chờ Showroom hoàn tất bàn giao';
-
   return (
     <div className="pending-pickups">
       <div className="page-header" style={{ marginBottom: 20 }}>
         <div>
           <h1 className="page-title">Chờ nhận xe</h1>
           <p className="page-subtitle" style={{ marginTop: 6, maxWidth: 720 }}>
-            Đây là bước theo dõi: showroom đang hoàn tất bàn giao trên hệ thống. Bạn không xác nhận «đã nhận xe» tại
-            đây — khi showroom cập nhật trạng thái, booking sẽ chuyển sang Chuyến đi của tôi.
+            Theo dõi booking đang chờ showroom hoàn tất bàn giao.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -238,26 +245,20 @@ const PendingPickups = () => {
                     </span>
                   </div>
                   <div style={{ marginTop: 8, fontSize: '0.78rem', fontWeight: 800, color: '#334155' }}>{booking.statusHeadline}</div>
-                  <div style={{ marginTop: 4, fontSize: '0.76rem', color: '#6b7280', lineHeight: 1.6 }}>
-                    {booking.waitingForLabel}
-                  </div>
-                  {booking.pickupConfirmationHint && (
-                    <div style={{ marginTop: 8, fontSize: '0.76rem', color: '#9a3412', lineHeight: 1.6 }}>
-                      {booking.pickupConfirmationHint}
-                    </div>
-                  )}
                 </div>
               </div>
 
               <div className="booking-card-right">
                 <div style={{ textAlign: 'right' }}>
                   <StatusBadge status={booking.status} />
-                  <div style={{ marginTop: 6 }}>
-                    <StatusBadge
-                      status={booking.paymentStatus}
-                      customLabel={PAYMENT_LABELS[booking.paymentStatus] || booking.paymentStatus}
-                    />
-                  </div>
+                  {!isPaymentStatusBadgeRedundant(booking.status, booking.paymentStatus) && (
+                    <div style={{ marginTop: 6 }}>
+                      <StatusBadge
+                        status={booking.paymentStatus}
+                        customLabel={PAYMENT_LABELS[booking.paymentStatus] || booking.paymentStatus}
+                      />
+                    </div>
+                  )}
                   <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#00b14f', marginTop: 8 }}>
                     {formatMoney(booking.totalPrice)}
                   </div>
@@ -278,20 +279,6 @@ const PendingPickups = () => {
                       {RENTAL_CONTRACT_UI.officialButton}
                     </button>
                   )}
-                  <div
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      borderRadius: 8,
-                      padding: '6px 12px',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      background: '#e2e8f0',
-                      color: '#475569',
-                    }}
-                  >
-                    {waitingLabel}
-                  </div>
                   {booking.showroomEmail && (
                     <a
                       className="renter-btn-soft"
@@ -324,19 +311,7 @@ const PendingPickups = () => {
                 padding: '14px 16px',
               }}
             >
-              <div style={{ fontWeight: 800, color: '#111827', marginBottom: 8 }}>{detailModal.statusHeadline}</div>
-              <div style={{ fontSize: '0.8rem', color: '#475569', lineHeight: 1.65, marginBottom: 8 }}>
-                {detailModal.waitingForLabel}
-              </div>
-              <div style={{ fontSize: '0.78rem', color: '#334155', fontWeight: 700, marginBottom: 6 }}>
-                {detailModal.waitingOwnerLabel}
-              </div>
-              <div style={{ fontSize: '0.78rem', color: '#64748b', lineHeight: 1.6 }}>
-                Bước tiếp theo: {detailModal.nextStepLabel}
-              </div>
-              <div style={{ marginTop: 8, fontSize: '0.78rem', color: '#0f766e', lineHeight: 1.6 }}>
-                Việc bạn nên làm: {detailModal.renterActionHint}
-              </div>
+              <div style={{ fontWeight: 800, color: '#111827' }}>{detailModal.statusHeadline}</div>
             </div>
 
             {[
@@ -363,40 +338,6 @@ const PendingPickups = () => {
                 <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#111827', textAlign: 'right' }}>{value}</span>
               </div>
             ))}
-
-            {detailModal.pickupConfirmationHint && (
-              <div
-                style={{
-                  background: '#fff7ed',
-                  border: '1px solid #fdba74',
-                  color: '#9a3412',
-                  borderRadius: 12,
-                  padding: '12px 14px',
-                  fontSize: '0.8rem',
-                  lineHeight: 1.6,
-                }}
-              >
-                {detailModal.pickupConfirmationHint}
-              </div>
-            )}
-
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: 10,
-                background: '#e2e8f0',
-                color: '#475569',
-                padding: '12px 14px',
-                fontSize: '0.8rem',
-                fontWeight: 700,
-                minHeight: 42,
-                textAlign: 'center',
-              }}
-            >
-              {waitingLabel}
-            </div>
 
             {canRenterViewOfficialRentalContract(detailModal) && (
               <button

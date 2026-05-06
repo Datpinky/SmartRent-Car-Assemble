@@ -104,19 +104,6 @@ export const getBookingFlowState = (booking, fallbackPaymentStatus) => {
       ? 'Đã quá hạn trả xe. Bạn có thể mở giao diện trả xe ngay.'
       : 'Đã đến lịch thuê. Bạn sẽ mở được quy trình trả xe khi đến đúng thời gian.'
     : '';
-
-  const pickupConfirmationHint = !(isAwaitingPickup || isAwaitingShowroomProcessing)
-    ? ''
-    : requiresRetryPayment
-      ? 'Thanh toán trước đó chưa thành công. Vui lòng thanh toán lại để tiếp tục quy trình nhận xe.'
-      : !hasSuccessfulPayment
-        ? 'Booking đang chờ thanh toán. Sau khi thanh toán thành công, showroom mới có thể bàn giao xe.'
-        : isAwaitingShowroomProcessing
-          ? 'Showroom đang xử lý booking và chuẩn bị bàn giao xe. Booking sẽ chuyển sang Chờ giao xe khi showroom hoàn tất xử lý.'
-          : !pickupReadyByTime && startAt
-            ? `Showroom sẽ hoàn tất bàn giao khi đến mốc ${startAt.toLocaleString('vi-VN')}.`
-            : 'Showroom đã hoàn tất bước bàn giao trên hệ thống. Đây là màn theo dõi — bạn không cần bấm «xác nhận đã nhận xe» ở đây; khi trạng thái đồng bộ, booking sẽ hiện ở Chuyến đi của tôi.';
-
   return {
     canConfirmPickup,
     canHandleReceive,
@@ -134,7 +121,6 @@ export const getBookingFlowState = (booking, fallbackPaymentStatus) => {
     isCompleted,
     isUpcoming,
     paymentStatus,
-    pickupConfirmationHint,
     rentalAccessHint,
     rentalActionLabel,
     timeBasedRentalAccess,

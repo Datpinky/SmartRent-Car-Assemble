@@ -1,7 +1,8 @@
 import apiClient from './apiClient';
 
 const PAYMENT_LIST_CACHE_TTL_MS = 15_000;
-const PAYMENT_STATE_CACHE_TTL_MS = 10_000;
+/** Tránh gọi GET + OPTIONS CORS lặp lại quá dày khi enrich danh sách booking (cache chi tiết ~12s). */
+const PAYMENT_STATE_CACHE_TTL_MS = 60_000;
 
 const paymentListCache = new Map();
 const paymentListInflight = new Map();

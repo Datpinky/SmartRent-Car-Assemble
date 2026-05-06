@@ -11,7 +11,13 @@ import { MdDirectionsCar } from 'react-icons/md';
 import Modal from '../../../components/common/Modal';
 import StatusBadge from '../../../components/common/StatusBadge';
 import bookingService from '../../../services/bookingService';
-import { mapRenterBooking, PAYMENT_LABELS, formatDateTime, formatMoney } from '../../../utils/renterBookingView';
+import {
+  mapRenterBooking,
+  PAYMENT_LABELS,
+  formatDateTime,
+  formatMoney,
+  isPaymentStatusBadgeRedundant,
+} from '../../../utils/renterBookingView';
 import RentalFlowModal from './RentalFlowModal';
 import { RENTAL_CONTRACT_UI } from '../../../constants/rentalContractTemplate';
 import RentalContractViewerModal from '../components/RentalContractViewerModal';
@@ -117,17 +123,17 @@ const MyBookings = () => {
     handledHighlightRef.current = handledKey;
 
     if (targetBooking.isAwaitingPayment) {
-      navigate(`/renter/pending-payments?bookingId=${targetBooking.id}&fromNotification=${fromNotification ? '1' : '0'}`, { replace: true });
+      navigate(`/renter/pending?tab=payment&bookingId=${targetBooking.id}&fromNotification=${fromNotification ? '1' : '0'}`, { replace: true });
       return;
     }
 
     if (targetBooking.isAwaitingShowroomProcessing) {
-      navigate(`/renter/pending-showroom-processing?bookingId=${targetBooking.id}&fromNotification=${fromNotification ? '1' : '0'}`, { replace: true });
+      navigate(`/renter/pending?tab=showroom&bookingId=${targetBooking.id}&fromNotification=${fromNotification ? '1' : '0'}`, { replace: true });
       return;
     }
 
     if (targetBooking.isAwaitingPickup) {
-      navigate(`/renter/pending-pickups?bookingId=${targetBooking.id}&fromNotification=${fromNotification ? '1' : '0'}`, { replace: true });
+      navigate(`/renter/pending?tab=pickup&bookingId=${targetBooking.id}&fromNotification=${fromNotification ? '1' : '0'}`, { replace: true });
       return;
     }
 
@@ -221,14 +227,14 @@ const MyBookings = () => {
         Bạn chưa có xe nào đang thuê hoặc đang trong bước trả xe.
       </div>
       <div style={{ fontSize: '0.82rem', color: '#9ca3af', lineHeight: 1.6, marginBottom: 16 }}>
-        Các booking chờ thanh toán, chờ showroom xử lý, chờ nhận xe, hoàn thành hoặc đã hủy đã được tách sang menu riêng.
+        Các booking chờ thanh toán, chờ showroom, chờ nhận xe và các trạng thái khác: dùng «Đặt xe đang chờ» hoặc «Chuyến đi của tôi».
       </div>
       <div style={{ display: 'flex', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <button className="renter-btn-soft" onClick={() => navigate('/renter/pending-showroom-processing')}>
-          Chờ showroom xử lý
+        <button className="renter-btn-soft" onClick={() => navigate('/renter/pending?tab=showroom')}>
+          Mở chờ showroom
         </button>
-        <button className="renter-btn-soft" onClick={() => navigate('/renter/pending-pickups')}>
-          Chờ nhận xe
+        <button className="renter-btn-soft" onClick={() => navigate('/renter/pending?tab=pickup')}>
+          Mở chờ nhận xe
         </button>
         <button className="btn-primary" onClick={() => navigate('/')}>
           Đặt xe mới
@@ -420,12 +426,14 @@ const MyBookings = () => {
               <div className="booking-card-right">
                 <div style={{ textAlign: 'right' }}>
                   <StatusBadge status={booking.status} />
-                  <div style={{ marginTop: 6 }}>
-                    <StatusBadge
-                      status={booking.paymentStatus}
-                      customLabel={PAYMENT_LABELS[booking.paymentStatus] || booking.paymentStatus}
-                    />
-                  </div>
+                  {!isPaymentStatusBadgeRedundant(booking.status, booking.paymentStatus) && (
+                    <div style={{ marginTop: 6 }}>
+                      <StatusBadge
+                        status={booking.paymentStatus}
+                        customLabel={PAYMENT_LABELS[booking.paymentStatus] || booking.paymentStatus}
+                      />
+                    </div>
+                  )}
                   <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#00b14f', marginTop: 8 }}>
                     {formatMoney(booking.totalPrice)}
                   </div>

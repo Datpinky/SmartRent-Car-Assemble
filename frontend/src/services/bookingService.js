@@ -163,11 +163,22 @@ const writeDetailedCache = (cacheKey, value) => {
   detailedBookingsCache.set(cacheKey, { at: Date.now(), value });
 };
 
+/** Tránh gọi getListBookings lặp lại cho cùng một xe (song song hoặc trong vài giây). */
+const INTERVALS_CACHE_TTL_MS = 45_000;
+const intervalsInflight = new Map();
+const intervalsResultCache = new Map();
+
+const clearIntervalsCaches = () => {
+  intervalsInflight.clear();
+  intervalsResultCache.clear();
+};
+
 const invalidateDetailedCacheForCurrentUser = () => {
   const currentUser = readStoredUser();
   const cacheKey = getDetailedCacheKey(currentUser);
   detailedBookingsCache.delete(cacheKey);
   detailedBookingsInflight.delete(cacheKey);
+  clearIntervalsCaches();
 };
 
 const toLegacyVehicleShape = (vehicle) => {
@@ -259,10 +270,15 @@ const enrichBooking = async (booking) => {
   const showroomId = resolveId(booking?.showroom_id);
   const bookingId = resolveId(booking);
 
+  /** booking đã kết thúc — không cần polling payment state (giảm OPTIONS + GET getPaymentState). */
+  const terminalStatuses = new Set(['completed', 'cancelled', 'cancel_pending', 'cancel_failed']);
+  const skipPaymentState =
+    bookingId && booking?.status && terminalStatuses.has(String(booking.status));
+
   const [vehicleResult, paymentResult, paymentStateResult] = await Promise.allSettled([
     vehicleId ? vehicleService.getById(vehicleId) : Promise.resolve(null),
     bookingId ? paymentService.getLatestPaymentByBookingId(bookingId) : Promise.resolve(null),
-    bookingId ? paymentService.getPaymentState(bookingId) : Promise.resolve(null),
+    bookingId && !skipPaymentState ? paymentService.getPaymentState(bookingId) : Promise.resolve(null),
   ]);
 
   const vehicle = vehicleResult.status === 'fulfilled' ? vehicleResult.value : null;
@@ -486,51 +502,79 @@ export const bookingService = {
     }
 
     const vehicleIdText = resolveId(vehicleId);
-    const firstPage = await this.getListBookings({
-      vehicle_id: vehicleIdText,
-      page: 1,
-      limit: 100,
-      sort_by: -1,
-    });
+    const rangeKey = `${from ? String(from) : ''}:${to ? String(to) : ''}`;
+    const cacheKey = `${vehicleIdText}|${rangeKey}`;
+    const now = Date.now();
 
-    const totalPages = Math.min(10, Math.max(1, Number(firstPage.pagination?.totalPages || 1)));
-    const pageResults =
-      totalPages > 1
-        ? await Promise.all(
-          Array.from({ length: totalPages - 1 }, (_, index) =>
-            this.getListBookings({
-              vehicle_id: vehicleIdText,
-              page: index + 2,
-              limit: 100,
-              sort_by: -1,
-            }).catch(() => ({ items: [] }))
-          )
-        )
-        : [];
+    const hit = intervalsResultCache.get(cacheKey);
+    if (hit && hit.expiresAt > now) {
+      return hit.value;
+    }
 
-    const bookings = [
-      ...(firstPage.items || []),
-      ...pageResults.flatMap((page) => page.items || []),
-    ];
+    const pending = intervalsInflight.get(cacheKey);
+    if (pending) {
+      return pending;
+    }
 
-    const intervals = bookings
-      .filter((booking) => resolveId(booking?.vehicle_id) === vehicleIdText)
-      .filter(isBlockingBooking)
-      .map(normalizeBookingInterval)
-      .filter(Boolean)
-      .filter((interval) => {
-        if (!from && !to) {
-          return true;
-        }
-        return dateRangesOverlapByDay(
-          interval.start,
-          interval.end,
-          from || interval.start,
-          to || interval.end
-        );
-      });
+    const promise = (async () => {
+      try {
+        const firstPage = await this.getListBookings({
+          vehicle_id: vehicleIdText,
+          page: 1,
+          limit: 100,
+          sort_by: -1,
+        });
 
-    return { intervals };
+        const totalPages = Math.min(10, Math.max(1, Number(firstPage.pagination?.totalPages || 1)));
+        const pageResults =
+          totalPages > 1
+            ? await Promise.all(
+              Array.from({ length: totalPages - 1 }, (_, index) =>
+                this.getListBookings({
+                  vehicle_id: vehicleIdText,
+                  page: index + 2,
+                  limit: 100,
+                  sort_by: -1,
+                }).catch(() => ({ items: [] }))
+              )
+            )
+            : [];
+
+        const bookings = [
+          ...(firstPage.items || []),
+          ...pageResults.flatMap((page) => page.items || []),
+        ];
+
+        const intervals = bookings
+          .filter((booking) => resolveId(booking?.vehicle_id) === vehicleIdText)
+          .filter(isBlockingBooking)
+          .map(normalizeBookingInterval)
+          .filter(Boolean)
+          .filter((interval) => {
+            if (!from && !to) {
+              return true;
+            }
+            return dateRangesOverlapByDay(
+              interval.start,
+              interval.end,
+              from || interval.start,
+              to || interval.end
+            );
+          });
+
+        const value = { intervals };
+        intervalsResultCache.set(cacheKey, {
+          expiresAt: Date.now() + INTERVALS_CACHE_TTL_MS,
+          value,
+        });
+        return value;
+      } finally {
+        intervalsInflight.delete(cacheKey);
+      }
+    })();
+
+    intervalsInflight.set(cacheKey, promise);
+    return promise;
   },
 
   isDateBooked(date, intervals = []) {

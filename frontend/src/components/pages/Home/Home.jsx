@@ -137,6 +137,7 @@ const mergeVehiclesWithLocation = async (vehicles = [], canReadVehicleLocation =
 
 const Home = () => {
   const { user } = useAuth();
+  const authUserId = user?._id || user?.id || '';
   const [allCars, setAllCars] = useState([]);
   const [filteredCars, setFilteredCars] = useState([]);
   const [loadingVehicles, setLoadingVehicles] = useState(true);
@@ -160,6 +161,18 @@ const Home = () => {
     const locallyFiltered = applyFilters(baseVehicles, nextFilters, nextSearch, nextSort);
 
     if (!hasAvailabilityRange(nextSearch) || locallyFiltered.length === 0) {
+      if (!isMountedRef.current || requestId !== availabilityRequestRef.current) {
+        return;
+      }
+
+      setFilteredCars(locallyFiltered);
+      setAvailabilityError('');
+      setCheckingAvailability(false);
+      return;
+    }
+
+    // getListBookings yêu cầu đăng nhập — tránh gọi N lần (401) khi khách vãng lai chọn ngày.
+    if (!user) {
       if (!isMountedRef.current || requestId !== availabilityRequestRef.current) {
         return;
       }
@@ -227,7 +240,7 @@ const Home = () => {
       setLoadingVehicles(true);
       try {
         const { data } = await vehicleService.getList({ limit: 100 });
-        const vehiclesWithLocation = await mergeVehiclesWithLocation(data, Boolean(user));
+        const vehiclesWithLocation = await mergeVehiclesWithLocation(data, Boolean(authUserId));
         const vehiclesWithReviewSummary = await reviewService.enrichVehiclesWithSummary(vehiclesWithLocation, { limit: 100 });
         if (cancelled) {
           return;
@@ -255,7 +268,7 @@ const Home = () => {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [authUserId]);
 
   const handleFilter = (payload) => {
     if (payload === 'all') {

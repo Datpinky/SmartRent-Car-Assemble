@@ -34,13 +34,14 @@ export async function generateReport(bookingId, payload) {
       status: res.status,
     };
   } catch (err) {
-    const data = err.response?.data?.data ?? null;
+    const raw = err.raw ?? err.response?.data;
+    const data = raw?.data ?? null;
     const ok = data?.status === 'ready';
     return {
       data,
       ok: Boolean(ok),
-      message: err.response?.data?.message || err.message,
-      status: err.response?.status || 0,
+      message: raw?.message || err.message,
+      status: err.status ?? err.response?.status ?? 0,
     };
   }
 }

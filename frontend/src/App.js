@@ -23,12 +23,10 @@ import AIReports from './pages/renter/AIReports/AIReports';
 import Checkout from './pages/renter/Checkout/Checkout';
 import MapPage from './pages/renter/Map/MapPage';
 import MyBookings from './pages/renter/MyBookings/MyBookings';
-import PendingPayments from './pages/renter/PendingPayments/PendingPayments';
-import PendingPickups from './pages/renter/PendingPickups/PendingPickups';
-import PendingShowroomProcessing from './pages/renter/PendingShowroomProcessing/PendingShowroomProcessing';
 import PaymentResult from './pages/renter/PaymentResult/PaymentResult';
 import Profile from './pages/renter/Profile/Profile';
 import RetryPayment from './pages/renter/RetryPayment/RetryPayment';
+import RenterPendingWorkflow from './pages/renter/RenterPendingWorkflow/RenterPendingWorkflow';
 import RenterDashboard from './pages/renter/RenterDashboard/RenterDashboard';
 import SOSReport from './pages/renter/SOSReport/SOSReport';
 import Transactions from './pages/renter/Transactions/Transactions';
@@ -36,7 +34,6 @@ import AIInspection from './pages/showroom/AIInspection/AIInspection';
 import BookingManagement from './pages/showroom/BookingManagement/BookingManagement';
 import ContractManagement from './pages/showroom/ContractManagement/ContractManagement';
 import CustomerManagement from './pages/showroom/CustomerManagement/CustomerManagement';
-import RevenueReports from './pages/showroom/RevenueReports/RevenueReports';
 import ShowroomDashboard from './pages/showroom/ShowroomDashboard/ShowroomDashboard';
 import ShowroomProfile from './pages/showroom/ShowroomProfile/ShowroomProfile';
 import VehicleManagement from './pages/showroom/VehicleManagement/VehicleManagement';
@@ -100,7 +97,6 @@ const App = () => (
           <Route path="/showroom/bookings" element={<DashboardPage roles={['showroom']}><BookingManagement /></DashboardPage>} />
           <Route path="/showroom/contracts" element={<DashboardPage roles={['showroom']}><ContractManagement /></DashboardPage>} />
           <Route path="/showroom/customers" element={<DashboardPage roles={['showroom']}><CustomerManagement /></DashboardPage>} />
-          <Route path="/showroom/revenue" element={<DashboardPage roles={['showroom']}><RevenueReports /></DashboardPage>} />
           <Route path="/showroom/ai-inspection" element={<DashboardPage roles={['showroom']}><AIInspection /></DashboardPage>} />
           <Route path="/showroom/profile" element={<DashboardPage roles={['showroom']}><ShowroomProfile /></DashboardPage>} />
 
@@ -108,9 +104,10 @@ const App = () => (
 
           <Route path="/renter/dashboard" element={<RenterPage><RenterDashboard /></RenterPage>} />
           <Route path="/renter/profile" element={<RenterPage><Profile /></RenterPage>} />
-          <Route path="/renter/pending-payments" element={<RenterPage><PendingPayments /></RenterPage>} />
-          <Route path="/renter/pending-showroom-processing" element={<RenterPage><PendingShowroomProcessing /></RenterPage>} />
-          <Route path="/renter/pending-pickups" element={<RenterPage><PendingPickups /></RenterPage>} />
+          <Route path="/renter/pending" element={<RenterPage><RenterPendingWorkflow /></RenterPage>} />
+          <Route path="/renter/pending-payments" element={<Navigate to="/renter/pending?tab=payment" replace />} />
+          <Route path="/renter/pending-showroom-processing" element={<Navigate to="/renter/pending?tab=showroom" replace />} />
+          <Route path="/renter/pending-pickups" element={<Navigate to="/renter/pending?tab=pickup" replace />} />
           <Route path="/renter/bookings" element={<RenterPage><MyBookings /></RenterPage>} />
           <Route path="/renter/ai-reports" element={<RenterPage><AIReports /></RenterPage>} />
           <Route path="/renter/transactions" element={<RenterPage><Transactions /></RenterPage>} />

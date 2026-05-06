@@ -187,7 +187,29 @@ class BookingService {
       { field: "createdAt", value: sort_by },
     ]);
 
-    return BaseService.findPaginated(Booking, filter, sortOptions, pagination);
+    const { page: pageNum, limit: limitNum, skip } = pagination;
+    const [data, total] = await Promise.all([
+      Booking.find(filter)
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limitNum)
+        .populate({
+          path: "user_id",
+          select: "name email phone is_active",
+        })
+        .lean(),
+      Booking.countDocuments(filter),
+    ]);
+
+    return {
+      data,
+      pagination: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum) || 0,
+      },
+    };
   }
 
   static async getBookingById(id) {

@@ -77,14 +77,22 @@ const formatRelativeTime = (value) => {
   return date.toLocaleDateString('vi-VN');
 };
 
+const buildPendingWorkflowLink = (tab, bookingId) => {
+  const params = new URLSearchParams();
+  params.set('tab', tab);
+  if (bookingId) params.set('bookingId', String(bookingId));
+  return `/renter/pending?${params.toString()}`;
+};
+
 const buildNotificationLink = (view) => {
   if (view.canRetryPayment) {
     return `/renter/retry-payment/${view.id}`;
   }
 
-  if (view.menuKey === 'pending-payments') return '/renter/pending-payments';
-  if (view.menuKey === 'pending-showroom-processing') return '/renter/pending-showroom-processing';
-  if (view.menuKey === 'pending-pickups') return '/renter/pending-pickups';
+  const id = view.id || '';
+  if (view.menuKey === 'pending-payments') return buildPendingWorkflowLink('payment', id);
+  if (view.menuKey === 'pending-showroom-processing') return buildPendingWorkflowLink('showroom', id);
+  if (view.menuKey === 'pending-pickups') return buildPendingWorkflowLink('pickup', id);
   if (view.menuKey === 'ai-reports') return '/renter/ai-reports';
 
   return `/renter/bookings?bookingId=${view.id}`;

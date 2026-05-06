@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   FaCalendarAlt,
@@ -7,8 +7,6 @@ import {
   FaEye,
   FaMapMarkerAlt,
   FaSpinner,
-  FaStore,
-  FaTimesCircle,
 } from 'react-icons/fa';
 import { MdDirectionsCar } from 'react-icons/md';
 import Modal from '../../../components/common/Modal';
@@ -19,6 +17,7 @@ import {
   PAYMENT_LABELS,
   formatDateTime,
   formatMoney,
+  isPaymentStatusBadgeRedundant,
   mapRenterBooking,
 } from '../../../utils/renterBookingView';
 import { RENTAL_CONTRACT_UI } from '../../../constants/rentalContractTemplate';
@@ -48,10 +47,10 @@ const PendingShowroomProcessing = () => {
   const [cancellingId, setCancellingId] = useState('');
   const [contractBookingId, setContractBookingId] = useState(null);
 
-  const loadBookings = async () => {
-    setLoading(true);
+  const loadBookings = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
-      const data = await bookingService.getCurrentRoleBookingsDetailed();
+      const data = await bookingService.getCurrentRoleBookingsDetailed({ bypassCache: true });
       const mapped = (data || [])
         .map(mapRenterBooking)
         .filter((booking) => booking.isAwaitingShowroomProcessing);
@@ -61,13 +60,22 @@ const PendingShowroomProcessing = () => {
       setBookings([]);
       setError(err.message || 'Không thể tải danh sách đang chờ showroom xử lý.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadBookings();
-  }, []);
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void loadBookings({ silent: true });
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [loadBookings]);
 
   const summary = useMemo(
     () => ({
@@ -123,18 +131,6 @@ const PendingShowroomProcessing = () => {
       ? 'Hủy booking / hoàn tiền'
       : 'Hủy booking'
   );
-
-  const getProcessingLabel = (booking) => {
-    if (booking.status === 'confirmed') {
-      return 'Showroom đang chuẩn bị bàn giao';
-    }
-
-    if (booking.status === 'paid') {
-      return 'Đang chờ showroom xác nhận';
-    }
-
-    return 'Đang chờ showroom xử lý';
-  };
 
   const handleCancelBooking = async (booking) => {
     const message = booking.paymentStatus === 'successful'
@@ -298,21 +294,20 @@ const PendingShowroomProcessing = () => {
                     </span>
                   </div>
                   <div style={{ marginTop: 8, fontSize: '0.78rem', fontWeight: 800, color: '#334155' }}>{booking.statusHeadline}</div>
-                  <div style={{ marginTop: 8, fontSize: '0.76rem', color: '#9a3412', lineHeight: 1.6 }}>
-                    {booking.pickupConfirmationHint || 'Booking đang chờ showroom xử lý trước khi chuyển sang bước bàn giao xe.'}
-                  </div>
                 </div>
               </div>
 
               <div className="booking-card-right">
                 <div style={{ textAlign: 'right' }}>
                   <StatusBadge status={booking.status} />
-                  <div style={{ marginTop: 6 }}>
-                    <StatusBadge
-                      status={booking.paymentStatus}
-                      customLabel={PAYMENT_LABELS[booking.paymentStatus] || booking.paymentStatus}
-                    />
-                  </div>
+                  {!isPaymentStatusBadgeRedundant(booking.status, booking.paymentStatus) && (
+                    <div style={{ marginTop: 6 }}>
+                      <StatusBadge
+                        status={booking.paymentStatus}
+                        customLabel={PAYMENT_LABELS[booking.paymentStatus] || booking.paymentStatus}
+                      />
+                    </div>
+                  )}
                   <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#00b14f', marginTop: 8 }}>
                     {formatMoney(booking.totalPrice)}
                   </div>
@@ -320,41 +315,21 @@ const PendingShowroomProcessing = () => {
                 </div>
 
                 <div style={{ display: 'flex', gap: 6, marginTop: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                  <button className="btn-icon" onClick={() => setDetailModal(booking)} title="Chi tiết">
+                  <button
+                    type="button"
+                    className="renter-btn-soft"
+                    style={{ fontSize: '0.75rem', padding: '6px 12px' }}
+                    onClick={() => setDetailModal(booking)}
+                  >
                     <FaEye />
+                    Chi tiết
                   </button>
-
-                  {canRenterViewOfficialRentalContract(booking) && (
-                    <button
-                      type="button"
-                      className="renter-btn-soft"
-                      style={{ fontSize: '0.75rem', padding: '6px 12px' }}
-                      onClick={() => setContractBookingId(booking.id)}
-                    >
-                      {RENTAL_CONTRACT_UI.officialButton}
-                    </button>
-                  )}
 
                   {booking.showroomEmail && (
                     <a className="btn-icon" href={`mailto:${booking.showroomEmail}`} title="Liên hệ showroom">
                       <FaEnvelope />
                     </a>
                   )}
-
-                  <div
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      borderRadius: 8,
-                      padding: '6px 12px',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      background: '#e2e8f0',
-                      color: '#475569',
-                    }}
-                  >
-                    {getProcessingLabel(booking)}
-                  </div>
 
                   {booking.canCancel && (
                     <button
@@ -389,19 +364,7 @@ const PendingShowroomProcessing = () => {
                 padding: '14px 16px',
               }}
             >
-              <div style={{ fontWeight: 800, color: '#111827', marginBottom: 8 }}>{detailModal.statusHeadline}</div>
-              <div style={{ fontSize: '0.8rem', color: '#475569', lineHeight: 1.65, marginBottom: 8 }}>
-                {detailModal.waitingForLabel}
-              </div>
-              <div style={{ fontSize: '0.78rem', color: '#334155', fontWeight: 700, marginBottom: 6 }}>
-                {detailModal.waitingOwnerLabel}
-              </div>
-              <div style={{ fontSize: '0.78rem', color: '#64748b', lineHeight: 1.6 }}>
-                Bước tiếp theo: {detailModal.nextStepLabel}
-              </div>
-              <div style={{ marginTop: 8, fontSize: '0.78rem', color: '#0f766e', lineHeight: 1.6 }}>
-                Việc bạn nên làm: {detailModal.renterActionHint}
-              </div>
+              <div style={{ fontWeight: 800, color: '#111827' }}>{detailModal.statusHeadline}</div>
             </div>
 
             {[
@@ -428,24 +391,6 @@ const PendingShowroomProcessing = () => {
               </div>
             ))}
 
-            <div
-              style={{
-                background: '#eff6ff',
-                border: '1px solid #bfdbfe',
-                color: '#1d4ed8',
-                borderRadius: 12,
-                padding: '12px 14px',
-                fontSize: '0.8rem',
-                lineHeight: 1.6,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, fontWeight: 800 }}>
-                <FaStore />
-                Đang chờ showroom xử lý
-              </div>
-              Showroom cần xác nhận và chuẩn bị bàn giao xe trước khi booking này được chuyển sang "Chờ nhận xe".
-            </div>
-
             {detailModal.showroomEmail && (
               <a
                 href={`mailto:${detailModal.showroomEmail}`}
@@ -464,16 +409,6 @@ const PendingShowroomProcessing = () => {
                 onClick={() => setContractBookingId(detailModal.id)}
               >
                 {RENTAL_CONTRACT_UI.officialButton}
-              </button>
-            )}
-
-            {detailModal.canCancel && (
-              <button
-                className="renter-btn-soft-danger"
-                style={{ justifyContent: 'center' }}
-                onClick={() => handleCancelBooking(detailModal)}
-              >
-                <FaTimesCircle /> {getCancelActionLabel(detailModal)}
               </button>
             )}
           </div>

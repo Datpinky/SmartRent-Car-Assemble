@@ -1,5 +1,8 @@
 import apiClient from './apiClient';
 
+const REVIEW_SUMMARY_TTL_MS = 120_000;
+const reviewSummaryCache = new Map();
+
 const normalizeReviewSummary = (response) => {
   const reviews = Array.isArray(response?.data) ? response.data : [];
   const reviewCount = Number(response?.pagination?.total ?? reviews.length ?? 0);
@@ -58,8 +61,17 @@ export const reviewService = {
   },
 
   async getSummaryByVehicleId(vehicleId, { limit = 100 } = {}) {
+    const id = String(vehicleId || '');
+    const cacheKey = `${id}|${limit}`;
+    const hit = reviewSummaryCache.get(cacheKey);
+    if (hit && Date.now() - hit.at < REVIEW_SUMMARY_TTL_MS) {
+      return hit.value;
+    }
+
     const response = await this.getByVehicleId(vehicleId, { page: 1, limit });
-    return normalizeReviewSummary(response);
+    const value = normalizeReviewSummary(response);
+    reviewSummaryCache.set(cacheKey, { at: Date.now(), value });
+    return value;
   },
 
   async enrichVehiclesWithSummary(vehicles = [], { limit = 100 } = {}) {

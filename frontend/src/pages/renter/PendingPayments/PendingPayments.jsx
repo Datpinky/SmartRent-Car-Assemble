@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   FaCalendarAlt,
@@ -7,7 +7,6 @@ import {
   FaMapMarkerAlt,
   FaMoneyBillWave,
   FaSpinner,
-  FaTimesCircle,
 } from 'react-icons/fa';
 import { MdDirectionsCar } from 'react-icons/md';
 import Modal from '../../../components/common/Modal';
@@ -18,6 +17,7 @@ import {
   PAYMENT_LABELS,
   formatDateTime,
   formatMoney,
+  isPaymentStatusBadgeRedundant,
   mapRenterBooking,
 } from '../../../utils/renterBookingView';
 
@@ -43,10 +43,10 @@ const PendingPayments = () => {
   const [detailModal, setDetailModal] = useState(null);
   const [cancellingId, setCancellingId] = useState('');
 
-  const loadBookings = async () => {
-    setLoading(true);
+  const loadBookings = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
-      const data = await bookingService.getCurrentRoleBookingsDetailed();
+      const data = await bookingService.getCurrentRoleBookingsDetailed({ bypassCache: true });
       const mapped = (data || []).map(mapRenterBooking).filter((booking) => booking.isAwaitingPayment);
       setBookings(mapped);
       setError('');
@@ -54,23 +54,22 @@ const PendingPayments = () => {
       setBookings([]);
       setError(err.message || 'Không thể tải danh sách chờ thanh toán.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadBookings();
-  }, []);
 
-  const summary = useMemo(
-    () => ({
-      total: bookings.length,
-      pending: bookings.filter((booking) => booking.paymentStatus === 'pending').length,
-      retry: bookings.filter((booking) => booking.canRetryPayment).length,
-      failed: bookings.filter((booking) => ['failed', 'declined'].includes(booking.paymentStatus)).length,
-    }),
-    [bookings]
-  );
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void loadBookings({ silent: true });
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [loadBookings]);
 
   useEffect(() => {
     if (!highlightedBookingId || loading || bookings.length === 0) {
@@ -214,28 +213,6 @@ const PendingPayments = () => {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        {[
-          { label: 'Tổng booking', val: summary.total, color: '#374151' },
-          { label: 'Đang chờ thanh toán', val: summary.pending, color: '#d97706' },
-          { label: 'Cần thanh toán lại', val: summary.retry, color: '#059669' },
-          { label: 'Thất bại / từ chối', val: summary.failed, color: '#dc2626' },
-        ].map((item) => (
-          <div
-            key={item.label}
-            style={{
-              ...cardInfoStyle,
-              minWidth: 150,
-              textAlign: 'center',
-              padding: '14px 18px',
-            }}
-          >
-            <div style={{ fontWeight: 800, fontSize: '1.3rem', color: item.color }}>{item.val}</div>
-            <div style={{ fontSize: '0.72rem', color: '#9ca3af' }}>{item.label}</div>
-          </div>
-        ))}
-      </div>
-
       {loading ? (
         <div style={{ textAlign: 'center', padding: '60px 0', color: '#6b7280' }}>
           <FaSpinner className="animate-spin" style={{ fontSize: '1.4rem', marginBottom: 10 }} />
@@ -302,21 +279,20 @@ const PendingPayments = () => {
                     </span>
                   </div>
                   <div style={{ marginTop: 8, fontSize: '0.78rem', fontWeight: 800, color: '#334155' }}>{booking.statusHeadline}</div>
-                  <div style={{ marginTop: 4, fontSize: '0.76rem', color: '#6b7280', lineHeight: 1.6 }}>
-                    {booking.waitingForLabel}
-                  </div>
                 </div>
               </div>
 
               <div className="booking-card-right">
                 <div style={{ textAlign: 'right' }}>
                   <StatusBadge status={booking.status} />
-                  <div style={{ marginTop: 6 }}>
-                    <StatusBadge
-                      status={booking.paymentStatus}
-                      customLabel={PAYMENT_LABELS[booking.paymentStatus] || booking.paymentStatus}
-                    />
-                  </div>
+                  {!isPaymentStatusBadgeRedundant(booking.status, booking.paymentStatus) && (
+                    <div style={{ marginTop: 6 }}>
+                      <StatusBadge
+                        status={booking.paymentStatus}
+                        customLabel={PAYMENT_LABELS[booking.paymentStatus] || booking.paymentStatus}
+                      />
+                    </div>
+                  )}
                   <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#00b14f', marginTop: 8 }}>
                     {formatMoney(booking.totalPrice)}
                   </div>
@@ -324,20 +300,22 @@ const PendingPayments = () => {
                 </div>
 
                 <div style={{ display: 'flex', gap: 6, marginTop: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                  <div
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      borderRadius: 8,
-                      padding: '6px 12px',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      background: '#e2e8f0',
-                      color: '#475569',
-                    }}
-                  >
-                    {getPaymentWaitingLabel(booking)}
-                  </div>
+                  {!booking.canRetryPayment && (
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        borderRadius: 8,
+                        padding: '6px 12px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        background: '#e2e8f0',
+                        color: '#475569',
+                      }}
+                    >
+                      {getPaymentWaitingLabel(booking)}
+                    </div>
+                  )}
 
                   {booking.canRetryPayment && (
                     <button
@@ -387,19 +365,7 @@ const PendingPayments = () => {
                 padding: '14px 16px',
               }}
             >
-              <div style={{ fontWeight: 800, color: '#111827', marginBottom: 8 }}>{detailModal.statusHeadline}</div>
-              <div style={{ fontSize: '0.8rem', color: '#475569', lineHeight: 1.65, marginBottom: 8 }}>
-                {detailModal.waitingForLabel}
-              </div>
-              <div style={{ fontSize: '0.78rem', color: '#334155', fontWeight: 700, marginBottom: 6 }}>
-                {detailModal.waitingOwnerLabel}
-              </div>
-              <div style={{ fontSize: '0.78rem', color: '#64748b', lineHeight: 1.6 }}>
-                Bước tiếp theo: {detailModal.nextStepLabel}
-              </div>
-              <div style={{ marginTop: 8, fontSize: '0.78rem', color: '#0f766e', lineHeight: 1.6 }}>
-                Việc bạn nên làm: {detailModal.renterActionHint}
-              </div>
+              <div style={{ fontWeight: 800, color: '#111827' }}>{detailModal.statusHeadline}</div>
             </div>
 
             {[
@@ -427,22 +393,6 @@ const PendingPayments = () => {
               </div>
             ))}
 
-            {detailModal.pickupConfirmationHint && (
-              <div
-                style={{
-                  background: '#fff7ed',
-                  border: '1px solid #fdba74',
-                  color: '#9a3412',
-                  borderRadius: 12,
-                  padding: '12px 14px',
-                  fontSize: '0.8rem',
-                  lineHeight: 1.6,
-                }}
-              >
-                {detailModal.pickupConfirmationHint}
-              </div>
-            )}
-
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button
                 className="btn-primary"
@@ -459,16 +409,6 @@ const PendingPayments = () => {
                   onClick={() => navigate(getRetryPaymentUrl(detailModal))}
                 >
                   <FaCreditCard /> Thanh toán lại
-                </button>
-              )}
-
-              {detailModal.canCancel && (
-                <button
-                  className="renter-btn-soft-danger"
-                  style={{ flex: 1, justifyContent: 'center' }}
-                  onClick={() => handleCancelBooking(detailModal)}
-                >
-                  <FaTimesCircle /> {getCancelActionLabel(detailModal)}
                 </button>
               )}
             </div>

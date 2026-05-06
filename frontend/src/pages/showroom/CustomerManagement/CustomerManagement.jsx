@@ -37,16 +37,22 @@ const CustomerManagement = () => {
     const customerMap = {};
 
     for (const booking of bookings) {
-      const renter = booking.user_id;
-      if (!renter) continue;
+      const rawRenter = booking.user_id;
+      if (rawRenter == null || rawRenter === '') continue;
 
-      const id = renter._id || renter.id || '';
+      /** Backend có thể trả user_id là ObjectId string hoặc object đã populate */
+      const renter =
+        typeof rawRenter === 'object'
+          ? rawRenter
+          : { _id: String(rawRenter), name: '', email: '', phone: '' };
+
+      const id = String(renter._id || renter.id || (typeof rawRenter === 'string' ? rawRenter : '') || '');
       if (!id) continue;
 
       if (!customerMap[id]) {
         customerMap[id] = {
           _id: id,
-          name: renter.name || renter.full_name || '—',
+          name: renter.name || renter.full_name || 'Khách (chưa có tên)',
           email: renter.email || '—',
           phone: renter.phone || '—',
           bookings: 0,
@@ -68,7 +74,6 @@ const CustomerManagement = () => {
     return Object.values(customerMap);
   }, [bookings]);
 
-  const totalRevenue = customers.reduce((sum, customer) => sum + customer.totalSpent, 0);
   const avgBookings = customers.length
     ? (customers.reduce((sum, customer) => sum + customer.bookings, 0) / customers.length).toFixed(1)
     : '0';
@@ -153,7 +158,6 @@ const CustomerManagement = () => {
       <div style={{ display: 'flex', gap: 14, marginBottom: 16, flexWrap: 'wrap' }}>
         {[
           { label: 'Tổng khách hàng', value: customers.length, color: '#2563eb' },
-          { label: 'Tổng doanh thu từ khách', value: `${totalRevenue.toLocaleString('vi-VN')}đ`, color: '#00b14f' },
           { label: 'Trung bình chuyến/người', value: avgBookings, color: '#7c3aed' },
         ].map((summary) => (
           <div

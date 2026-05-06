@@ -195,14 +195,14 @@ const PaymentResult = () => {
 
           {isSuccess ? (
             <button
-              onClick={() => navigate('/renter/pending-pickups')}
+              onClick={() => navigate('/renter/pending?tab=showroom')}
               style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '11px 0', background: '#00b14f', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem' }}
             >
-              <FaList /> Chờ nhận xe
+              <FaList /> Theo dõi đặt xe
             </button>
           ) : isPending ? (
             <button
-              onClick={() => navigate(canRetryPayment ? `/renter/retry-payment/${bookingId}` : '/renter/pending-pickups')}
+              onClick={() => navigate(canRetryPayment ? `/renter/retry-payment/${bookingId}` : '/renter/pending?tab=payment')}
               style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '11px 0', background: '#d97706', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem' }}
             >
               <FaMoneyBillWave /> Thanh toán lại

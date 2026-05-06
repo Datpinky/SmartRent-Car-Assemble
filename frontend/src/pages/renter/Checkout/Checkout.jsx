@@ -1021,7 +1021,8 @@ const Checkout = () => {
   const handleContinue = async () => {
     if (!vehicle) return;
     if (!hasAcceptedContract) {
-      setPrepError('Vui lòng đọc và tick đồng ý với hợp đồng thuê xe trước khi tiếp tục thanh toán.');
+      setPrepError('Vui lòng mở bản xem trước hợp đồng, đọc nội dung và tick đồng ý ở cuối hợp đồng trước khi tiếp tục thanh toán.');
+      setIsContractPreviewOpen(true);
       return;
     }
     setPreparingPay(true);
@@ -1221,29 +1222,49 @@ const Checkout = () => {
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4 sm:px-5">
       <div className="max-w-[1100px] mx-auto">
-        {/* Step indicator — gọn, không lấn layout mockup */}
-        <div className="mb-8 flex flex-col items-center gap-2">
-          <div className="flex items-center justify-center gap-2">
-            {[1, 2].map((s, i) => (
-              <React.Fragment key={s}>
-                <div
-                  className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold transition-colors ${step >= s ? 'bg-primary text-white' : 'bg-gray-200 text-gray-500'
-                    }`}
-                >
-                  {step > s ? <FaCheckCircle aria-hidden="true" /> : s}
-                </div>
-                {i < 1 && (
-                  <div
-                    className={`h-1 rounded ${step > s ? 'bg-primary' : 'bg-gray-200'}`}
-                    style={{ width: 72 }}
-                  />
-                )}
-              </React.Fragment>
-            ))}
+        {/* Step indicator */}
+        <div className="mb-8 flex items-start justify-center gap-3 sm:gap-4">
+          <div className="flex w-24 flex-col items-center text-center">
+            <div
+              className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold transition-colors ${
+                step >= 1 ? 'bg-primary text-white' : 'bg-gray-200 text-gray-500'
+              }`}
+            >
+              {step > 1 ? <FaCheckCircle aria-hidden="true" /> : 1}
+            </div>
+            <p className="mt-2 text-[0.72rem] font-semibold text-gray-700">Bước 1</p>
+            <p className="text-[0.78rem] text-gray-500 leading-tight">Kiểm tra</p>
           </div>
-          <p className="text-[0.75rem] text-gray-500">
-            {step === 1 ? 'Thông tin đặt xe' : 'Thanh toán'}
-          </p>
+
+          <div
+            className={`relative mt-[1.05rem] h-4 w-16 sm:w-24 ${
+              step > 1 ? 'text-primary' : 'text-gray-300'
+            }`}
+            aria-hidden="true"
+          >
+            <span
+              className={`absolute left-0 right-1 top-1/2 h-1 -translate-y-1/2 rounded-full ${
+                step > 1 ? 'bg-primary' : 'bg-gray-200'
+              }`}
+            />
+            <span
+              className={`absolute right-0 top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 border-r-[3px] border-t-[3px] ${
+                step > 1 ? 'border-primary' : 'border-gray-200'
+              }`}
+            />
+          </div>
+
+          <div className="flex w-24 flex-col items-center text-center">
+            <div
+              className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold transition-colors ${
+                step >= 2 ? 'bg-primary text-white' : 'bg-gray-200 text-gray-500'
+              }`}
+            >
+              2
+            </div>
+            <p className="mt-2 text-[0.72rem] font-semibold text-gray-700">Bước 2</p>
+            <p className="text-[0.78rem] text-gray-500 leading-tight">Thanh toán</p>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-8 items-start">
@@ -1524,7 +1545,7 @@ const Checkout = () => {
                   </div>
                 )}
 
-                <div className="mb-6 space-y-4 rounded-xl border border-gray-200 bg-slate-50/60 p-4">
+                <div className="mb-6 space-y-3 rounded-xl border border-gray-200 bg-slate-50/60 p-4">
                   <button
                     type="button"
                     className="text-sm font-semibold text-primary underline underline-offset-2 hover:text-primary/90"
@@ -1532,22 +1553,23 @@ const Checkout = () => {
                   >
                     {RENTAL_CONTRACT_UI.previewButton}
                   </button>
-                  <label className="flex items-start gap-3 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                      checked={hasAcceptedContract}
-                      onChange={(e) => setHasAcceptedContract(e.target.checked)}
-                    />
-                    <span className="text-[0.82rem] text-gray-800 leading-relaxed">{RENTAL_CONTRACT_UI.acceptCheckbox}</span>
-                  </label>
+                  {hasAcceptedContract ? (
+                    <p className="flex items-start gap-2 text-[0.82rem] text-emerald-700 leading-relaxed">
+                      <FaCheckCircle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span>{RENTAL_CONTRACT_UI.acceptCheckbox}</span>
+                    </p>
+                  ) : (
+                    <p className="text-[0.82rem] text-gray-600 leading-relaxed">
+                      Vui lòng mở hợp đồng, đọc nội dung và tick đồng ý ở cuối hợp đồng.
+                    </p>
+                  )}
                 </div>
 
                 <button
                   type="button"
                   className="btn-primary inline-flex items-center justify-center gap-2 px-8 py-3 text-[0.95rem] rounded-xl"
                   onClick={handleContinue}
-                  disabled={!pickupDate || !returnDate || preparingPay || !hasAcceptedContract || hasBookedDateSelection}
+                  disabled={!pickupDate || !returnDate || preparingPay || hasBookedDateSelection}
                 >
                   {preparingPay ? (
                     <>

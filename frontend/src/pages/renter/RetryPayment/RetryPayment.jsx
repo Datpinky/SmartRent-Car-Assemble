@@ -317,9 +317,6 @@ const RetryPayment = () => {
             <h1 className="page-title">Thanh toán lại</h1>
             <p className="page-subtitle">Mở lại phiên Stripe cho booking đang chờ thanh toán hoặc cần retry</p>
           </div>
-          <button className="renter-btn-soft" onClick={() => navigate('/renter/pending-payments')}>
-            <FaArrowLeft /> Chờ thanh toán
-          </button>
         </div>
 
         {error && (
@@ -403,30 +400,6 @@ const RetryPayment = () => {
                   </div>
                 ))}
               </div>
-
-              <div
-                style={{
-                  marginTop: 16,
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: 12,
-                  padding: '14px 16px',
-                }}
-              >
-                <div style={{ fontWeight: 800, color: '#111827', marginBottom: 8 }}>{renterBooking.statusHeadline}</div>
-                <div style={{ fontSize: '0.8rem', color: '#475569', lineHeight: 1.65, marginBottom: 8 }}>
-                  {renterBooking.waitingForLabel}
-                </div>
-                <div style={{ fontSize: '0.78rem', color: '#334155', fontWeight: 700, marginBottom: 6 }}>
-                  {renterBooking.waitingOwnerLabel}
-                </div>
-                <div style={{ fontSize: '0.78rem', color: '#64748b', lineHeight: 1.6 }}>
-                  Bước tiếp theo: {renterBooking.nextStepLabel}
-                </div>
-                <div style={{ marginTop: 8, fontSize: '0.78rem', color: '#0f766e', lineHeight: 1.6 }}>
-                  Việc bạn nên làm: {renterBooking.renterActionHint}
-                </div>
-              </div>
             </div>
 
             <div style={{ background: '#fff', borderRadius: 18, border: '1px solid #f1f5f9', padding: 22 }}>
@@ -458,21 +431,6 @@ const RetryPayment = () => {
                 </div>
               ) : clientSecret ? (
                 <>
-                  <div
-                    style={{
-                      background: '#f0fdf4',
-                      border: '1px solid #86efac',
-                      color: '#166534',
-                      borderRadius: 12,
-                      padding: '12px 14px',
-                      fontSize: '0.82rem',
-                      lineHeight: 1.6,
-                      marginBottom: 16,
-                    }}
-                  >
-                    <FaCheckCircle style={{ marginRight: 6 }} />
-                    Đã sẵn sàng mở lại cổng thanh toán cho booking này. Nếu cổng Stripe không tải được, FE sẽ đưa bạn về thao tác tạo lại phiên mới.
-                  </div>
                   <Elements stripe={stripePromise} options={stripeOptions} key={clientSecret}>
                     <StripeRetryForm
                       bookingId={renterBooking.id}
@@ -521,7 +479,7 @@ const RetryPayment = () => {
               )}
 
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 16 }}>
-                <button className="renter-btn-soft" onClick={() => navigate('/renter/pending-payments')}>
+                <button className="renter-btn-soft" onClick={() => navigate('/renter/pending?tab=payment')}>
                   <FaArrowLeft /> Quay về Chờ thanh toán
                 </button>
                 <button className="renter-btn-soft" onClick={handleRefreshBooking} disabled={loading || preparing}>
@@ -532,12 +490,6 @@ const RetryPayment = () => {
                     <FaEnvelope /> Liên hệ showroom
                   </a>
                 )}
-                <button className="renter-btn-soft" onClick={() => navigate(`/renter/payment-result?bookingId=${renterBooking.id}&status=pending`)}>
-                  Xem kết quả thanh toán
-                </button>
-                <button className="renter-btn-soft" onClick={() => navigate('/renter/transactions')}>
-                  Lịch sử giao dịch
-                </button>
               </div>
             </div>
           </div>

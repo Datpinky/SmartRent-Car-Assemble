@@ -108,7 +108,7 @@ const VehicleManagement = () => {
       }
       closeModal();
     } catch (err) {
-      alert(err?.response?.data?.message || 'Lưu thất bại');
+      alert(err?.message || err?.response?.data?.message || 'Lưu thất bại');
     }
   };
 
@@ -118,7 +118,7 @@ const VehicleManagement = () => {
       await vehicleService.deleteById(id);
       setVehicles(prev => prev.filter(v => (v._id || v.id) !== id));
     } catch (err) {
-      alert(err?.response?.data?.message || 'Xóa thất bại');
+      alert(err?.message || err?.response?.data?.message || 'Xóa thất bại');
     }
   };
 
@@ -165,13 +165,6 @@ const VehicleManagement = () => {
         <FaStar size={12} /> {row.rating}
       </span>
     ) : <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>—</span> },
-    { key: 'source', label: 'Nguồn', render: row => (
-      <span style={{ fontSize: '0.75rem', fontWeight: 600, padding: '2px 8px', borderRadius: 50,
-        background: row.companyOwned ? '#dbeafe' : '#e0e7ff',
-        color: row.companyOwned ? '#2563eb' : '#4338ca' }}>
-        {row.companyOwned ? 'Showroom' : 'Ký gửi'}
-      </span>
-    )},
     { key: 'status', label: 'Trạng thái', render: row => <StatusBadge status={row.status} /> },
     { key: 'actions', label: '', render: row => (
       <div style={{ display: 'flex', gap: 5 }}>
@@ -198,14 +191,6 @@ const VehicleManagement = () => {
           {['all', 'available', 'rented', 'maintenance'].map(s => (
             <button key={s} onClick={() => setFilterStatus(s)} style={{ padding: '4px 12px', borderRadius: 50, border: '1.5px solid', borderColor: filterStatus === s ? '#00b14f' : '#e5e7eb', background: filterStatus === s ? '#00b14f' : '#fff', color: filterStatus === s ? '#fff' : '#374151', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' }}>
               {s === 'all' ? 'Tất cả' : s === 'available' ? 'Sẵn sàng' : s === 'rented' ? 'Đang thuê' : 'Bảo dưỡng'}
-            </button>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <span style={{ fontSize: '0.8rem', color: '#6b7280', marginRight: 4 }}>Nguồn:</span>
-          {['all', 'showroom', 'consigned'].map(s => (
-            <button key={s} onClick={() => setFilterSource(s)} style={{ padding: '4px 12px', borderRadius: 50, border: '1.5px solid', borderColor: filterSource === s ? '#4338ca' : '#e5e7eb', background: filterSource === s ? '#4338ca' : '#fff', color: filterSource === s ? '#fff' : '#374151', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' }}>
-              {s === 'all' ? 'Tất cả' : s === 'showroom' ? 'Showroom' : 'Ký gửi'}
             </button>
           ))}
         </div>
