@@ -31,11 +31,23 @@ class VeHicleController {
         }
     }
 
+    async updateVehicle(req, res, next) {
+        try {
+            const { vehicleId } = req.params;
+            const requesterId = req.user.userId;
+            const result = await vehicleService.updateVehicle(vehicleId, req.body, requesterId);
+            if (!result) return res.status(404).json({ message: "Không tìm thấy xe" });
+            return res.status(200).json({ message: "Cập nhật xe thành công", data: result });
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async deleteVehicleById(req, res, next) {
         try {
             const vehicleId = req.params.vehicleId;
             const result = await vehicleService.deleteVehicleById(vehicleId);
-            return res.status(201).json({ message: "Vehicle delete successfully", data: result });
+            return res.status(200).json({ message: "Vehicle deleted successfully", data: result });
         } catch (error) {
             next(error);
         }

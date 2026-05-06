@@ -47,7 +47,17 @@ const vehicleSchema = new mongoose.Schema(
         verified: { type: Date },
         company_owned: { type: Boolean, default: false },
         added_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-        active: { type: Boolean, default: true }
+        active: { type: Boolean, default: true },
+
+        // Consignment support: xe ký gửi từ chủ xe cá nhân
+        source: {
+            type: String,
+            enum: ['showroom_owned', 'consigned'],
+            default: 'showroom_owned'
+        },
+        consignor_name: { type: String },
+        consignor_phone: { type: String },
+        commission_rate: { type: Number, min: 0, max: 100 },
     },
     { timestamps: true }
 );

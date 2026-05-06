@@ -17,7 +17,7 @@ router.get(
 router.post(
   '/getListProfiles',
   authMiddleware, 
-  authorizeRoles(['admin']),
+  authorizeRoles('admin'),
   profileController.getListProfiles
 );
 
@@ -32,7 +32,7 @@ router.put(
 router.delete(
   '/deleteProfileById/:userId',
   authMiddleware,
-  authorizeRoles(['admin']),
+  authorizeRoles('admin'),
   profileController.deleteProfileById
 );
 module.exports = router;

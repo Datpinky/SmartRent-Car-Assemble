@@ -5,7 +5,7 @@ class BookingController {
     try {
       const userId = req.user.userId;
       const data = req.body;
-      const result = await bookingService.createBooking(data, userId);
+      const result = await bookingService.createBooking(data, String(userId));
       return res.status(201).json({
         message: "Tạo booking thành công",
         data: result,

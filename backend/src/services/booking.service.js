@@ -6,8 +6,10 @@ const QueryBuilder = require('../utils/queryBuilder');
 
 class BookingService {
 
-  static async createBooking(data) {
-    const booking = new Booking(data);
+  static async createBooking(data, userId) {
+    // Ensure user_id always comes from verified token, never from client body
+    const { user_id: _ignored, total_price: _price, ...safeData } = data;
+    const booking = new Booking({ ...safeData, user_id: userId });
     return booking.save();
   }
 

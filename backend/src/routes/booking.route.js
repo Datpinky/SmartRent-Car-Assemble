@@ -9,6 +9,7 @@ const PaymentController = require("../controllers/payment.controller");
 
 router.post(
   '/:bookingId/createPayment',
+  authMiddleware,
   PaymentController.createPaymentForBooking
 );
 

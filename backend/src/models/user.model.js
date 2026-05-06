@@ -23,7 +23,7 @@ const userSchema = new mongoose.Schema(
 
         role: {
             type: String,
-            enum: ["user", "showroom", "admin", "owner"],
+            enum: ["user", "showroom", "admin"],
             default: "user"
         },
 
@@ -31,7 +31,7 @@ const userSchema = new mongoose.Schema(
             type: Boolean,
             default: true
         },
-        
+
         address: {
             type: String,
         },
@@ -41,6 +41,19 @@ const userSchema = new mongoose.Schema(
         age: {
             type: Number,
         },
+
+        // Showroom-specific fields (populated when role === 'showroom')
+        business_name: { type: String, trim: true },
+        tax_code: { type: String, trim: true },
+        showroom_status: {
+            type: String,
+            enum: ['pending', 'approved', 'rejected', 'suspended'],
+            default: 'pending'
+        },
+        showroom_description: { type: String },
+        logo: { type: String },
+        license_image: { type: String },
+        showroom_address: { type: String },
     },
     { timestamps: true }
 );

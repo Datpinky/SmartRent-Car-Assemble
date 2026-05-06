@@ -36,15 +36,11 @@ class PaymentService {
         400
       );
     }
-    // Tìm payment cũ
+    // Tìm payment cũ (pending)
     let payment = await PaymentModel.findOne({
       booking_id: bookingId,
       payment_status: 'pending'
-    })
-
-    if (payment.payment_status !== "pending") {
-      throw throwError('Chỉ có thanh toán pending mới được tạo intent', 400);
-    }
+    });
 
     // Nếu chưa có thì tạo mới
     if (!payment) {

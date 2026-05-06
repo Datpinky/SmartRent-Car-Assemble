@@ -42,6 +42,16 @@ class VehicleService {
         return vehicleModel.findById(vehicleId);
     }
 
+    async updateVehicle(vehicleId, updates, requesterId) {
+        // Strip protected fields the client should not set directly
+        const { added_by: _a, _id: _i, ...safeUpdates } = updates;
+        return vehicleModel.findByIdAndUpdate(
+            vehicleId,
+            { $set: safeUpdates },
+            { new: true, runValidators: true }
+        );
+    }
+
     async deleteVehicleById(vehicleId) {
         return vehicleModel.findByIdAndDelete(vehicleId);
     }

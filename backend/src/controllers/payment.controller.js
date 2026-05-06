@@ -19,10 +19,9 @@ class PaymentController {
   }
 
 
-  async createPaymentDB(req, res) {
+  async createPaymentDB(req, res, next) {
     try {
-      const { ...body } = req.body;
-      const payment = await paymentService.createPaymentDB(body);
+      const payment = await paymentService.createPaymentDB(req.body);
       res.status(201).json({ message: 'Tạo dữ liệu thanh toán thành công', data: payment });
     } catch (error) {
       next(error);

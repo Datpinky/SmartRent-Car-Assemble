@@ -23,7 +23,13 @@ router.get('/getVehicleById/:vehicleId',
     vehicleController.getVehicleById
 );
 
+router.put('/updateVehicle/:vehicleId',
+    authMiddleware,
+    vehicleController.updateVehicle
+);
+
 router.delete('/deleteVehicleById/:vehicleId',
+    authMiddleware,
     vehicleValidation.deleteVehicleById,
     validate,
     vehicleController.deleteVehicleById

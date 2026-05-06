@@ -24,9 +24,17 @@ class ProfileController {
 
   async updateProfile(req, res, next) {
     try {
-        const userId = req.params.userId
-        const body = req.body
-      const updatedUser = await ProfileService.updateProfile(userId, body);
+      const requestedId = req.params.userId;
+      const { userId: tokenUserId, role } = req.user;
+
+      if (role !== 'admin' && String(tokenUserId) !== String(requestedId)) {
+        return res.status(403).json({ message: 'Bạn chỉ có thể cập nhật hồ sơ của chính mình' });
+      }
+
+      // Prevent role escalation via profile update
+      const { role: _stripped, password: _pwd, ...safeBody } = req.body;
+
+      const updatedUser = await ProfileService.updateProfile(requestedId, safeBody);
       if (!updatedUser) {
         return res.status(404).json({ message: 'Không tìm thấy hồ sơ để cập nhật' });
       }

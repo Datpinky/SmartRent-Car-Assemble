@@ -34,7 +34,7 @@ require('dotenv').config();
 app.use(morgan('dev'));
 app.use(
     cors({
-        origin: 'http://localhost:5000', // đổi theo frontend của bạn
+        origin: process.env.CLIENT_ORIGIN || 'http://localhost:3000',
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
         credentials: true, // nếu dùng cookie / auth
     })
