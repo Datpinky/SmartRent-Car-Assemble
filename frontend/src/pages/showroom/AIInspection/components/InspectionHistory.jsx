@@ -81,9 +81,7 @@ function InspectionHistory({ historyRows, loadingHistory, expandedRow, onToggleR
                         <div className="font-bold text-[0.82rem] text-gray-700 mb-2">Chi tiet vi tri</div>
                         <div className="flex flex-wrap gap-2 mb-3">
                           {h.position_results.map((pr, pi) => {
-                            const posInfo = POSITIONS.find(
-                              (p) => p.label === pr.position || p.key === pr.position_key,
-                            );
+                            const posInfo = POSITIONS.find((p) => p.label === pr.position || p.key === pr.position_key);
                             return (
                               <div
                                 key={pi}

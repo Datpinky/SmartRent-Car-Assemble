@@ -51,9 +51,7 @@ const CarReviews = ({ reviews, reviewsMeta, reviewsLoading, currentUserId }) => 
               </div>
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[0.85rem] font-semibold text-gray-800">
-                    {review.user?.name || 'Ẩn danh'}
-                  </span>
+                  <span className="text-[0.85rem] font-semibold text-gray-800">{review.user?.name || 'Ẩn danh'}</span>
                   {isOwnReview(review) && (
                     <span className="rounded-full bg-primary-light px-2 py-0.5 text-[0.68rem] font-semibold text-primary">
                       Đánh giá của bạn

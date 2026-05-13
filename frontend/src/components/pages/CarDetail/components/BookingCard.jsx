@@ -65,7 +65,9 @@ const BookingCard = ({ car, id, navigate, user, initialRentalWindow, onOpenShowr
       setBookedIntervals([]);
       setBookedDateError('');
       setLoadingBookedDates(false);
-      return () => { cancelled = true; };
+      return () => {
+        cancelled = true;
+      };
     }
     setLoadingBookedDates(true);
     setBookedDateError('');
@@ -83,7 +85,9 @@ const BookingCard = ({ car, id, navigate, user, initialRentalWindow, onOpenShowr
       .finally(() => {
         if (!cancelled) setLoadingBookedDates(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [Boolean(user?._id), vehicleId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isBookedDay = useCallback((date) => bookingService.isDateBooked(date, bookedIntervals), [bookedIntervals]);

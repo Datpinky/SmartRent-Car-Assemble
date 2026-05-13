@@ -89,16 +89,12 @@ function VehicleSelector({
               <FaSpinner className="animate-spin" /> Dang tai...
             </div>
           ) : bookings.length === 0 ? (
-            <div className="text-xs text-gray-400">
-              Khong co booking dang thue / cho tra / hoan thanh cho xe nay.
-            </div>
+            <div className="text-xs text-gray-400">Khong co booking dang thue / cho tra / hoan thanh cho xe nay.</div>
           ) : (
             <div className="flex flex-col gap-2">
               <label
                 className={`flex items-center gap-2.5 p-2.5 rounded-lg border-2 cursor-pointer transition-colors ${
-                  !selectedBookingId
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-200 bg-white hover:border-gray-300'
+                  !selectedBookingId ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:border-gray-300'
                 }`}
               >
                 <input

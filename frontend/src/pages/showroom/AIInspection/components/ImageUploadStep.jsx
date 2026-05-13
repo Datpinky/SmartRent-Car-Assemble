@@ -79,9 +79,7 @@ function ImageUploadStep({
                     <FaCheckCircle /> Du 2 anh
                   </span>
                 ) : (
-                  <span
-                    className={`text-[0.7rem] ${hasBefore || files.after ? 'text-amber-500' : 'text-gray-300'}`}
-                  >
+                  <span className={`text-[0.7rem] ${hasBefore || files.after ? 'text-amber-500' : 'text-gray-300'}`}>
                     {hasBefore || files.after ? '1/2 anh' : 'Chua tai'}
                   </span>
                 )}
