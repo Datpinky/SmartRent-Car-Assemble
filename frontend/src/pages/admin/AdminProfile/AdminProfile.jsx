@@ -1,17 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../../contexts/AuthContext';
-import { FaSave, FaUser, FaShieldAlt, FaCheckCircle } from 'react-icons/fa';
-import { MdVerifiedUser, MdAdminPanelSettings } from 'react-icons/md';
+import { useEffect, useState } from 'react';
+import { FaCheckCircle, FaSave, FaShieldAlt, FaUser } from 'react-icons/fa';
+import { MdAdminPanelSettings, MdVerifiedUser } from 'react-icons/md';
 import {
   PasswordStrengthInput,
   PasswordToggleInput,
   passwordMeetsPolicy,
 } from '../../../components/common/PasswordInput';
+import { useAuth } from '../../../contexts/AuthContext';
 import adminService from '../../../services/adminService';
 import authService from '../../../services/authService';
 
-const fmtStat = (n) =>
-  n == null || Number.isNaN(Number(n)) ? '—' : Number(n).toLocaleString('vi-VN');
+const fmtStat = (n) => (n == null || Number.isNaN(Number(n)) ? '—' : Number(n).toLocaleString('vi-VN'));
 
 const AdminProfile = () => {
   const { user, updateUser } = useAuth();
@@ -50,7 +49,7 @@ const AdminProfile = () => {
       email: user.email || '',
       phone: (user.phone || '').replace(/\D/g, '').slice(0, 10),
     }));
-  }, [user]);
+  }, [user?.name, user?.email, user?.phone]);
 
   useEffect(() => {
     let mounted = true;
@@ -152,9 +151,7 @@ const AdminProfile = () => {
       return;
     }
     if (!passwordMeetsPolicy(pwForm.next)) {
-      setPwError(
-        'Mật khẩu mới chưa đủ độ mạnh. Vui lòng đáp ứng đủ các yêu cầu bên dưới ô mật khẩu.'
-      );
+      setPwError('Mật khẩu mới chưa đủ độ mạnh. Vui lòng đáp ứng đủ các yêu cầu bên dưới ô mật khẩu.');
       return;
     }
     if (pwForm.next !== pwForm.confirm) {
@@ -276,9 +273,7 @@ const AdminProfile = () => {
                   onChange={(e) => handleFieldChange(key, e.target.value)}
                   className="ap-input"
                   readOnly={key === 'email'}
-                  {...(key === 'phone'
-                    ? { maxLength: 10, inputMode: 'numeric', pattern: '[0-9]*' }
-                    : {})}
+                  {...(key === 'phone' ? { maxLength: 10, inputMode: 'numeric', pattern: '[0-9]*' } : {})}
                 />
               </div>
             ))}
@@ -361,9 +356,7 @@ const AdminProfile = () => {
               required
             />
             {confirmPwError && (
-              <div className="text-[0.78rem] text-red-600 font-medium flex items-center gap-1">
-                ⚠ {confirmPwError}
-              </div>
+              <div className="text-[0.78rem] text-red-600 font-medium flex items-center gap-1">⚠ {confirmPwError}</div>
             )}
             {pwError && (
               <div
@@ -434,71 +427,69 @@ const AdminProfile = () => {
                     color: '#92400e',
                   }}
                 >
-                  Token đăng nhập hiện tại chưa gắn phiên. Vui lòng{' '}
-                  <strong>đăng xuất và đăng nhập lại</strong> để xem danh sách phiên trên máy chủ.
+                  Token đăng nhập hiện tại chưa gắn phiên. Vui lòng <strong>đăng xuất và đăng nhập lại</strong> để xem
+                  danh sách phiên trên máy chủ.
                 </div>
               )}
-            {!sessionsState.loading &&
-              !sessionsState.error &&
-              sessionsState.items.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {sessionsState.items.map((s) => (
+            {!sessionsState.loading && !sessionsState.error && sessionsState.items.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {sessionsState.items.map((s) => (
+                  <div
+                    key={s.jti}
+                    style={{
+                      background: '#f9fafb',
+                      borderRadius: 10,
+                      padding: 16,
+                      border: s.isCurrent ? '1px solid #c4b5fd' : '1px solid #f0f0f0',
+                    }}
+                  >
                     <div
-                      key={s.jti}
                       style={{
-                        background: '#f9fafb',
-                        borderRadius: 10,
-                        padding: 16,
-                        border: s.isCurrent ? '1px solid #c4b5fd' : '1px solid #f0f0f0',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: 12,
                       }}
                     >
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          gap: 12,
-                        }}
-                      >
-                        <div style={{ minWidth: 0 }}>
-                          <div
-                            style={{
-                              fontWeight: 600,
-                              fontSize: '0.85rem',
-                              color: '#111827',
-                            }}
-                          >
-                            {s.isCurrent ? 'Thiết bị hiện tại' : 'Phiên khác'}
-                          </div>
-                          <div
-                            style={{
-                              fontSize: '0.75rem',
-                              color: '#9ca3af',
-                              marginTop: 2,
-                              wordBreak: 'break-word',
-                            }}
-                          >
-                            {s.summary}
-                          </div>
-                        </div>
-                        <span
+                      <div style={{ minWidth: 0 }}>
+                        <div
                           style={{
-                            background: s.isCurrent ? '#d1fae5' : '#f3f4f6',
-                            color: s.isCurrent ? '#059669' : '#6b7280',
-                            fontSize: '0.72rem',
-                            fontWeight: 700,
-                            padding: '3px 10px',
-                            borderRadius: 50,
-                            flexShrink: 0,
+                            fontWeight: 600,
+                            fontSize: '0.85rem',
+                            color: '#111827',
                           }}
                         >
-                          {s.isCurrent ? 'Hoạt động' : 'Đã lưu'}
-                        </span>
+                          {s.isCurrent ? 'Thiết bị hiện tại' : 'Phiên khác'}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: '0.75rem',
+                            color: '#9ca3af',
+                            marginTop: 2,
+                            wordBreak: 'break-word',
+                          }}
+                        >
+                          {s.summary}
+                        </div>
                       </div>
+                      <span
+                        style={{
+                          background: s.isCurrent ? '#d1fae5' : '#f3f4f6',
+                          color: s.isCurrent ? '#059669' : '#6b7280',
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          padding: '3px 10px',
+                          borderRadius: 50,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {s.isCurrent ? 'Hoạt động' : 'Đã lưu'}
+                      </span>
                     </div>
-                  ))}
-                </div>
-              )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

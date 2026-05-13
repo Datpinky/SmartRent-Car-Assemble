@@ -25,16 +25,7 @@ const STATUS_MAP = {
 };
 
 /** Đồng bộ backend `vehicle.validation.js` ALLOWED_AMENITIES */
-export const AMENITY_OPTIONS = [
-  'Điều hòa',
-  'Camera lùi',
-  'Cảm biến',
-  'GPS',
-  'Bluetooth',
-  'USB',
-  'Bản đồ',
-  'Túi khí',
-];
+export const AMENITY_OPTIONS = ['Điều hòa', 'Camera lùi', 'Cảm biến', 'GPS', 'Bluetooth', 'USB', 'Bản đồ', 'Túi khí'];
 
 function mapListerProfile(added) {
   if (!added || typeof added !== 'object') {
@@ -97,17 +88,13 @@ export function mapVehicle(v) {
   const images = rawImages.map(sanitizeVehicleImageUrl).filter(Boolean);
 
   const pickup =
-    v.pickup_address != null && String(v.pickup_address).trim() !== ''
-      ? String(v.pickup_address).trim()
-      : '';
+    v.pickup_address != null && String(v.pickup_address).trim() !== '' ? String(v.pickup_address).trim() : '';
   const latRaw = v.pickup_latitude != null ? v.pickup_latitude : v.latitude;
   const lngRaw = v.pickup_longitude != null ? v.pickup_longitude : v.longitude;
   const lat = latRaw !== undefined && latRaw !== null && latRaw !== '' ? Number(latRaw) : null;
   const lng = lngRaw !== undefined && lngRaw !== null && lngRaw !== '' ? Number(lngRaw) : null;
 
-  const lister = mapListerProfile(
-    v.added_by && typeof v.added_by === 'object' ? v.added_by : null
-  );
+  const lister = mapListerProfile(v.added_by && typeof v.added_by === 'object' ? v.added_by : null);
   const showroomDisplay = v.showroom || lister.displayName || '';
 
   const amenitiesRaw = v.amenities;
@@ -198,6 +185,19 @@ export const vehicleService = {
     return v ? mapVehicle(v) : null;
   },
 
+  async getByIds(vehicleIds = []) {
+    if (!vehicleIds.length) return {};
+    const res = await apiClient.post('/api/vehicles/getVehiclesByIds', {
+      vehicle_ids: vehicleIds,
+    });
+    const raw = res.data?.data || {};
+    const mapped = {};
+    for (const [id, v] of Object.entries(raw)) {
+      mapped[id] = v ? mapVehicle(v) : null;
+    }
+    return mapped;
+  },
+
   /**
    * Create a new vehicle (requires auth).
    * payload: { vehicle_type, vehicle_brand, vehicle_model, vehicle_engine_number,
@@ -229,4 +229,3 @@ export const vehicleService = {
 };
 
 export default vehicleService;
-

@@ -21,7 +21,7 @@ const persistStoredUser = (nextUser) => {
     JSON.stringify({
       ...(currentUser || {}),
       ...nextUser,
-    })
+    }),
   );
 };
 
@@ -40,13 +40,23 @@ export const mapProfileUser = (user = {}) => ({
   createdAt: user.createdAt || '',
   updatedAt: user.updatedAt || '',
   userLocation: user.userLocation || null,
+  driver_license_number: user.driver_license_number || '',
+  driver_license_fullname: user.driver_license_fullname || '',
+  driver_license_dob: user.driver_license_dob || '',
+  driver_license_class: user.driver_license_class || '',
+  driver_license_expiry: user.driver_license_expiry || '',
+  driver_license_front_image: user.driver_license_front_image || '',
+  driver_license_back_image: user.driver_license_back_image || '',
+  driver_license_status: user.driver_license_status || 'none',
+  driver_license_reject_reason: user.driver_license_reject_reason || '',
 });
 
-const mergeProfileWithLocation = (user, userLocation) => mapProfileUser({
-  ...user,
-  address: userLocation?.address || user?.address || '',
-  userLocation,
-});
+const mergeProfileWithLocation = (user, userLocation) =>
+  mapProfileUser({
+    ...user,
+    address: userLocation?.address || user?.address || '',
+    userLocation,
+  });
 
 export const profileService = {
   async getProfileById(userId) {
@@ -120,11 +130,11 @@ export const profileService = {
     if (hasAddressField) {
       const latitude = payload.latitude ?? payload.userLocation?.latitude ?? payload.location?.latitude;
       const longitude = payload.longitude ?? payload.userLocation?.longitude ?? payload.location?.longitude;
-      const plusCode = payload.plus_code ?? payload.plusCode ?? payload.userLocation?.plusCode ?? payload.location?.plusCode;
+      const plusCode =
+        payload.plus_code ?? payload.plusCode ?? payload.userLocation?.plusCode ?? payload.location?.plusCode;
       const normalizedLatitude = Number(latitude);
       const normalizedLongitude = Number(longitude);
-      const hasCoordinates =
-        Number.isFinite(normalizedLatitude) && Number.isFinite(normalizedLongitude);
+      const hasCoordinates = Number.isFinite(normalizedLatitude) && Number.isFinite(normalizedLongitude);
       const trimmedAddress = String(payload.address || '').trim();
 
       if (!trimmedAddress) {
@@ -142,6 +152,32 @@ export const profileService = {
     }
 
     const mappedProfile = mergeProfileWithLocation(updatedUser, userLocation);
+    persistStoredUser(mappedProfile);
+    return mappedProfile;
+  },
+
+  async updateDriverLicense(userId, payload = {}) {
+    const res = await apiClient.put(`/api/profile/updateDriverLicense/${userId}`, payload);
+    const updatedUser = res.data?.data || res.data;
+    const mappedProfile = mapProfileUser(updatedUser);
+    persistStoredUser(mappedProfile);
+    return mappedProfile;
+  },
+
+  /** Renter đăng ký trở thành showroom (kèm chữ ký điện tử) */
+  async becomeShowroom({ signature, business_name = '', tax_code = '' }) {
+    const res = await apiClient.put('/api/profile/becomeShowroom', { signature, business_name, tax_code });
+    const updatedUser = res.data?.data || res.data;
+    const mappedProfile = mapProfileUser(updatedUser);
+    persistStoredUser(mappedProfile);
+    return mappedProfile;
+  },
+
+  /** Showroom cập nhật chữ ký điện tử */
+  async updateSignature(signature) {
+    const res = await apiClient.put('/api/profile/updateSignature', { signature });
+    const updatedUser = res.data?.data || res.data;
+    const mappedProfile = mapProfileUser(updatedUser);
     persistStoredUser(mappedProfile);
     return mappedProfile;
   },

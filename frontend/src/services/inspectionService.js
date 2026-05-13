@@ -1,3 +1,5 @@
+import apiClient from './apiClient';
+
 function normalizeList(raw) {
   if (Array.isArray(raw)) return { items: raw, pagination: null };
   if (raw && Array.isArray(raw.data)) {
@@ -8,15 +10,22 @@ function normalizeList(raw) {
 
 const inspectionService = {
   async list(filters = {}) {
-    return normalizeList([]);
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') params.append(k, v);
+    });
+    const res = await apiClient.get(`/api/inspections?${params.toString()}`);
+    return normalizeList(res.data);
+  },
+
+  async getById(id) {
+    const res = await apiClient.get(`/api/inspections/${id}`);
+    return res.data?.data ?? null;
   },
 
   async create(payload) {
-    return {
-      ...payload,
-      _id: `local-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-    };
+    const res = await apiClient.post('/api/inspections', payload);
+    return res.data?.data ?? null;
   },
 };
 

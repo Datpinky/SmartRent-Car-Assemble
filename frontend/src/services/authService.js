@@ -4,16 +4,15 @@ const AUTH_CLEARED_EVENT = 'smartrent:auth-cleared';
 
 /**
  * Maps backend role to frontend role used in routing/UI.
- * Backend:  user | owner | showroom | admin
- * Frontend: renter (=user) | owner | showroom | admin
+ * Backend:  user | showroom | admin
+ * Frontend: renter (=user) | showroom | admin
  */
 export const mapBackendRole = (backendRole) => {
   if (backendRole === 'user') return 'renter';
   return backendRole;
 };
 
-const mapFrontendConsumerRoleToBackend = (frontendRole) => {
-  if (frontendRole === 'owner') return 'owner';
+const mapFrontendConsumerRoleToBackend = () => {
   return 'user';
 };
 
@@ -144,6 +143,11 @@ export const authService = {
       throw new Error('Khong tim thay thong tin nguoi dung da dang nhap.');
     }
     const res = await apiClient.put(`/api/profile/updateProfile/${userId}`, payload);
+    return this.mapUser(res.data?.data);
+  },
+
+  async updateSignature(signature) {
+    const res = await apiClient.put('/api/profile/updateSignature', { signature });
     return this.mapUser(res.data?.data);
   },
 

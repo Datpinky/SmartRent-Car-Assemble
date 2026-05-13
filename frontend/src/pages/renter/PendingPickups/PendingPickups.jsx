@@ -1,25 +1,14 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  FaCalendarAlt,
-  FaClock,
-  FaEnvelope,
-  FaMapMarkerAlt,
-  FaSpinner,
-} from 'react-icons/fa';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { FaCalendarAlt, FaClock, FaEnvelope, FaMapMarkerAlt, FaSpinner } from 'react-icons/fa';
 import { MdDirectionsCar } from 'react-icons/md';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import ContractModal from '../../../components/common/ContractModal';
 import Modal from '../../../components/common/Modal';
 import StatusBadge from '../../../components/common/StatusBadge';
-import bookingService from '../../../services/bookingService';
-import {
-  PAYMENT_LABELS,
-  formatDateTime,
-  formatMoney,
-  mapRenterBooking,
-} from '../../../utils/renterBookingView';
 import { RENTAL_CONTRACT_UI } from '../../../constants/rentalContractTemplate';
-import RentalContractViewerModal from '../components/RentalContractViewerModal';
+import bookingService from '../../../services/bookingService';
 import { canRenterViewOfficialRentalContract } from '../../../utils/rentalContractEligibility';
+import { PAYMENT_LABELS, formatDateTime, formatMoney, mapRenterBooking } from '../../../utils/renterBookingView';
 
 const cardInfoStyle = {
   background: '#fff',
@@ -41,14 +30,15 @@ const PendingPickups = () => {
   const [error, setError] = useState('');
   const [detailModal, setDetailModal] = useState(null);
   const [contractBookingId, setContractBookingId] = useState(null);
+  const [otpInputs, setOtpInputs] = useState({}); // { [bookingId]: string }
+  const [otpLoading, setOtpLoading] = useState(''); // bookingId đang verify
+  const [otpErrors, setOtpErrors] = useState({}); // { [bookingId]: string }
 
   const loadBookings = async () => {
     setLoading(true);
     try {
       const data = await bookingService.getCurrentRoleBookingsDetailed();
-      const mapped = (data || [])
-        .map(mapRenterBooking)
-        .filter((booking) => booking.isAwaitingPickup);
+      const mapped = (data || []).map(mapRenterBooking).filter((booking) => booking.isAwaitingPickup);
       setBookings(mapped);
       setError('');
     } catch (err) {
@@ -62,6 +52,29 @@ const PendingPickups = () => {
   useEffect(() => {
     loadBookings();
   }, []);
+
+  const handleVerifyOtp = async (bookingId) => {
+    const otp = (otpInputs[bookingId] || '').trim();
+    if (!otp) {
+      setOtpErrors((prev) => ({ ...prev, [bookingId]: 'Vui lòng nhập mã OTP' }));
+      return;
+    }
+    setOtpLoading(bookingId);
+    setOtpErrors((prev) => ({ ...prev, [bookingId]: '' }));
+    try {
+      await bookingService.verifyHandoverOtp(bookingId, otp);
+      // Booking chuyển sang in_use → reload để nó biến khỏi trang này
+      await loadBookings();
+      setDetailModal(null);
+    } catch (err) {
+      setOtpErrors((prev) => ({
+        ...prev,
+        [bookingId]: err?.response?.data?.message || err?.message || 'Mã OTP không đúng',
+      }));
+    } finally {
+      setOtpLoading('');
+    }
+  };
 
   useEffect(() => {
     if (!highlightedBookingId || loading || bookings.length === 0) {
@@ -105,11 +118,11 @@ const PendingPickups = () => {
   const summary = useMemo(
     () => ({
       total: bookings.length,
-      waiting: bookings.length,
-      readyForHandover: bookings.filter((booking) => booking.status === 'waiting_handover').length,
+      needsRenterConfirm: bookings.filter((booking) => booking.status === 'handed_over').length,
+      waitingShowroom: bookings.filter((booking) => booking.status === 'waiting_handover').length,
       contactable: bookings.filter((booking) => Boolean(booking.showroomEmail)).length,
     }),
-    [bookings]
+    [bookings],
   );
 
   const waitingLabel = 'Đang chờ Showroom hoàn tất bàn giao';
@@ -120,8 +133,8 @@ const PendingPickups = () => {
         <div>
           <h1 className="page-title">Chờ nhận xe</h1>
           <p className="page-subtitle" style={{ marginTop: 6, maxWidth: 720 }}>
-            Đây là bước theo dõi: showroom đang hoàn tất bàn giao trên hệ thống. Bạn không xác nhận «đã nhận xe» tại
-            đây — khi showroom cập nhật trạng thái, booking sẽ chuyển sang Chuyến đi của tôi.
+            Theo dõi quá trình bàn giao xe. Khi showroom đã bàn giao, bạn sẽ cần xác nhận đã nhận xe để bắt đầu chuyến
+            đi.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -153,8 +166,8 @@ const PendingPickups = () => {
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         {[
           { label: 'Tổng booking', val: summary.total, color: '#374151' },
-          { label: 'Đang chờ bàn giao', val: summary.waiting, color: '#d97706' },
-          { label: 'Đã sẵn sàng giao', val: summary.readyForHandover, color: '#2563eb' },
+          { label: 'Chờ showroom bàn giao', val: summary.waitingShowroom, color: '#d97706' },
+          { label: 'Cần bạn xác nhận nhận xe', val: summary.needsRenterConfirm, color: '#2563eb' },
           { label: 'Có email showroom', val: summary.contactable, color: '#059669' },
         ].map((item) => (
           <div
@@ -182,7 +195,8 @@ const PendingPickups = () => {
           <MdDirectionsCar style={{ fontSize: '3rem', color: '#94a3b8', marginBottom: 14 }} />
           <div style={{ fontWeight: 800, color: '#111827', marginBottom: 6 }}>Không có booking nào chờ nhận xe</div>
           <div style={{ fontSize: '0.84rem', color: '#6b7280', lineHeight: 1.6, marginBottom: 16 }}>
-            Booking sẽ hiện tại đây khi Showroom đã chuyển sang Chờ bàn giao và đang hoàn tất bước bàn giao trên hệ thống.
+            Booking sẽ hiện tại đây khi Showroom đã chuyển sang Chờ bàn giao và đang hoàn tất bước bàn giao trên hệ
+            thống.
           </div>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button className="renter-btn-soft" onClick={() => navigate('/renter/bookings')}>
@@ -201,14 +215,16 @@ const PendingPickups = () => {
               id={`renter-booking-card-${booking.id}`}
               className="booking-card-item"
               onClick={() => setDetailModal(booking)}
-              style={String(booking.id) === String(highlightedBookingId)
-                ? {
-                  border: '1px solid #bfdbfe',
-                  boxShadow: '0 12px 30px rgba(37, 99, 235, 0.12)',
-                  background: '#f8fbff',
-                  cursor: 'pointer',
-                }
-                : { cursor: 'pointer' }}
+              style={
+                String(booking.id) === String(highlightedBookingId)
+                  ? {
+                      border: '1px solid #bfdbfe',
+                      boxShadow: '0 12px 30px rgba(37, 99, 235, 0.12)',
+                      background: '#f8fbff',
+                      cursor: 'pointer',
+                    }
+                  : { cursor: 'pointer' }
+              }
             >
               <div className="booking-card-left">
                 <div className="booking-card-img" style={{ overflow: 'hidden', background: '#f3f4f6' }}>
@@ -227,17 +243,26 @@ const PendingPickups = () => {
                   <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#111827' }}>{booking.vehicleName}</div>
                   <div style={{ fontSize: '0.78rem', color: '#6b7280', marginTop: 3 }}>{booking.showroomName}</div>
                   <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.78rem', color: '#6b7280' }}>
-                      <FaCalendarAlt size={11} /> {formatDateTime(booking.startDate)} - {formatDateTime(booking.endDate)}
+                    <span
+                      style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.78rem', color: '#6b7280' }}
+                    >
+                      <FaCalendarAlt size={11} /> {formatDateTime(booking.startDate)} -{' '}
+                      {formatDateTime(booking.endDate)}
                     </span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.78rem', color: '#6b7280' }}>
+                    <span
+                      style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.78rem', color: '#6b7280' }}
+                    >
                       <FaClock size={11} /> {booking.durationDays} ngày
                     </span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.78rem', color: '#6b7280' }}>
+                    <span
+                      style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.78rem', color: '#6b7280' }}
+                    >
                       <FaMapMarkerAlt size={11} /> {booking.locationLabel}
                     </span>
                   </div>
-                  <div style={{ marginTop: 8, fontSize: '0.78rem', fontWeight: 800, color: '#334155' }}>{booking.statusHeadline}</div>
+                  <div style={{ marginTop: 8, fontSize: '0.78rem', fontWeight: 800, color: '#334155' }}>
+                    {booking.statusHeadline}
+                  </div>
                   <div style={{ marginTop: 4, fontSize: '0.76rem', color: '#6b7280', lineHeight: 1.6 }}>
                     {booking.waitingForLabel}
                   </div>
@@ -278,21 +303,66 @@ const PendingPickups = () => {
                       {RENTAL_CONTRACT_UI.officialButton}
                     </button>
                   )}
-                  <div
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      borderRadius: 8,
-                      padding: '6px 12px',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      background: '#e2e8f0',
-                      color: '#475569',
-                    }}
-                  >
-                    {waitingLabel}
-                  </div>
-                  {booking.showroomEmail && (
+
+                  {booking.status === 'handed_over' ? (
+                    // Showroom đã bàn giao → renter nhập OTP
+                    <div
+                      style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={6}
+                          placeholder="Nhập mã OTP"
+                          value={otpInputs[booking.id] || ''}
+                          onChange={(e) =>
+                            setOtpInputs((prev) => ({ ...prev, [booking.id]: e.target.value.replace(/\D/g, '') }))
+                          }
+                          style={{
+                            width: 110,
+                            padding: '6px 10px',
+                            borderRadius: 8,
+                            border: '1.5px solid #00b14f',
+                            fontSize: '0.85rem',
+                            fontFamily: 'monospace',
+                            letterSpacing: '0.15em',
+                            outline: 'none',
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          style={{ fontSize: '0.75rem', padding: '6px 12px', whiteSpace: 'nowrap' }}
+                          disabled={otpLoading === booking.id}
+                          onClick={() => handleVerifyOtp(booking.id)}
+                        >
+                          {otpLoading === booking.id ? <FaSpinner className="animate-spin" /> : 'Xác nhận'}
+                        </button>
+                      </div>
+                      {otpErrors[booking.id] && (
+                        <div style={{ fontSize: '0.72rem', color: '#dc2626' }}>{otpErrors[booking.id]}</div>
+                      )}
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        borderRadius: 8,
+                        padding: '6px 12px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        background: '#e2e8f0',
+                        color: '#475569',
+                      }}
+                    >
+                      {waitingLabel}
+                    </div>
+                  )}
+
+                  {booking.status !== 'handed_over' && booking.showroomEmail && (
                     <a
                       className="renter-btn-soft"
                       href={`mailto:${booking.showroomEmail}`}
@@ -360,7 +430,9 @@ const PendingPickups = () => {
                 }}
               >
                 <span style={{ fontSize: '0.82rem', color: '#6b7280' }}>{label}</span>
-                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#111827', textAlign: 'right' }}>{value}</span>
+                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#111827', textAlign: 'right' }}>
+                  {value}
+                </span>
               </div>
             ))}
 
@@ -380,23 +452,87 @@ const PendingPickups = () => {
               </div>
             )}
 
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: 10,
-                background: '#e2e8f0',
-                color: '#475569',
-                padding: '12px 14px',
-                fontSize: '0.8rem',
-                fontWeight: 700,
-                minHeight: 42,
-                textAlign: 'center',
-              }}
-            >
-              {waitingLabel}
-            </div>
+            {detailModal.status === 'handed_over' ? (
+              // Showroom đã bàn giao → renter nhập OTP xác nhận
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div
+                  style={{
+                    background: '#f0fdf4',
+                    border: '1px solid #86efac',
+                    borderRadius: 12,
+                    padding: '12px 14px',
+                    fontSize: '0.8rem',
+                    color: '#166534',
+                    lineHeight: 1.6,
+                  }}
+                >
+                  Showroom đã bàn giao xe. Hãy yêu cầu showroom đọc mã OTP và nhập vào ô bên dưới để xác nhận nhận xe.
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="Nhập mã OTP 6 số"
+                    value={otpInputs[detailModal.id] || ''}
+                    onChange={(e) =>
+                      setOtpInputs((prev) => ({ ...prev, [detailModal.id]: e.target.value.replace(/\D/g, '') }))
+                    }
+                    style={{
+                      flex: 1,
+                      padding: '10px 14px',
+                      borderRadius: 10,
+                      border: '1.5px solid #00b14f',
+                      fontSize: '1.1rem',
+                      fontFamily: 'monospace',
+                      letterSpacing: '0.2em',
+                      outline: 'none',
+                      textAlign: 'center',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    style={{ padding: '10px 20px', whiteSpace: 'nowrap' }}
+                    disabled={otpLoading === detailModal.id}
+                    onClick={() => handleVerifyOtp(detailModal.id)}
+                  >
+                    {otpLoading === detailModal.id ? <FaSpinner className="animate-spin" /> : 'Xác nhận nhận xe'}
+                  </button>
+                </div>
+                {otpErrors[detailModal.id] && (
+                  <div
+                    style={{
+                      fontSize: '0.8rem',
+                      color: '#dc2626',
+                      background: '#fef2f2',
+                      borderRadius: 8,
+                      padding: '8px 12px',
+                    }}
+                  >
+                    {otpErrors[detailModal.id]}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 10,
+                  background: '#e2e8f0',
+                  color: '#475569',
+                  padding: '12px 14px',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  minHeight: 42,
+                  textAlign: 'center',
+                }}
+              >
+                {waitingLabel}
+              </div>
+            )}
 
             {canRenterViewOfficialRentalContract(detailModal) && (
               <button
@@ -422,7 +558,7 @@ const PendingPickups = () => {
         )}
       </Modal>
 
-      <RentalContractViewerModal
+      <ContractModal
         isOpen={!!contractBookingId}
         bookingId={contractBookingId || ''}
         onClose={() => setContractBookingId(null)}

@@ -1,12 +1,8 @@
-import { sanitizeImageList } from './media';
+import { CANCELLABLE_STATUSES, getBookingFlowState, getBookingPaymentStatus } from './bookingFlowState';
 import { canReviewBooking, resolveBookingVehicleId } from './bookingReviewEligibility';
-import {
-  CANCELLABLE_STATUSES,
-  getBookingFlowState,
-  getBookingPaymentStatus,
-} from './bookingFlowState';
+import { sanitizeImageList } from './media';
 import { getRentalWorkflow } from './rentalWorkflowStorage';
-import { getAiReportBadgeLabel, getAiFlowHeadline } from './renterAiReportStatus';
+import { getAiFlowHeadline, getAiReportBadgeLabel } from './renterAiReportStatus';
 
 export const PAYMENT_LABELS = {
   pending: 'Chờ thanh toán',
@@ -48,33 +44,39 @@ const getCoordinationMeta = (booking, flowState, paymentStatus) => {
         ? 'Hệ thống đang chờ bạn tạo lại và hoàn tất phiên thanh toán.'
         : 'Hệ thống đang chờ bạn hoàn tất thanh toán cho booking này.',
       owner: 'Bên cần xử lý: Bạn',
-      nextStep: 'Sau khi thanh toán thành công, booking sẽ chuyển sang Chờ showroom xử lý.',
-      renterAction: needsRetry ? 'Thanh toán lại để tiếp tục quy trình đặt xe.' : 'Hoàn tất thanh toán để showroom tiếp tục xử lý.',
+      nextStep: 'Sau khi thanh toán thành công, showroom sẽ xác nhận và chốt thời gian bàn giao xe.',
+      renterAction: needsRetry
+        ? 'Thanh toán lại để tiếp tục quy trình đặt xe.'
+        : 'Hoàn tất thanh toán để showroom tiếp tục xử lý.',
       menuKey: 'pending-payments',
     };
   }
 
   if (flowState.isAwaitingShowroomProcessing) {
-    const isConfirmed = booking.status === 'confirmed';
     return {
-      headline: isConfirmed ? 'Cho showroom chuẩn bị bàn giao' : 'Chờ showroom xác nhận',
-      waitingFor: isConfirmed
-        ? 'Đang chờ showroom chuẩn bị xe và chuyển booking sang bước Chờ giao xe.'
-        : 'Đang chờ showroom tiếp nhận booking đã thanh toán và xác nhận xử lý.',
+      headline: 'Showroom đang chuẩn bị bàn giao',
+      waitingFor: 'Bạn đã thanh toán thành công. Showroom sẽ xác nhận và chốt thời gian bàn giao xe.',
       owner: 'Bên cần xử lý: Showroom',
-      nextStep: 'Khi showroom cập nhật đã bàn giao, booking sẽ rời khỏi menu này và chuyển vào Chuyến đi của tôi.',
-      renterAction: 'Theo dõi cập nhật từ showroom hoặc liên hệ nếu cần.',
+      nextStep: 'Showroom sẽ chuyển booking sang trạng thái Chờ bàn giao. Bạn sẽ nhận được thông báo khi có cập nhật.',
+      renterAction: 'Chờ showroom xác nhận. Liên hệ showroom nếu cần hỗ trợ.',
       menuKey: 'pending-showroom-processing',
     };
   }
 
   if (flowState.isAwaitingPickup) {
+    const isHandedOver = booking.status === 'handed_over';
     return {
-      headline: 'Chờ showroom hoàn tất bàn giao',
-      waitingFor: `Booking đã ở mức Chờ giao xe. ${startLabel}. Showroom cần hoàn tất bước bàn giao trên hệ thống trước khi booking được chuyển vào Chuyến đi của tôi.`,
-      owner: 'Bên cần xử lý: Showroom',
-      nextStep: 'Khi showroom cập nhật đã bàn giao, booking sẽ rời khỏi menu này và chuyển vào Chuyến đi của tôi.',
-      renterAction: 'Đến điểm giao nhận đúng hẹn, kiểm tra xe và liên hệ showroom nếu cần bổ sung thông tin bàn giao.',
+      headline: isHandedOver ? 'Xác nhận đã nhận xe' : 'Chờ showroom hoàn tất bàn giao',
+      waitingFor: isHandedOver
+        ? 'Showroom đã đánh dấu đã bàn giao xe. Hãy kiểm tra xe và xác nhận đã nhận để bắt đầu chuyến đi.'
+        : `Booking đã ở mức Chờ giao xe. ${startLabel}. Showroom cần hoàn tất bước bàn giao trên hệ thống.`,
+      owner: isHandedOver ? 'Bên cần xử lý: Bạn' : 'Bên cần xử lý: Showroom',
+      nextStep: isHandedOver
+        ? 'Sau khi xác nhận, booking chuyển sang Đang thuê và chuyến đi bắt đầu được tính.'
+        : 'Khi showroom cập nhật đã bàn giao, bạn sẽ nhận được thông báo và cần xác nhận nhận xe.',
+      renterAction: isHandedOver
+        ? 'Kiểm tra xe kỹ rồi bấm “Xác nhận đã nhận xe”. Khi đó thời gian thuê bắt đầu được tính.'
+        : 'Đến điểm giao nhận đúng hẹn, kiểm tra xe và liên hệ showroom nếu cần.',
       menuKey: 'pending-pickups',
     };
   }
@@ -100,7 +102,9 @@ const getCoordinationMeta = (booking, flowState, paymentStatus) => {
       nextStep: flowState.hasEnded
         ? 'Mở [Yêu cầu trả xe] xe để upload ảnh trả xe và lưu bộ hồ sơ đối chiếu cho showroom.'
         : 'Khi đến hạn, bạn sẽ mở yêu cầu trả xe để thực hiện bước trả xe.',
-      renterAction: flowState.hasEnded ? 'Lưu biên bản và bộ ảnh trả xe, sau đó liên hệ showroom xác nhận.' : 'Theo dõi hạn thuê và giữ xe đúng hiện trạng.',
+      renterAction: flowState.hasEnded
+        ? 'Lưu biên bản và bộ ảnh trả xe, sau đó liên hệ showroom xác nhận.'
+        : 'Theo dõi hạn thuê và giữ xe đúng hiện trạng.',
       menuKey: 'bookings',
     };
   }
@@ -121,9 +125,10 @@ const getCoordinationMeta = (booking, flowState, paymentStatus) => {
       headline: 'Đã hủy Booking',
       waitingFor: 'Booking này không còn tiếp tục trong quy trình đặt xe hiện tại.',
       owner: 'Trạng thái: Đã hủy',
-      nextStep: paymentStatus === 'refunded'
-        ? 'Khoản hoàn trả đã được ghi nhận trong lịch sử giao dịch.'
-        : 'Nếu cần đặt lại xe, bạn có thể tạo booking mới.',
+      nextStep:
+        paymentStatus === 'refunded'
+          ? 'Khoản hoàn trả đã được ghi nhận trong lịch sử giao dịch.'
+          : 'Nếu cần đặt lại xe, bạn có thể tạo booking mới.',
       renterAction: 'Kiểm tra lịch sử giao dịch nếu cần đối chiếu thanh toán.',
       menuKey: 'bookings',
     };
@@ -170,8 +175,8 @@ export const mapRenterBooking = (booking) => {
     paymentMethod: booking.payment?.payment_method || 'Chưa có',
     paymentRecord: booking.payment || null,
     canRetryPayment:
-      RETRY_PAYMENT_BOOKING_STATUSES.includes(booking.status)
-      && ['pending', 'failed', 'declined'].includes(paymentStatus),
+      RETRY_PAYMENT_BOOKING_STATUSES.includes(booking.status) &&
+      ['pending', 'failed', 'declined'].includes(paymentStatus),
     canCancel: CANCELLABLE_STATUSES.includes(booking.status),
     canReviewVehicle: canReviewBooking(booking),
     canConfirmPickup: flowState.canConfirmPickup,

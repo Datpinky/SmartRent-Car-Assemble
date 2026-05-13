@@ -59,15 +59,16 @@ const mapShowroomRow = (user = {}) => ({
 const mapPaymentRow = (payment = {}) => {
   const booking = payment.booking_id || payment.booking || {};
   const status =
-    payment.payment_status === 'successful'
-      ? 'paid'
-      : payment.payment_status === 'failed'
-        ? 'failed'
-        : 'processing';
+    payment.payment_status === 'successful' ? 'paid' : payment.payment_status === 'failed' ? 'failed' : 'processing';
 
   return {
     id: payment._id || payment.id || '',
-    code: payment.transaction_code || payment.stripe_payment_intent_id || `GD${String(payment._id || '').slice(-6).toUpperCase()}`,
+    code:
+      payment.transaction_code ||
+      payment.stripe_payment_intent_id ||
+      `GD${String(payment._id || '')
+        .slice(-6)
+        .toUpperCase()}`,
     bookingId: booking?._id ? `BK${String(booking._id).slice(-6).toUpperCase()}` : String(payment.booking_id || ''),
     renter: payment.renter?.name || booking?.user_id?.name || '-',
     showroom: payment.showroom?.name || booking?.showroom_id?.name || '-',
@@ -165,7 +166,9 @@ const adminService = {
       pendingCount: users.filter((user) => user.role === 'showroom' && user.showroom_status === 'pending').length,
       recentBookings: bookings.slice(0, 8).map((booking) => ({
         id: booking._id || booking.id,
-        code: `BK${String(booking._id || booking.id || '').slice(-6).toUpperCase()}`,
+        code: `BK${String(booking._id || booking.id || '')
+          .slice(-6)
+          .toUpperCase()}`,
         renter: booking.user_id?.name || '-',
         vehicle: booking.vehicle_id?.vehicle_name || booking.vehicle_id?.vehicle_brand || '-',
         from: formatDate(booking.start_date),
@@ -201,7 +204,7 @@ const adminService = {
         const key = vehicle.status || 'available';
         acc[key] = (acc[key] || 0) + 1;
         return acc;
-      }, {})
+      }, {}),
     ).map(([name, value]) => ({ name, value, color: statusColors[name] || '#6b7280' }));
 
     const categoryColors = ['#00b14f', '#2563eb', '#f59e0b', '#6d28d9', '#dc2626', '#0891b2'];
@@ -210,7 +213,7 @@ const adminService = {
         const key = vehicle.vehicle_type || vehicle.type || 'Khac';
         acc[key] = (acc[key] || 0) + 1;
         return acc;
-      }, {})
+      }, {}),
     ).map(([name, value], index) => ({ name, value, color: categoryColors[index % categoryColors.length] }));
 
     const monthKeys = Array.from({ length: 6 }, (_, index) => {
@@ -235,7 +238,6 @@ const adminService = {
       return {
         month,
         renters: rows.filter((user) => user.role === 'user').length,
-        owners: rows.filter((user) => user.role === 'owner').length,
         showrooms: rows.filter((user) => user.role === 'showroom').length,
       };
     });
@@ -252,6 +254,40 @@ const adminService = {
     const { data } = await fetchPayments();
     const transactions = data.map(mapPaymentRow);
     return status === 'all' ? transactions : transactions.filter((item) => item.status === status);
+  },
+
+  async listDriverLicenses(status = 'all') {
+    const res = await apiClient.post('/api/profile/listDriverLicenses', { role: 'user' });
+    const raw = Array.isArray(res.data?.data) ? res.data.data : [];
+    const withLicense = raw.filter((u) => u.driver_license_number && u.driver_license_number !== '');
+    const mapped = withLicense.map((u) => ({
+      id: u._id || u.id,
+      _id: u._id || u.id,
+      name: u.name || u.email,
+      email: u.email || '',
+      phone: u.phone || '',
+      licenseNumber: u.driver_license_number || '',
+      licenseFullname: u.driver_license_fullname || '',
+      licenseDob: u.driver_license_dob || '',
+      licenseClass: u.driver_license_class || '',
+      licenseExpiry: u.driver_license_expiry || '',
+      licenseFrontImage: u.driver_license_front_image || '',
+      licenseBackImage: u.driver_license_back_image || '',
+      licenseStatus: u.driver_license_status || 'pending',
+      rejectReason: u.driver_license_reject_reason || '',
+      createdAt: u.createdAt || '',
+    }));
+    return status === 'all' ? mapped : mapped.filter((item) => item.licenseStatus === status);
+  },
+
+  async approveDriverLicense(userId) {
+    const res = await apiClient.put(`/api/profile/verifyDriverLicense/${userId}`, { action: 'approved' });
+    return res.data;
+  },
+
+  async rejectDriverLicense(userId, reason) {
+    const res = await apiClient.put(`/api/profile/verifyDriverLicense/${userId}`, { action: 'rejected', reason });
+    return res.data;
   },
 };
 

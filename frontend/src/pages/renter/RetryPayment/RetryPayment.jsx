@@ -1,12 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Elements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
-import {
-  Elements,
-  PaymentElement,
-  useElements,
-  useStripe,
-} from '@stripe/react-stripe-js';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FaArrowLeft,
   FaCheckCircle,
@@ -16,14 +10,11 @@ import {
   FaSpinner,
   FaSyncAlt,
 } from 'react-icons/fa';
+import { useNavigate, useParams } from 'react-router-dom';
+import StripePaymentForm from '../../../components/common/StripePaymentForm';
 import bookingService from '../../../services/bookingService';
 import paymentService from '../../../services/paymentService';
-import {
-  formatDateTime,
-  formatMoney,
-  mapRenterBooking,
-  PAYMENT_LABELS,
-} from '../../../utils/renterBookingView';
+import { formatDateTime, formatMoney, mapRenterBooking, PAYMENT_LABELS } from '../../../utils/renterBookingView';
 
 const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLIC_KEY, {
   developerTools: {
@@ -32,104 +23,6 @@ const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLIC_KEY, {
     },
   },
 });
-
-const buildRetrySessionError = (message = '') => {
-  const normalized = String(message || '').toLowerCase();
-  const looksExpiredSession =
-    normalized.includes('client secret')
-    || normalized.includes('payment intent')
-    || normalized.includes('elements session')
-    || normalized.includes('invalid')
-    || normalized.includes('expired')
-    || normalized.includes('loaderror');
-
-  return looksExpiredSession
-    ? 'Phiên thanh toán hiện tại không còn hợp lệ trên Stripe. Vui lòng tạo lại phiên thanh toán mới.'
-    : 'Cổng thanh toán Stripe không tải được đầy đủ. Vui lòng tạo lại phiên thanh toán và thử lại.';
-};
-
-const StripeRetryForm = ({ bookingId, onError, onSessionBroken }) => {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [submitting, setSubmitting] = useState(false);
-  const [paymentElementReady, setPaymentElementReady] = useState(false);
-
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    if (!stripe || !elements || submitting) return;
-
-    const paymentElement = elements.getElement(PaymentElement);
-    if (!paymentElement || !paymentElementReady) {
-      onError('Cổng thanh toán chưa sẵn sàng. Vui lòng đợi trong giây lát rồi thử lại.');
-      return;
-    }
-
-    setSubmitting(true);
-    onError('');
-
-    try {
-      const returnUrl = `${window.location.origin}/renter/payment-result?bookingId=${bookingId}`;
-      const { error } = await stripe.confirmPayment({
-        elements,
-        confirmParams: { return_url: returnUrl },
-      });
-
-      if (error) {
-        onError(error.message || 'Không thể tiếp tục thanh toán lúc này.');
-        setSubmitting(false);
-      }
-    } catch (error) {
-      onError(error?.message || 'Không thể tiếp tục thanh toán lúc này.');
-      setSubmitting(false);
-    }
-  };
-
-  const handleLoadError = (event) => {
-    setPaymentElementReady(false);
-    onSessionBroken(buildRetrySessionError(event?.error?.message || event?.message || ''));
-  };
-
-  return (
-    <form onSubmit={handleSubmit}>
-      <div
-        style={{
-          border: '1px solid #e5e7eb',
-          borderRadius: 16,
-          padding: 16,
-          background: '#fff',
-          marginBottom: 18,
-        }}
-      >
-        <PaymentElement
-          options={{
-            layout: 'tabs',
-            wallets: { applePay: 'never', googlePay: 'never' },
-          }}
-          onLoaderStart={() => setPaymentElementReady(false)}
-          onReady={() => setPaymentElementReady(true)}
-          onLoadError={handleLoadError}
-        />
-      </div>
-
-      <button
-        type="submit"
-        className="btn-primary"
-        style={{ width: '100%', justifyContent: 'center', minHeight: 46 }}
-        disabled={!stripe || submitting || !paymentElementReady}
-      >
-        {submitting ? (
-          <>
-            <FaSpinner className="animate-spin" /> Đang xử lý...
-          </>
-        ) : (
-          <>
-            <FaCreditCard /> {paymentElementReady ? 'Thanh toán lại ngay' : 'Đang tải cổng thanh toán...'}
-          </>
-        )}
-      </button>
-    </form>
-  );
-};
 
 const RetryPayment = () => {
   const { bookingId = '' } = useParams();
@@ -145,10 +38,7 @@ const RetryPayment = () => {
 
   const autoPreparedRef = useRef('');
 
-  const renterBooking = useMemo(
-    () => (booking ? mapRenterBooking(booking) : null),
-    [booking]
-  );
+  const renterBooking = useMemo(() => (booking ? mapRenterBooking(booking) : null), [booking]);
 
   const loadBooking = useCallback(async () => {
     if (!bookingId) {
@@ -199,68 +89,74 @@ const RetryPayment = () => {
     }
   }, []);
 
-  const handleTerminalClientSecret = useCallback(async (secret, targetBookingId) => {
-    const intentStatus = await inspectStripeIntentStatus(secret);
+  const handleTerminalClientSecret = useCallback(
+    async (secret, targetBookingId) => {
+      const intentStatus = await inspectStripeIntentStatus(secret);
 
-    if (intentStatus === 'succeeded') {
-      await paymentService.syncPaymentIntentFromClientSecret(secret).catch(() => null);
-      navigate(`/renter/payment-result?bookingId=${targetBookingId}&status=success`);
-      return true;
-    }
+      if (intentStatus === 'succeeded') {
+        await paymentService.syncPaymentIntentFromClientSecret(secret).catch(() => null);
+        navigate(`/renter/payment-result?bookingId=${targetBookingId}&status=success`);
+        return true;
+      }
 
-    if (intentStatus === 'canceled') {
-      await paymentService.syncPaymentIntentFromClientSecret(secret).catch(() => null);
-      setBrokenClientSecret(secret);
-      setClientSecret('');
-      setNeedsNewSession(true);
-      setError('Phien thanh toan cu da bi huy tren Stripe. Vui long tao lai phien thanh toan moi.');
-      return true;
-    }
+      if (intentStatus === 'canceled') {
+        await paymentService.syncPaymentIntentFromClientSecret(secret).catch(() => null);
+        setBrokenClientSecret(secret);
+        setClientSecret('');
+        setNeedsNewSession(true);
+        setError('Phien thanh toan cu da bi huy tren Stripe. Vui long tao lai phien thanh toan moi.');
+        return true;
+      }
 
-    return false;
-  }, [inspectStripeIntentStatus, navigate]);
+      return false;
+    },
+    [inspectStripeIntentStatus, navigate],
+  );
 
-  const prepareRetryPayment = useCallback(async (targetBooking = renterBooking) => {
-    if (!targetBooking?.id) {
-      setError('Không tìm thấy booking để tạo lại phiên thanh toán.');
-      return;
-    }
-
-    setPreparing(true);
-    setError('');
-    setNeedsNewSession(false);
-
-    try {
-      const amount = Number(targetBooking.totalPrice || 0);
-      const paymentData = brokenClientSecret
-        ? await paymentService.recreatePaymentSession(targetBooking.id, amount, brokenClientSecret)
-        : await paymentService.retryPaymentSession(targetBooking.id, amount);
-
-      if (paymentData?.alreadyPaid) {
-        navigate(`/renter/payment-result?bookingId=${targetBooking.id}&status=success`);
+  const prepareRetryPayment = useCallback(
+    async (targetBooking = renterBooking) => {
+      if (!targetBooking?.id) {
+        setError('Không tìm thấy booking để tạo lại phiên thanh toán.');
         return;
       }
 
-      const secret = paymentData?.client_secret || paymentData?.clientSecret || '';
+      setPreparing(true);
+      setError('');
+      setNeedsNewSession(false);
 
-      if (!secret) {
-        throw new Error('Không nhận được client secret để tiếp tục thanh toán.');
+      try {
+        const amount = Number(targetBooking.totalPrice || 0);
+        const paymentData = brokenClientSecret
+          ? await paymentService.recreatePaymentSession(targetBooking.id, amount, brokenClientSecret)
+          : await paymentService.retryPaymentSession(targetBooking.id, amount);
+
+        if (paymentData?.alreadyPaid) {
+          navigate(`/renter/payment-result?bookingId=${targetBooking.id}&status=success`);
+          return;
+        }
+
+        const secret = paymentData?.client_secret || paymentData?.clientSecret || '';
+
+        if (!secret) {
+          throw new Error('Không nhận được client secret để tiếp tục thanh toán.');
+        }
+
+        if (await handleTerminalClientSecret(secret, targetBooking.id)) {
+          return;
+        }
+
+        setClientSecret(secret);
+        setBrokenClientSecret('');
+      } catch (err) {
+        setClientSecret('');
+        setNeedsNewSession(true);
+        setError(err.message || 'Không thể tạo lại phiên thanh toán cho booking này.');
+      } finally {
+        setPreparing(false);
       }
-
-      if (await handleTerminalClientSecret(secret, targetBooking.id)) {
-        return;
-      }
-
-      setClientSecret(secret);
-      setBrokenClientSecret('');
-    } catch (err) {
-      setClientSecret('');
-      setNeedsNewSession(true);
-      setError(err.message || 'Không thể tạo lại phiên thanh toán cho booking này.');
-    } finally {
-      setPreparing(false);
-    }
-  }, [brokenClientSecret, handleTerminalClientSecret, navigate, renterBooking]);
+    },
+    [brokenClientSecret, handleTerminalClientSecret, navigate, renterBooking],
+  );
 
   useEffect(() => {
     if (!renterBooking?.id || !renterBooking.canRetryPayment || clientSecret) {
@@ -276,16 +172,17 @@ const RetryPayment = () => {
   }, [clientSecret, prepareRetryPayment, renterBooking]);
 
   const stripeOptions = useMemo(
-    () => (clientSecret
-      ? {
-        clientSecret,
-        appearance: {
-          theme: 'stripe',
-          variables: { colorPrimary: '#00b14f' },
-        },
-      }
-      : undefined),
-    [clientSecret]
+    () =>
+      clientSecret
+        ? {
+            clientSecret,
+            appearance: {
+              theme: 'stripe',
+              variables: { colorPrimary: '#00b14f' },
+            },
+          }
+        : undefined,
+    [clientSecret],
   );
 
   const retryBlockedMessage = !renterBooking
@@ -302,7 +199,16 @@ const RetryPayment = () => {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '70vh', color: '#6b7280', gap: 10 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '70vh',
+          color: '#6b7280',
+          gap: 10,
+        }}
+      >
         <FaSpinner className="animate-spin" />
         Đang tải thông tin thanh toán...
       </div>
@@ -369,14 +275,20 @@ const RetryPayment = () => {
             <div style={{ background: '#fff', borderRadius: 18, border: '1px solid #f1f5f9', padding: 22 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#111827' }}>{renterBooking.vehicleName}</div>
-                  <div style={{ marginTop: 4, fontSize: '0.82rem', color: '#6b7280' }}>{renterBooking.showroomName}</div>
+                  <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#111827' }}>
+                    {renterBooking.vehicleName}
+                  </div>
+                  <div style={{ marginTop: 4, fontSize: '0.82rem', color: '#6b7280' }}>
+                    {renterBooking.showroomName}
+                  </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontWeight: 800, fontSize: '1.2rem', color: '#00b14f' }}>
                     {formatMoney(renterBooking.totalPrice)}
                   </div>
-                  <div style={{ marginTop: 6, fontSize: '0.78rem', color: '#6b7280' }}>Mã booking: {renterBooking.id}</div>
+                  <div style={{ marginTop: 6, fontSize: '0.78rem', color: '#6b7280' }}>
+                    Mã booking: {renterBooking.id}
+                  </div>
                 </div>
               </div>
 
@@ -399,7 +311,9 @@ const RetryPayment = () => {
                     }}
                   >
                     <span style={{ fontSize: '0.82rem', color: '#6b7280' }}>{label}</span>
-                    <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#111827', textAlign: 'right' }}>{value}</span>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#111827', textAlign: 'right' }}>
+                      {value}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -431,13 +345,25 @@ const RetryPayment = () => {
 
             <div style={{ background: '#fff', borderRadius: 18, border: '1px solid #f1f5f9', padding: 22 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                <div style={{ width: 40, height: 40, borderRadius: 12, background: '#ecfdf5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 12,
+                    background: '#ecfdf5',
+                    color: '#059669',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
                   <FaMoneyBillWave />
                 </div>
                 <div>
                   <div style={{ fontWeight: 800, color: '#111827' }}>Phiên thanh toán Stripe</div>
                   <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: 2 }}>
-                    FE sẽ mở lại phiên thanh toán cho chính booking này. Nếu Stripe báo phiên không hợp lệ, bạn có thể tạo lại phiên mới ngay tại đây.
+                    FE sẽ mở lại phiên thanh toán cho chính booking này. Nếu Stripe báo phiên không hợp lệ, bạn có thể
+                    tạo lại phiên mới ngay tại đây.
                   </div>
                 </div>
               </div>
@@ -471,11 +397,13 @@ const RetryPayment = () => {
                     }}
                   >
                     <FaCheckCircle style={{ marginRight: 6 }} />
-                    Đã sẵn sàng mở lại cổng thanh toán cho booking này. Nếu cổng Stripe không tải được, FE sẽ đưa bạn về thao tác tạo lại phiên mới.
+                    Đã sẵn sàng mở lại cổng thanh toán cho booking này. Nếu cổng Stripe không tải được, FE sẽ đưa bạn về
+                    thao tác tạo lại phiên mới.
                   </div>
                   <Elements stripe={stripePromise} options={stripeOptions} key={clientSecret}>
-                    <StripeRetryForm
+                    <StripePaymentForm
                       bookingId={renterBooking.id}
+                      clientSecret={clientSecret}
                       onError={setError}
                       onSessionBroken={(message) => {
                         setBrokenClientSecret(clientSecret);
@@ -483,6 +411,7 @@ const RetryPayment = () => {
                         setNeedsNewSession(true);
                         setError(message);
                       }}
+                      submitLabel="Thanh toán lại ngay"
                     />
                   </Elements>
                 </>
@@ -532,7 +461,10 @@ const RetryPayment = () => {
                     <FaEnvelope /> Liên hệ showroom
                   </a>
                 )}
-                <button className="renter-btn-soft" onClick={() => navigate(`/renter/payment-result?bookingId=${renterBooking.id}&status=pending`)}>
+                <button
+                  className="renter-btn-soft"
+                  onClick={() => navigate(`/renter/payment-result?bookingId=${renterBooking.id}&status=pending`)}
+                >
                   Xem kết quả thanh toán
                 </button>
                 <button className="renter-btn-soft" onClick={() => navigate('/renter/transactions')}>

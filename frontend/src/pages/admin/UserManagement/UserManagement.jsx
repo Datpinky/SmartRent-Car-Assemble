@@ -1,19 +1,23 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { FaEye, FaLock, FaSpinner, FaUnlock } from 'react-icons/fa';
 import DataTable from '../../../components/common/DataTable';
-import StatusBadge from '../../../components/common/StatusBadge';
 import Modal from '../../../components/common/Modal';
-import { FaEye, FaLock, FaUnlock, FaSpinner } from 'react-icons/fa';
-import adminService from '../../../services/adminService';
+import StatusBadge from '../../../components/common/StatusBadge';
 import { useAuth } from '../../../contexts/AuthContext';
+import adminService from '../../../services/adminService';
 
-const ROLE_LABELS = { admin: 'Quản trị viên', showroom: 'Showroom', owner: 'Chủ xe', renter: 'Khách thuê' };
-const ROLE_COLORS = { admin: '#6d28d9', showroom: '#00b14f', owner: '#0891b2', renter: '#d97706' };
+const ROLE_LABELS = { admin: 'Quản trị viên', showroom: 'Showroom', renter: 'Khách thuê' };
+const ROLE_COLORS = { admin: '#6d28d9', showroom: '#00b14f', renter: '#d97706' };
 
 const initialsFromName = (name) => {
   if (!name || typeof name !== 'string') return '?';
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return '?';
-  return parts.map((w) => w[0]).slice(-2).join('').toUpperCase();
+  return parts
+    .map((w) => w[0])
+    .slice(-2)
+    .join('')
+    .toUpperCase();
 };
 
 const UserManagement = () => {
@@ -26,6 +30,7 @@ const UserManagement = () => {
 
   const [selectedUser, setSelectedUser] = useState(null);
   const [modalType, setModalType] = useState(null);
+  const [lockConfirmRow, setLockConfirmRow] = useState(null);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -54,13 +59,20 @@ const UserManagement = () => {
     setModalType(null);
   };
 
-  const isSelf = (row) =>
-    String(row.id) === String(currentUser?.id) || String(row.id) === String(currentUser?._id);
+  const isSelf = (row) => String(row.id) === String(currentUser?.id) || String(row.id) === String(currentUser?._id);
 
-  const toggleLock = async (row) => {
+  const toggleLock = (row) => {
     if (isSelf(row)) return;
     const isLocking = row.status !== 'locked';
-    if (isLocking && !window.confirm(`Bạn có chắc muốn khóa tài khoản "${row.name}"?`)) return;
+    if (isLocking) {
+      setLockConfirmRow(row);
+      return;
+    }
+    executeToggleLock(row);
+  };
+
+  const executeToggleLock = async (row) => {
+    setLockConfirmRow(null);
     setActionError('');
     const nextActive = row.status === 'locked';
     setTogglingId(row.id);
@@ -137,14 +149,22 @@ const UserManagement = () => {
         const busy = togglingId === row.id;
         return (
           <div style={{ display: 'flex', gap: 6 }}>
-            <button type="button" className="btn-icon" title="Xem chi tiết" aria-label="Xem chi tiết" onClick={() => openModal(row, 'view')}>
+            <button
+              type="button"
+              className="btn-icon"
+              title="Xem chi tiết"
+              aria-label="Xem chi tiết"
+              onClick={() => openModal(row, 'view')}
+            >
               <FaEye />
             </button>
             <button
               type="button"
               className="btn-icon"
               title={self ? 'Không thể khóa chính bạn' : row.status === 'locked' ? 'Mở khóa' : 'Khóa'}
-              aria-label={self ? 'Không thể khóa chính bạn' : row.status === 'locked' ? 'Mở khóa tài khoản' : 'Khóa tài khoản'}
+              aria-label={
+                self ? 'Không thể khóa chính bạn' : row.status === 'locked' ? 'Mở khóa tài khoản' : 'Khóa tài khoản'
+              }
               disabled={self || busy}
               onClick={() => toggleLock(row)}
               style={row.status === 'locked' ? { borderColor: '#059669', color: '#059669' } : {}}
@@ -232,7 +252,10 @@ const UserManagement = () => {
       </div>
 
       {loading ? (
-        <div aria-live="polite" style={{ display: 'flex', justifyContent: 'center', padding: '48px 0', color: '#6b7280' }}>
+        <div
+          aria-live="polite"
+          style={{ display: 'flex', justifyContent: 'center', padding: '48px 0', color: '#6b7280' }}
+        >
           <FaSpinner style={{ fontSize: '2rem', animation: 'spin 0.9s linear infinite' }} />
         </div>
       ) : (
@@ -278,17 +301,59 @@ const UserManagement = () => {
             ].map(([k, v]) => (
               <div
                 key={k}
-                style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f3f4f6', paddingBottom: 10 }}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  borderBottom: '1px solid #f3f4f6',
+                  paddingBottom: 10,
+                }}
               >
                 <span style={{ fontSize: '0.82rem', color: '#6b7280' }}>{k}</span>
                 <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#111827' }}>{v}</span>
               </div>
             ))}
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f3f4f6', paddingBottom: 10 }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                borderBottom: '1px solid #f3f4f6',
+                paddingBottom: 10,
+              }}
+            >
               <span style={{ fontSize: '0.82rem', color: '#6b7280' }}>Trạng thái tài khoản</span>
               <StatusBadge status={selectedUser.status} />
             </div>
           </div>
+        )}
+      </Modal>
+
+      {/* Confirm lock account modal */}
+      <Modal
+        isOpen={!!lockConfirmRow}
+        onClose={() => setLockConfirmRow(null)}
+        title="Xác nhận khóa tài khoản"
+        width={420}
+        footer={
+          <>
+            <button className="btn-outline" onClick={() => setLockConfirmRow(null)}>
+              Hủy
+            </button>
+            <button
+              className="btn-primary"
+              style={{ background: '#ef4444', borderColor: '#ef4444' }}
+              onClick={() => executeToggleLock(lockConfirmRow)}
+              disabled={togglingId === lockConfirmRow?.id}
+            >
+              {togglingId === lockConfirmRow?.id ? 'Đang khóa...' : 'Khóa tài khoản'}
+            </button>
+          </>
+        }
+      >
+        {lockConfirmRow && (
+          <p style={{ color: '#374151', fontSize: '0.9rem', margin: 0 }}>
+            Bạn có chắc muốn khóa tài khoản của <strong>{lockConfirmRow.name}</strong>? Người dùng này sẽ không thể đăng
+            nhập cho đến khi được mở khóa.
+          </p>
         )}
       </Modal>
     </div>

@@ -1,68 +1,24 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FaEdit, FaLocationArrow, FaMapMarkerAlt, FaSave, FaSpinner, FaUser } from 'react-icons/fa';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  FaLocationArrow, FaMapMarkerAlt, FaSave, FaSpinner, FaStore, FaUser,
+} from 'react-icons/fa';
 import { MdAlternateEmail, MdInfoOutline, MdPhoneIphone } from 'react-icons/md';
 import CarLocationMap from '../../../components/Map/CarLocationMap';
+import BecomeShowroomModal from '../../../components/common/BecomeShowroomModal';
+import SavedCardManager from '../../../components/common/SavedCardManager';
 import { useAuth } from '../../../contexts/AuthContext';
 import mapService from '../../../services/mapService';
 import profileService from '../../../services/profileService';
-
-const ROLE_LABELS = {
-  renter: 'Khách thuê',
-  owner: 'Chủ xe',
-  showroom: 'Showroom',
-  admin: 'Quản trị',
-};
-
-const buildInitialForm = (user) => ({
-  name: user?.name || '',
-  phone: user?.phone || '',
-  address: user?.address || '',
-});
-
-const FIELD_INPUT_STYLE = {
-  border: 'none',
-  outline: 'none',
-  background: 'transparent',
-  width: '100%',
-};
-
-const noticeStyles = {
-  success: {
-    background: '#f0fdf4',
-    border: '1px solid #bbf7d0',
-    color: '#166534',
-  },
-  warning: {
-    background: '#fffbeb',
-    border: '1px solid #fde68a',
-    color: '#92400e',
-  },
-  error: {
-    background: '#fef2f2',
-    border: '1px solid #fecaca',
-    color: '#b91c1c',
-  },
-};
-
-const formatCoordinates = (latitude, longitude) => `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
-
-const parseCoordinateAddress = (value) => {
-  const match = String(value || '').match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/);
-  if (!match) {
-    return null;
-  }
-
-  const latitude = Number(match[1]);
-  const longitude = Number(match[2]);
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-    return null;
-  }
-
-  return { latitude, longitude };
-};
-
-const hasValidCoordinates = (location) =>
-  Number.isFinite(Number(location?.latitude)) && Number.isFinite(Number(location?.longitude));
+import DriverLicenseSection from './components/DriverLicenseSection';
+import {
+  buildInitialForm,
+  FIELD_INPUT_STYLE,
+  formatCoordinates,
+  hasValidCoordinates,
+  noticeStyles,
+  parseCoordinateAddress,
+  ROLE_LABELS,
+} from './profile.helpers';
 
 const Profile = () => {
   const { user, updateUser } = useAuth();
@@ -72,7 +28,7 @@ const Profile = () => {
 
   const activeUser = useMemo(
     () => (profile?._id ? profile : profileService.mapProfileUser(user)),
-    [profile, user]
+    [profile, user],
   );
   const userId = activeUser?._id || activeUser?.id || authUserId || '';
 
@@ -86,19 +42,23 @@ const Profile = () => {
   const [addressSuggestions, setAddressSuggestions] = useState([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [notice, setNotice] = useState({ type: '', message: '' });
+  const [showBecomeShowroom, setShowBecomeShowroom] = useState(false);
 
   const initials = useMemo(
-    () => activeUser?.name?.split(' ').map((word) => word[0]).slice(-2).join('').toUpperCase() || 'U',
-    [activeUser?.name]
+    () =>
+      activeUser?.name
+        ?.split(' ')
+        .map((word) => word[0])
+        .slice(-2)
+        .join('')
+        .toUpperCase() || 'U',
+    [activeUser?.name],
   );
 
   const applyStoredLocation = useCallback((userLocation, addressOverride = '') => {
     const latitude = Number(userLocation?.latitude);
     const longitude = Number(userLocation?.longitude);
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-      return false;
-    }
-
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return false;
     setLoadingLocation(false);
     setMapLocation({
       address: addressOverride || userLocation?.address || '',
@@ -114,34 +74,22 @@ const Profile = () => {
     const parsedCoordinates = parseCoordinateAddress(nextAddress);
     if (parsedCoordinates) {
       setLoadingLocation(false);
-      return {
-        address: nextAddress,
-        latitude: parsedCoordinates.latitude,
-        longitude: parsedCoordinates.longitude,
-        plusCode: '',
-      };
+      return { address: nextAddress, latitude: parsedCoordinates.latitude, longitude: parsedCoordinates.longitude, plusCode: '' };
     }
-
     if (nextAddress.length >= 4) {
       try {
         setLoadingLocation(true);
         const results = await mapService.directForwardGeocode(nextAddress, { limit: 1 });
         const bestMatch = results[0];
         if (bestMatch) {
-          return {
-            address: nextAddress,
-            latitude: bestMatch.lat,
-            longitude: bestMatch.lng,
-            plusCode: bestMatch.plusCode || '',
-          };
+          return { address: nextAddress, latitude: bestMatch.lat, longitude: bestMatch.lng, plusCode: bestMatch.plusCode || '' };
         }
       } catch {
-        // Fall back to stored coordinates if direct geocode is unavailable.
+        // fall through
       } finally {
         setLoadingLocation(false);
       }
     }
-
     setLoadingLocation(false);
     if (hasValidCoordinates(fallbackLocation)) {
       return {
@@ -151,29 +99,23 @@ const Profile = () => {
         plusCode: fallbackLocation.plusCode || '',
       };
     }
-
     return null;
   }, []);
 
-  const hydrateProfileLocation = useCallback(async (profileData) => {
-    const nextAddress = String(profileData?.address || '').trim();
-    const resolvedLocation = await resolveAddressLocation(nextAddress, profileData?.userLocation);
-
-    if (resolvedLocation) {
-      setMapLocation(resolvedLocation);
-      return;
-    }
-
-    if (applyStoredLocation(profileData?.userLocation, nextAddress)) {
-      return;
-    }
-
-    setMapLocation(null);
-  }, [applyStoredLocation, resolveAddressLocation]);
+  const hydrateProfileLocation = useCallback(
+    async (profileData) => {
+      const nextAddress = String(profileData?.address || '').trim();
+      const resolvedLocation = await resolveAddressLocation(nextAddress, profileData?.userLocation);
+      if (resolvedLocation) { setMapLocation(resolvedLocation); return; }
+      if (applyStoredLocation(profileData?.userLocation, nextAddress)) return;
+      setMapLocation(null);
+    },
+    [applyStoredLocation, resolveAddressLocation],
+  );
 
   useEffect(() => {
     fallbackProfileRef.current = profileService.mapProfileUser(user);
-  }, [user]);
+  }, [user?._id]);
 
   useEffect(() => {
     if (!authUserId) {
@@ -183,16 +125,12 @@ const Profile = () => {
       setMapLocation(null);
       return;
     }
-
     let mounted = true;
     setLoadingProfile(true);
-
-    profileService.getProfileById(authUserId)
+    profileService
+      .getProfileById(authUserId)
       .then(async (nextProfile) => {
-        if (!mounted) {
-          return;
-        }
-
+        if (!mounted) return;
         const resolvedProfile = nextProfile || fallbackProfileRef.current;
         setProfile(resolvedProfile);
         setSavedAddress(resolvedProfile.address || '');
@@ -200,198 +138,107 @@ const Profile = () => {
         hydrateProfileLocation(resolvedProfile);
       })
       .catch((error) => {
-        if (!mounted) {
-          return;
-        }
-
+        if (!mounted) return;
         setProfile(fallbackProfileRef.current);
-        setNotice({
-          type: 'error',
-          message: error.message || 'Không thể tải hồ sơ',
-        });
+        setNotice({ type: 'error', message: error.message || 'Khong the tai ho so' });
       })
-      .finally(() => {
-        if (mounted) {
-          setLoadingProfile(false);
-        }
-      });
-
-    return () => {
-      mounted = false;
-    };
+      .finally(() => { if (mounted) setLoadingProfile(false); });
+    return () => { mounted = false; };
   }, [authUserId, hydrateProfileLocation, updateUser]);
 
   useEffect(() => {
     if (!isEditing) {
-      setForm({
-        ...buildInitialForm(activeUser),
-        address: savedAddress || activeUser?.address || '',
-      });
+      setForm({ ...buildInitialForm(activeUser), address: savedAddress || activeUser?.address || '' });
       setAddressSuggestions([]);
       setLoadingSuggestions(false);
     }
   }, [activeUser, isEditing, savedAddress]);
 
   useEffect(() => {
-    if (!isEditing) {
-      setAddressSuggestions([]);
-      setLoadingSuggestions(false);
-      return undefined;
-    }
-
+    if (!isEditing) { setAddressSuggestions([]); setLoadingSuggestions(false); return undefined; }
     const normalizedAddress = String(form.address || '').trim();
-    if (
-      !normalizedAddress
-      || normalizedAddress.length < 3
-      || parseCoordinateAddress(normalizedAddress)
-      || normalizedAddress === mapLocation?.address
-    ) {
-      setAddressSuggestions([]);
-      setLoadingSuggestions(false);
-      return undefined;
+    if (!normalizedAddress || normalizedAddress.length < 3 || parseCoordinateAddress(normalizedAddress) || normalizedAddress === mapLocation?.address) {
+      setAddressSuggestions([]); setLoadingSuggestions(false); return undefined;
     }
-
     let cancelled = false;
     setLoadingSuggestions(true);
-
     const timeoutId = window.setTimeout(() => {
-      mapService.directAutocomplete(normalizedAddress, { limit: 5 })
-        .then((items) => {
-          if (!cancelled) {
-            setAddressSuggestions(items || []);
-          }
-        })
-        .catch(() => {
-          if (!cancelled) {
-            setAddressSuggestions([]);
-          }
-        })
-        .finally(() => {
-          if (!cancelled) {
-            setLoadingSuggestions(false);
-          }
-        });
+      mapService
+        .directAutocomplete(normalizedAddress, { limit: 5 })
+        .then((items) => { if (!cancelled) setAddressSuggestions(items || []); })
+        .catch(() => { if (!cancelled) setAddressSuggestions([]); })
+        .finally(() => { if (!cancelled) setLoadingSuggestions(false); });
     }, 350);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timeoutId);
-    };
+    return () => { cancelled = true; window.clearTimeout(timeoutId); };
   }, [form.address, isEditing, mapLocation?.address]);
 
   const handleChange = (field, value) => {
     if (field === 'address') {
       const parsedCoordinates = parseCoordinateAddress(value);
-      setMapLocation(parsedCoordinates
-        ? {
-          address: value,
-          latitude: parsedCoordinates.latitude,
-          longitude: parsedCoordinates.longitude,
-          plusCode: '',
-        }
-        : null);
-      if (parsedCoordinates) {
-        setAddressSuggestions([]);
-      }
+      setMapLocation(
+        parsedCoordinates
+          ? { address: value, latitude: parsedCoordinates.latitude, longitude: parsedCoordinates.longitude, plusCode: '' }
+          : null,
+      );
+      if (parsedCoordinates) setAddressSuggestions([]);
     }
     setForm((current) => ({ ...current, [field]: value }));
   };
 
   const handleSelectAddressSuggestion = (suggestion) => {
-    if (!suggestion?.address) {
-      return;
-    }
-
+    if (!suggestion?.address) return;
     setForm((current) => ({ ...current, address: suggestion.address }));
     setAddressSuggestions([]);
-    setMapLocation({
-      address: suggestion.address,
-      latitude: suggestion.lat,
-      longitude: suggestion.lng,
-      plusCode: suggestion.plusCode || '',
-    });
+    setMapLocation({ address: suggestion.address, latitude: suggestion.lat, longitude: suggestion.lng, plusCode: suggestion.plusCode || '' });
   };
 
   const handleUseCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      setNotice({ type: 'error', message: 'Trinh duyet khong ho tro lay vi tri hien tai.' });
-      return;
-    }
-
+    if (!navigator.geolocation) { setNotice({ type: 'error', message: 'Trinh duyet khong ho tro lay vi tri.' }); return; }
     setLoadingLocation(true);
     setNotice({ type: '', message: '' });
-
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        const latitude = position.coords.latitude;
-        const longitude = position.coords.longitude;
+        const { latitude, longitude } = position.coords;
         const address = formatCoordinates(latitude, longitude);
-
         setForm((current) => ({ ...current, address }));
         setAddressSuggestions([]);
-        setMapLocation({
-          address,
-          latitude,
-          longitude,
-          plusCode: '',
-        });
+        setMapLocation({ address, latitude, longitude, plusCode: '' });
         setLoadingLocation(false);
       },
       () => {
         setLoadingLocation(false);
-        setNotice({ type: 'error', message: 'Khong the lay vi tri hien tai. Hay kiem tra quyen truy cap vi tri.' });
+        setNotice({ type: 'error', message: 'Khong the lay vi tri. Hay kiem tra quyen truy cap.' });
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true, timeout: 10000 },
     );
   };
 
   const handleStartEdit = () => {
-    setForm({
-      ...buildInitialForm(activeUser),
-      address: savedAddress || activeUser?.address || '',
-    });
+    setForm({ ...buildInitialForm(activeUser), address: savedAddress || activeUser?.address || '' });
     setNotice({ type: '', message: '' });
     setIsEditing(true);
   };
 
   const handleCancelEdit = () => {
-    setForm({
-      ...buildInitialForm(activeUser),
-      address: savedAddress || activeUser?.address || '',
-    });
+    setForm({ ...buildInitialForm(activeUser), address: savedAddress || activeUser?.address || '' });
     setNotice({ type: '', message: '' });
     setIsEditing(false);
-    hydrateProfileLocation(activeUser).catch(() => { });
+    hydrateProfileLocation(activeUser).catch(() => {});
   };
 
   const validateForm = () => {
-    if (!String(form.name || '').trim()) {
-      return 'Vui lòng nhập họ và tên.';
-    }
-
+    if (!String(form.name || '').trim()) return 'Vui long nhap ho va ten.';
     const phoneDigits = String(form.phone || '').replace(/\D/g, '');
-    if (phoneDigits && phoneDigits.length !== 10) {
-      return 'Số điện thoại phải có đúng 10 số';
-    }
-
+    if (phoneDigits && phoneDigits.length !== 10) return 'So dien thoai phai co dung 10 so';
     return '';
   };
 
   const handleSave = async () => {
     const validationError = validateForm();
-    if (validationError) {
-      setNotice({ type: 'error', message: validationError });
-      return;
-    }
-
-    if (!userId) {
-      setNotice({ type: 'error', message: 'Không tìm thấy thông tin để cập nhật' });
-      return;
-    }
-
+    if (validationError) { setNotice({ type: 'error', message: validationError }); return; }
+    if (!userId) { setNotice({ type: 'error', message: 'Khong tim thay thong tin de cap nhat' }); return; }
     setSaving(true);
     setNotice({ type: '', message: '' });
-
     try {
       const trimmedName = String(form.name || '').trim();
       const normalizedPhone = String(form.phone || '').replace(/\D/g, '');
@@ -399,376 +246,316 @@ const Profile = () => {
       const currentName = String(activeUser?.name || '').trim();
       const currentPhone = String(activeUser?.phone || '').replace(/\D/g, '');
       const currentAddress = String(activeUser?.address || '').trim();
-      const currentLatitude = Number(activeUser?.userLocation?.latitude);
-      const currentLongitude = Number(activeUser?.userLocation?.longitude);
       const shouldReuseCurrentCoordinates = trimmedAddress && trimmedAddress === currentAddress;
       const resolvedFormLocation = trimmedAddress
-        ? (
-          hasValidCoordinates(mapLocation) && mapLocation.address === trimmedAddress
-            ? mapLocation
-            : await resolveAddressLocation(
-              trimmedAddress,
-              shouldReuseCurrentCoordinates ? activeUser?.userLocation : null
-            )
-        )
+        ? hasValidCoordinates(mapLocation) && mapLocation.address === trimmedAddress
+          ? mapLocation
+          : await resolveAddressLocation(trimmedAddress, shouldReuseCurrentCoordinates ? activeUser?.userLocation : null)
         : null;
-      const fallbackLatitude =
-        shouldReuseCurrentCoordinates
-          ? activeUser?.userLocation?.latitude
-          : undefined;
-      const fallbackLongitude =
-        shouldReuseCurrentCoordinates
-          ? activeUser?.userLocation?.longitude
-          : undefined;
-      const fallbackPlusCode =
-        shouldReuseCurrentCoordinates
-          ? activeUser?.userLocation?.plusCode
-          : '';
-      const nextLatitude = resolvedFormLocation?.latitude ?? mapLocation?.latitude ?? fallbackLatitude;
-      const nextLongitude = resolvedFormLocation?.longitude ?? mapLocation?.longitude ?? fallbackLongitude;
-      const nextPlusCode = resolvedFormLocation?.plusCode || mapLocation?.plusCode || fallbackPlusCode || '';
+      const nextLatitude = resolvedFormLocation?.latitude ?? mapLocation?.latitude ?? (shouldReuseCurrentCoordinates ? activeUser?.userLocation?.latitude : undefined);
+      const nextLongitude = resolvedFormLocation?.longitude ?? mapLocation?.longitude ?? (shouldReuseCurrentCoordinates ? activeUser?.userLocation?.longitude : undefined);
+      const nextPlusCode = resolvedFormLocation?.plusCode || mapLocation?.plusCode || (shouldReuseCurrentCoordinates ? activeUser?.userLocation?.plusCode : '') || '';
+      const currentLatitude = Number(activeUser?.userLocation?.latitude);
+      const currentLongitude = Number(activeUser?.userLocation?.longitude);
       const coordinatesChanged =
-        Number.isFinite(Number(nextLatitude))
-        && Number.isFinite(Number(nextLongitude))
-        && (
-          !Number.isFinite(currentLatitude)
-          || !Number.isFinite(currentLongitude)
-          || Math.abs(Number(nextLatitude) - currentLatitude) > 0.00001
-          || Math.abs(Number(nextLongitude) - currentLongitude) > 0.00001
-        );
+        Number.isFinite(Number(nextLatitude)) && Number.isFinite(Number(nextLongitude)) &&
+        (!Number.isFinite(currentLatitude) || !Number.isFinite(currentLongitude) ||
+          Math.abs(Number(nextLatitude) - currentLatitude) > 0.00001 ||
+          Math.abs(Number(nextLongitude) - currentLongitude) > 0.00001);
       const hasSupportedChanges =
-        trimmedName !== currentName
-        || normalizedPhone !== currentPhone
-        || trimmedAddress !== currentAddress
-        || coordinatesChanged;
-
-      if (!hasSupportedChanges) {
-        setNotice({
-          type: 'warning',
-          message: 'Không có thay đổi nào để lưu',
-        });
-        return;
-      }
-
+        trimmedName !== currentName || normalizedPhone !== currentPhone ||
+        trimmedAddress !== currentAddress || coordinatesChanged;
+      if (!hasSupportedChanges) { setNotice({ type: 'warning', message: 'Khong co thay doi nao de luu' }); return; }
       const updatedProfile = await profileService.updateProfile(userId, {
-        name: trimmedName,
-        phone: normalizedPhone,
-        address: trimmedAddress,
-        latitude: nextLatitude,
-        longitude: nextLongitude,
-        plusCode: nextPlusCode,
+        name: trimmedName, phone: normalizedPhone, address: trimmedAddress,
+        latitude: nextLatitude, longitude: nextLongitude, plusCode: nextPlusCode,
       });
       const hasResolvedCoordinates =
-        Number.isFinite(Number(updatedProfile?.userLocation?.latitude))
-        && Number.isFinite(Number(updatedProfile?.userLocation?.longitude));
-
+        Number.isFinite(Number(updatedProfile?.userLocation?.latitude)) &&
+        Number.isFinite(Number(updatedProfile?.userLocation?.longitude));
       setProfile(updatedProfile);
       updateUser(updatedProfile);
       setSavedAddress(updatedProfile.address || '');
-
       if (hasResolvedCoordinates && updatedProfile.userLocation) {
         applyStoredLocation(updatedProfile.userLocation);
       } else if (trimmedAddress) {
         const parsedCoordinates = parseCoordinateAddress(trimmedAddress);
-        setMapLocation(parsedCoordinates
-          ? {
-            address: trimmedAddress,
-            latitude: parsedCoordinates.latitude,
-            longitude: parsedCoordinates.longitude,
-            plusCode: '',
-          }
-          : null);
+        setMapLocation(
+          parsedCoordinates
+            ? { address: trimmedAddress, latitude: parsedCoordinates.latitude, longitude: parsedCoordinates.longitude, plusCode: '' }
+            : null,
+        );
       } else {
         setMapLocation(null);
       }
-
       setIsEditing(false);
-
       setNotice({
         type: trimmedAddress && !hasResolvedCoordinates ? 'warning' : 'success',
         message: trimmedAddress && !hasResolvedCoordinates
-          ? 'Đã cập nhật hồ sơ. Địa chỉ đã được lưu, nhưng hệ thống chưa xác định được toạ độ chính xác để đồng bộ'
-          : 'Đã cập nhật hồ sơ thành công.',
+          ? 'Da cap nhat ho so. Dia chi da duoc luu, nhung he thong chua xac dinh duoc toa do chinh xac.'
+          : 'Da cap nhat ho so thanh cong.',
       });
     } catch (error) {
-      setNotice({
-        type: 'error',
-        message: error.message || 'Không thể cập nhật hồ sơ',
-      });
+      setNotice({ type: 'error', message: error.message || 'Khong the cap nhat ho so' });
     } finally {
       setSaving(false);
     }
   };
 
   const renderReadonlyField = (icon, value) => (
-    <div
-      className="form-input"
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        background: '#f9fafb',
-      }}
-    >
+    <div className="form-input" style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#f9fafb' }}>
       <span style={{ color: '#6b7280' }}>{icon}</span>
-      <span>{value || 'Chưa cập nhật'}</span>
+      <span>{value || 'Chua cap nhat'}</span>
     </div>
   );
 
   return (
-    <div className="profile-page">
-      <div className="page-header" style={{ marginBottom: 20 }}>
-        <div>
-          <h1 className="page-title">Hồ sơ cá nhân</h1>
+    <>
+      <div className="profile-page">
+        <div className="page-header" style={{ marginBottom: 20 }}>
+          <div><h1 className="page-title">Ho so ca nhan</h1></div>
         </div>
-      </div>
 
-      {notice.message && (
-        <div
-          style={{
-            ...(noticeStyles[notice.type] || noticeStyles.success),
-            borderRadius: 12,
-            padding: '12px 14px',
-            marginBottom: 16,
-            fontSize: '0.84rem',
-          }}
-        >
-          {notice.message}
-        </div>
-      )}
-
-      <div className="profile-card" style={{ padding: 24 }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 18,
-            marginBottom: 24,
-            flexWrap: 'wrap',
-          }}
-        >
+        {notice.message && (
           <div
-            className="profile-avatar-big"
             style={{
-              width: 72,
-              height: 72,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #00b14f 0%, #059669 100%)',
-              color: '#fff',
-              fontWeight: 800,
-              fontSize: '1.4rem',
-              flexShrink: 0,
+              ...(noticeStyles[notice.type] || noticeStyles.success),
+              borderRadius: 12, padding: '12px 14px', marginBottom: 16, fontSize: '0.84rem',
             }}
           >
-            {initials}
+            {notice.message}
           </div>
+        )}
 
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#111827' }}>
-              {activeUser?.name || 'Chưa cập nhật'}
-            </div>
-            <div style={{ fontSize: '0.84rem', color: '#6b7280', marginTop: 4 }}>
-              {activeUser?.email || 'Chưa cập nhật'}
-            </div>
+        <div className="profile-card" style={{ padding: 24 }}>
+          {/* Avatar + identity row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginBottom: 24, flexWrap: 'wrap' }}>
             <div
+              className="profile-avatar-big"
               style={{
-                marginTop: 10,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                background: mapLocation ? '#eff6ff' : '#f9fafb',
-                border: `1px solid ${mapLocation ? '#bfdbfe' : '#e5e7eb'}`,
-                borderRadius: 999,
-                padding: '6px 12px',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                color: mapLocation ? '#1d4ed8' : '#6b7280',
+                width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                borderRadius: '50%', background: 'linear-gradient(135deg, #00b14f 0%, #059669 100%)',
+                color: '#fff', fontWeight: 800, fontSize: '1.4rem', flexShrink: 0,
               }}
             >
-              {(loadingProfile || loadingLocation) ? <FaSpinner className="animate-spin" /> : <FaMapMarkerAlt />}
-              {loadingProfile
-                ? 'Đang cập nhật hồ sơ'
-                : (loadingLocation ? 'Đang xác định vị trí' : (mapLocation ? 'Đã xác định vị trí' : 'Chưa xác định được vị trí'))}
+              {initials}
             </div>
-          </div>
-        </div>
-
-        <div className="profile-form-grid">
-          <div>
-            <label className="form-label">Họ và tên</label>
-            <div className="form-input" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ color: '#6b7280' }}><FaUser /></span>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(event) => handleChange('name', event.target.value)}
-                disabled={!isEditing || loadingProfile}
-                style={FIELD_INPUT_STYLE}
-              />
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#111827' }}>{activeUser?.name || 'Chua cap nhat'}</div>
+              <div style={{ fontSize: '0.84rem', color: '#6b7280', marginTop: 4 }}>{activeUser?.email || 'Chua cap nhat'}</div>
+              <div
+                style={{
+                  marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 8,
+                  background: mapLocation ? '#eff6ff' : '#f9fafb',
+                  border: `1px solid ${mapLocation ? '#bfdbfe' : '#e5e7eb'}`,
+                  borderRadius: 999, padding: '6px 12px', fontSize: '0.8rem', fontWeight: 600,
+                  color: mapLocation ? '#1d4ed8' : '#6b7280',
+                }}
+              >
+                {loadingProfile || loadingLocation ? <FaSpinner className="animate-spin" /> : <FaMapMarkerAlt />}
+                {loadingProfile ? 'Dang cap nhat ho so' : loadingLocation ? 'Dang xac dinh vi tri' : mapLocation ? 'Da xac dinh vi tri' : 'Chua xac dinh duoc vi tri'}
+              </div>
             </div>
           </div>
 
-          <div>
-            <label className="form-label">Email</label>
-            {renderReadonlyField(<MdAlternateEmail />, activeUser?.email || 'Chưa cập nhật')}
-          </div>
-
-          <div>
-            <label className="form-label">Số điện thoại</label>
-            <div className="form-input" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ color: '#6b7280' }}><MdPhoneIphone /></span>
-              <input
-                type="text"
-                value={form.phone}
-                onChange={(event) => handleChange('phone', event.target.value)}
-                disabled={!isEditing || loadingProfile}
-                style={FIELD_INPUT_STYLE}
-              />
+          {/* Form fields */}
+          <div className="profile-form-grid">
+            <div>
+              <label className="form-label">Ho va ten</label>
+              <div className="form-input" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ color: '#6b7280' }}><FaUser /></span>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(event) => handleChange('name', event.target.value)}
+                  disabled={!isEditing || loadingProfile}
+                  style={FIELD_INPUT_STYLE}
+                />
+              </div>
             </div>
-          </div>
-
-          <div>
-            <label className="form-label">Vai trò</label>
-            {renderReadonlyField(<MdInfoOutline />, ROLE_LABELS[activeUser?.role] || activeUser?.role || 'Chưa cập nhật')}
-          </div>
-        </div>
-
-        <div style={{ marginTop: 16 }}>
-          <label className="form-label">Địa chỉ</label>
-          <div style={{ position: 'relative' }}>
-            <div className="form-input" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ color: '#6b7280' }}><FaMapMarkerAlt /></span>
-            <input
-              type="text"
-              value={form.address}
-              onChange={(event) => handleChange('address', event.target.value)}
-              disabled={!isEditing || loadingProfile}
-              placeholder="Nhập địa chỉ để đồng bộ"
-              style={FIELD_INPUT_STYLE}
-            />
-              {isEditing && (
-                <button
-                  type="button"
-                  title="Lay vi tri hien tai"
-                  aria-label="Lay vi tri hien tai"
-                  onClick={handleUseCurrentLocation}
-                  disabled={loadingLocation || loadingProfile}
-                  className="rounded-md p-1.5 text-primary hover:bg-primary-light disabled:opacity-50"
-                >
-                  {loadingLocation ? <FaSpinner className="animate-spin" /> : <FaLocationArrow />}
-                </button>
+            <div>
+              <label className="form-label">Email</label>
+              {renderReadonlyField(<MdAlternateEmail />, activeUser?.email || 'Chua cap nhat')}
+            </div>
+            <div>
+              <label className="form-label">So dien thoai</label>
+              <div className="form-input" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ color: '#6b7280' }}><MdPhoneIphone /></span>
+                <input
+                  type="text"
+                  value={form.phone}
+                  onChange={(event) => handleChange('phone', event.target.value)}
+                  disabled={!isEditing || loadingProfile}
+                  style={FIELD_INPUT_STYLE}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="form-label">Vai tro</label>
+              {renderReadonlyField(
+                <MdInfoOutline />,
+                ROLE_LABELS[activeUser?.role] || activeUser?.role || 'Chua cap nhat',
               )}
             </div>
-            {isEditing && (loadingSuggestions || addressSuggestions.length > 0) && (
-              <div
-                className="absolute left-0 right-0 z-20 mt-1 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg"
-                role="listbox"
-              >
-                {loadingSuggestions && (
-                  <div className="flex items-center gap-2 px-3 py-2 text-[0.78rem] text-gray-500">
-                    <FaSpinner className="animate-spin" /> Dang tim goi y dia chi...
-                  </div>
-                )}
-                {!loadingSuggestions && addressSuggestions.map((suggestion) => (
+          </div>
+
+          {/* Address field */}
+          <div style={{ marginTop: 16 }}>
+            <label className="form-label">Dia chi</label>
+            <div style={{ position: 'relative' }}>
+              <div className="form-input" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ color: '#6b7280' }}><FaMapMarkerAlt /></span>
+                <input
+                  type="text"
+                  value={form.address}
+                  onChange={(event) => handleChange('address', event.target.value)}
+                  disabled={!isEditing || loadingProfile}
+                  placeholder="Nhap dia chi de dong bo"
+                  style={FIELD_INPUT_STYLE}
+                />
+                {isEditing && (
                   <button
-                    key={`${suggestion.lat}-${suggestion.lng}-${suggestion.address}`}
                     type="button"
-                    role="option"
-                    aria-selected="false"
-                    className="block w-full px-3 py-2 text-left text-[0.8rem] text-gray-700 hover:bg-primary-light focus:bg-primary-light focus:outline-none"
-                    onClick={() => handleSelectAddressSuggestion(suggestion)}
+                    title="Lay vi tri hien tai"
+                    aria-label="Lay vi tri hien tai"
+                    onClick={handleUseCurrentLocation}
+                    disabled={loadingLocation || loadingProfile}
+                    className="rounded-md p-1.5 text-primary hover:bg-primary-light disabled:opacity-50"
                   >
-                    {suggestion.address}
+                    {loadingLocation ? <FaSpinner className="animate-spin" /> : <FaLocationArrow />}
                   </button>
-                ))}
+                )}
+              </div>
+              {isEditing && (loadingSuggestions || addressSuggestions.length > 0) && (
+                <div
+                  className="absolute left-0 right-0 z-20 mt-1 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg"
+                  role="listbox"
+                >
+                  {loadingSuggestions && (
+                    <div className="flex items-center gap-2 px-3 py-2 text-[0.78rem] text-gray-500">
+                      <FaSpinner className="animate-spin" /> Dang tim goi y...
+                    </div>
+                  )}
+                  {!loadingSuggestions && addressSuggestions.map((suggestion) => (
+                    <button
+                      key={`${suggestion.lat}-${suggestion.lng}-${suggestion.address}`}
+                      type="button"
+                      role="option"
+                      aria-selected="false"
+                      className="block w-full px-3 py-2 text-left text-[0.8rem] text-gray-700 hover:bg-primary-light focus:bg-primary-light focus:outline-none"
+                      onClick={() => handleSelectAddressSuggestion(suggestion)}
+                    >
+                      {suggestion.address}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Driver license section (renter only) */}
+          {activeUser?.role === 'renter' && (
+            <DriverLicenseSection
+              userId={userId}
+              profile={activeUser}
+              onSaved={(updated) => { setProfile(updated); updateUser(updated); }}
+            />
+          )}
+
+          {/* Saved cards (renter only) */}
+          {activeUser?.role === 'renter' && (
+            <div className="mt-6 px-5 py-4 bg-white border border-gray-100 rounded-2xl shadow-sm">
+              <SavedCardManager />
+            </div>
+          )}
+
+          {/* Become showroom CTA (renter only) */}
+          {activeUser?.role === 'renter' && (
+            <div className="mt-6 px-5 py-4 bg-green-50 border border-green-200 rounded-xl">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h4 className="font-bold text-green-800 flex items-center gap-2 mb-1">
+                    <FaStore /> Muon cho thue xe?
+                  </h4>
+                  <p className="text-xs text-green-800 m-0">Dang ky tro thanh Showroom de dang xe va quan ly hop dong.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowBecomeShowroom(true)}
+                  className="flex items-center gap-1.5 px-5 py-2 bg-[#00b14f] border-none rounded-lg text-white font-bold cursor-pointer text-sm whitespace-nowrap hover:bg-[#009f45] transition-colors"
+                >
+                  <FaStore /> Dang ky Showroom
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Map section */}
+          <div style={{ marginTop: 24 }}>
+            <h3 className="profile-section-title" style={{ marginBottom: 12 }}>Vi tri cua ban</h3>
+            {loadingLocation ? (
+              <div
+                style={{
+                  minHeight: 280, borderRadius: 16, border: '1px solid #e5e7eb', background: '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  color: '#6b7280', fontSize: '0.84rem',
+                }}
+              >
+                <FaSpinner className="animate-spin" /> Dang xac dinh vi tri...
+              </div>
+            ) : mapLocation ? (
+              <CarLocationMap
+                latitude={mapLocation.latitude}
+                longitude={mapLocation.longitude}
+                address={mapLocation.address}
+                style={{ borderRadius: 16, minHeight: 280, border: '1px solid #e5e7eb' }}
+              />
+            ) : (
+              <div
+                style={{
+                  minHeight: 200, borderRadius: 16, border: '1px dashed #e5e7eb', background: '#f9fafb',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                  gap: 10, color: '#9ca3af', fontSize: '0.84rem', padding: 24,
+                }}
+              >
+                <FaMapMarkerAlt style={{ fontSize: '2rem' }} />
+                <span>Chua xac dinh duoc vi tri</span>
+                {isEditing && (
+                  <span style={{ fontSize: '0.78rem' }}>Nhap dia chi o tren hoac dung nut lay vi tri</span>
+                )}
               </div>
             )}
           </div>
-        </div>
 
-        <div style={{ marginTop: 24 }}>
-          <h3 className="profile-section-title" style={{ marginBottom: 12 }}>Vị trí của bạn</h3>
-          {loadingLocation ? (
-            <div
-              style={{
-                minHeight: 280,
-                borderRadius: 16,
-                border: '1px solid #e5e7eb',
-                background: '#fff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#6b7280',
-                gap: 8,
-              }}
-            >
-              <FaSpinner className="animate-spin" />
-              Đang lấy địa chỉ.....
-            </div>
-          ) : mapLocation ? (
-            <CarLocationMap
-              locationText={mapLocation.address || form.address}
-              lat={mapLocation.latitude}
-              lng={mapLocation.longitude}
-              openMapLabel="Mở trong map"
-              mapHeight={360}
-            />
-          ) : (
-            <div
-              style={{
-                minHeight: 280,
-                borderRadius: 16,
-                border: '1px solid #e5e7eb',
-                background: '#fff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                textAlign: 'center',
-                color: '#9ca3af',
-                padding: 24,
-              }}
-            >
-              Chưa có dữ liệu địa chỉ để hiển thị bản đồ
-            </div>
-          )}
-        </div>
-
-        <div style={{ marginTop: 16 }}>
-          <label className="form-label">Mã tài khoản</label>
-          {renderReadonlyField(<MdInfoOutline />, activeUser?._id || activeUser?.id || 'Chưa cập nhật')}
-        </div>
-
-        <div
-          style={{
-            display: 'flex',
-            gap: 10,
-            flexWrap: 'wrap',
-            justifyContent: 'flex-start',
-            marginTop: 24,
-          }}
-        >
-          {isEditing ? (
-            <>
-              <button className="btn-primary" type="button" onClick={handleSave} disabled={saving || loadingProfile}>
-                {saving ? <FaSpinner className="animate-spin" /> : <FaSave />}
-                Lưu
+          {/* Edit/Save/Cancel buttons */}
+          <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+            {isEditing ? (
+              <>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleSave}
+                  disabled={saving || loadingProfile}
+                >
+                  {saving ? <FaSpinner className="animate-spin" /> : <FaSave />} Luu thay doi
+                </button>
+                <button type="button" className="btn-outline" onClick={handleCancelEdit} disabled={saving}>
+                  Huy
+                </button>
+              </>
+            ) : (
+              <button type="button" className="btn-outline" onClick={handleStartEdit} disabled={loadingProfile}>
+                Chinh sua ho so
               </button>
-              <button className="btn-outline" type="button" onClick={handleCancelEdit} disabled={saving || loadingProfile}>
-                Hủy
-              </button>
-            </>
-          ) : (
-            <button className="btn-primary" type="button" onClick={handleStartEdit} disabled={loadingProfile}>
-              <FaEdit />
-              {loadingProfile ? 'Đang đồng bộ...' : 'Chỉnh sửa hồ sơ'}
-            </button>
-          )}
+            )}
+          </div>
         </div>
       </div>
-    </div>
+
+      {showBecomeShowroom && (
+        <BecomeShowroomModal onClose={() => setShowBecomeShowroom(false)} />
+      )}
+    </>
   );
 };
 

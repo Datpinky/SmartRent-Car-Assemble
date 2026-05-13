@@ -62,20 +62,28 @@ export const reviewService = {
     return normalizeReviewSummary(response);
   },
 
-  async enrichVehiclesWithSummary(vehicles = [], { limit = 100 } = {}) {
+  async getBatchSummary(vehicleIds = []) {
+    if (!vehicleIds.length) return {};
+    const res = await apiClient.post('/api/reviews/batch-summary', { vehicle_ids: vehicleIds });
+    return res.data.data || {};
+  },
+
+  async enrichVehiclesWithSummary(vehicles = []) {
     if (!Array.isArray(vehicles) || vehicles.length === 0) {
       return [];
     }
 
-    const settled = await Promise.allSettled(
-      vehicles.map((vehicle) => this.getSummaryByVehicleId(vehicle.id || vehicle._id, { limit }))
-    );
+    const ids = vehicles.map((v) => v.id || v._id).filter(Boolean);
+    let summaryMap = {};
+    try {
+      summaryMap = await this.getBatchSummary(ids);
+    } catch {
+      // nếu batch thất bại, giữ nguyên dữ liệu gốc
+    }
 
-    return vehicles.map((vehicle, index) => {
-      const summary = settled[index]?.status === 'fulfilled'
-        ? settled[index].value
-        : null;
-
+    return vehicles.map((vehicle) => {
+      const key = vehicle.id || vehicle._id;
+      const summary = summaryMap[key] || null;
       return {
         ...vehicle,
         rating: summary ? summary.rating : Number(vehicle.rating || 0),

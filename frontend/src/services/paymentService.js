@@ -7,11 +7,11 @@ const resolveId = (value) => {
 };
 
 const resolvePaymentStatus = (booking, payment, paymentState) =>
-  payment?.payment_status
-  || paymentState?.paymentStatus
-  || booking?.payment?.payment_status
-  || booking?.paymentState?.paymentStatus
-  || (booking?.status === 'paid' ? 'successful' : 'pending');
+  payment?.payment_status ||
+  paymentState?.paymentStatus ||
+  booking?.payment?.payment_status ||
+  booking?.paymentState?.paymentStatus ||
+  (booking?.status === 'paid' ? 'successful' : 'pending');
 
 const normalizePaymentList = (payload) => {
   if (Array.isArray(payload)) {
@@ -49,24 +49,6 @@ const getLatestPaymentForBooking = async (bookingId) => {
   return Array.isArray(payments) && payments.length > 0 ? payments[0] : null;
 };
 
-const ensurePendingPaymentForBooking = async (bookingId, amount) => {
-  const payments = await listPaymentsForBooking(bookingId, 20).catch(() => []);
-  const hasPendingPayment = Array.isArray(payments)
-    && payments.some((payment) => payment?.payment_status === 'pending');
-
-  if (hasPendingPayment) {
-    return;
-  }
-
-  await apiClient.post('/api/payment/createPaymentDB', {
-    booking_id: bookingId,
-    amount: Number(amount || 0),
-    currency: 'vnd',
-    payment_method: 'stripe',
-    payment_status: 'pending',
-  });
-};
-
 const extractPaymentIntentIdFromClientSecret = (clientSecret) => {
   if (!clientSecret || typeof clientSecret !== 'string') {
     return '';
@@ -98,8 +80,6 @@ const paymentService = {
         return { alreadyPaid: true, syncResult };
       }
     }
-
-    await ensurePendingPaymentForBooking(bookingId, options.amount || amount);
 
     const res = await apiClient.post(`/api/booking/${bookingId}/createPayment`);
     return res.data?.data ?? res.data;
@@ -162,26 +142,35 @@ const paymentService = {
   },
 
   async getMyTransactions(bookings = []) {
-    const transactionResults = await Promise.allSettled(
-      (bookings || []).map(async (booking) => {
-        const bookingId = resolveId(booking);
-        if (!bookingId) {
-          return [];
-        }
+    if (!bookings.length) return [];
 
-        const payments = await listPaymentsForBooking(bookingId, 20).catch(() => []);
-        const paymentState = booking?.paymentState || await this.getMyPaymentState(bookingId).catch(() => null);
-        const paymentRows = Array.isArray(payments) ? payments : [];
+    const bookingIds = bookings.map(resolveId).filter(Boolean);
 
-        if (paymentRows.length === 0) {
-          const fallbackStatus = resolvePaymentStatus(booking, booking?.payment, paymentState);
-          const fallbackPayment = booking?.payment || null;
+    // 1 request lấy tất cả payments thay vì N requests
+    let paymentsMap = {};
+    try {
+      const res = await apiClient.post('/api/payment/batch-payments-by-bookings', {
+        booking_ids: bookingIds,
+      });
+      paymentsMap = res.data?.data || {};
+    } catch {
+      // fallback: dùng embedded payment trong booking
+    }
 
-          if (!fallbackPayment && !paymentState) {
-            return [];
-          }
+    const rows = bookings.flatMap((booking) => {
+      const bookingId = resolveId(booking);
+      if (!bookingId) return [];
 
-          return [{
+      const paymentState = booking?.paymentState || null;
+      const paymentRows = paymentsMap[bookingId] || [];
+
+      if (paymentRows.length === 0) {
+        const fallbackPayment = booking?.payment || null;
+        const fallbackStatus = resolvePaymentStatus(booking, fallbackPayment, paymentState);
+        if (!fallbackPayment && !paymentState) return [];
+
+        return [
+          {
             id: resolveId(fallbackPayment) || `${bookingId}-fallback`,
             bookingId,
             vehicleName: booking?.vehicle?.name || booking?.vehicle_id?.vehicle_name || 'Xe khong ten',
@@ -193,41 +182,53 @@ const paymentService = {
             paidAt: fallbackPayment?.paid_at || '',
             createdAt: fallbackPayment?.createdAt || booking?.createdAt || '',
             bookingStatus: paymentState?.bookingStatus || booking?.status || '',
-            image: booking?.image || booking?.vehicle?.images?.[0] || booking?.vehicle_id?.vehicle_images_paths?.[0] || '',
-            raw: {
-              booking,
-              payment: fallbackPayment,
-              paymentState,
-            },
-          }];
-        }
-
-        return paymentRows.map((payment) => ({
-          id: resolveId(payment) || `${bookingId}-${payment?.transaction_code || payment?.stripe_payment_intent_id || 'payment'}`,
-          bookingId,
-          vehicleName: booking?.vehicle?.name || booking?.vehicle_id?.vehicle_name || 'Xe khong ten',
-          showroomName: booking?.showroom?.name || booking?.showroom_id?.name || 'SmartRent',
-          amount: Number(payment?.amount || booking?.total_price || 0),
-          method: payment?.payment_method || 'stripe',
-          status: resolvePaymentStatus(booking, payment, paymentState),
-          transactionCode: payment?.transaction_code || payment?.stripe_payment_intent_id || '',
-          paidAt: payment?.paid_at || '',
-          createdAt: payment?.createdAt || booking?.createdAt || '',
-          bookingStatus: paymentState?.bookingStatus || booking?.status || '',
-          image: booking?.image || booking?.vehicle?.images?.[0] || booking?.vehicle_id?.vehicle_images_paths?.[0] || '',
-          raw: {
-            booking,
-            payment,
-            paymentState,
+            image:
+              booking?.image || booking?.vehicle?.images?.[0] || booking?.vehicle_id?.vehicle_images_paths?.[0] || '',
+            raw: { booking, payment: fallbackPayment, paymentState },
           },
-        }));
-      })
-    );
+        ];
+      }
 
-    return transactionResults
-      .filter((result) => result.status === 'fulfilled')
-      .flatMap((result) => result.value)
-      .sort((left, right) => new Date(right?.createdAt || 0).getTime() - new Date(left?.createdAt || 0).getTime());
+      return paymentRows.map((payment) => ({
+        id:
+          resolveId(payment) ||
+          `${bookingId}-${payment?.transaction_code || payment?.stripe_payment_intent_id || 'payment'}`,
+        bookingId,
+        vehicleName: booking?.vehicle?.name || booking?.vehicle_id?.vehicle_name || 'Xe khong ten',
+        showroomName: booking?.showroom?.name || booking?.showroom_id?.name || 'SmartRent',
+        amount: Number(payment?.amount || booking?.total_price || 0),
+        method: payment?.payment_method || 'stripe',
+        status: resolvePaymentStatus(booking, payment, paymentState),
+        transactionCode: payment?.transaction_code || payment?.stripe_payment_intent_id || '',
+        paidAt: payment?.paid_at || '',
+        createdAt: payment?.createdAt || booking?.createdAt || '',
+        bookingStatus: paymentState?.bookingStatus || booking?.status || '',
+        image: booking?.image || booking?.vehicle?.images?.[0] || booking?.vehicle_id?.vehicle_images_paths?.[0] || '',
+        raw: { booking, payment, paymentState },
+      }));
+    });
+
+    return rows.sort((a, b) => new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime());
+  },
+
+  // ─── Saved Card Management ────────────────────────────────────────────────
+
+  async listSavedCards() {
+    const res = await apiClient.get('/api/payment/saved-cards');
+    return res.data?.data ?? [];
+  },
+
+  async createSetupIntent() {
+    const res = await apiClient.post('/api/payment/saved-cards/setup-intent');
+    return res.data?.data ?? res.data;
+  },
+
+  async deleteSavedCard(pmId) {
+    await apiClient.delete(`/api/payment/saved-cards/${pmId}`);
+  },
+
+  async setDefaultCard(pmId) {
+    await apiClient.post('/api/payment/saved-cards/set-default', { pmId });
   },
 };
 

@@ -5,22 +5,37 @@ const parseDate = (value) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
-export const UPCOMING_STATUSES = ['pending', 'confirmed', 'waiting_payment', 'paid', 'waiting_handover'];
-export const ACTIVE_STATUSES = ['handed_over', 'in_use', 'waiting_return_confirmation'];
+export const UPCOMING_STATUSES = ['pending', 'waiting_payment', 'paid', 'waiting_handover'];
+export const ACTIVE_STATUSES = ['in_use', 'waiting_return_confirmation'];
 export const AWAITING_PAYMENT_STATUSES = ['pending', 'waiting_payment'];
-export const SHOWROOM_PROCESSING_STATUSES = ['confirmed', 'paid'];
-export const AWAITING_PICKUP_STATUSES = ['waiting_handover'];
-export const CANCELLABLE_STATUSES = ['pending', 'confirmed', 'waiting_payment', 'paid', 'waiting_handover'];
-export const RENTAL_FLOW_STATUSES = ['waiting_handover', 'handed_over', 'in_use', 'waiting_return_confirmation', 'completed'];
+// Sau khi thanh toán, showroom chuẩn bị để chốt bàn giao
+export const SHOWROOM_PROCESSING_STATUSES = ['paid'];
+// waiting_handover: showroom chưa bàn giao
+// handed_over: showroom đã bàn giao nhưng renter chưa xác nhận nhận xe
+export const AWAITING_PICKUP_STATUSES = ['waiting_handover', 'handed_over'];
+export const CANCELLABLE_STATUSES = ['pending', 'waiting_payment', 'paid', 'waiting_handover'];
+export const RENTAL_FLOW_STATUSES = [
+  'waiting_handover',
+  'handed_over',
+  'in_use',
+  'waiting_return_confirmation',
+  'completed',
+];
 
-const RECEIVE_READY_STATUSES = ['waiting_handover', 'handed_over', 'in_use', 'waiting_return_confirmation', 'completed'];
+const RECEIVE_READY_STATUSES = [
+  'waiting_handover',
+  'handed_over',
+  'in_use',
+  'waiting_return_confirmation',
+  'completed',
+];
 const RETURN_READY_STATUSES = ['handed_over', 'in_use', 'waiting_return_confirmation', 'completed'];
 
 export const getBookingPaymentStatus = (booking) =>
-  booking?.payment?.payment_status
-  || booking?.paymentState?.paymentStatus
-  || booking?.paymentStatus
-  || (booking?.status === 'paid' ? 'successful' : 'pending');
+  booking?.payment?.payment_status ||
+  booking?.paymentState?.paymentStatus ||
+  booking?.paymentStatus ||
+  (booking?.status === 'paid' ? 'successful' : 'pending');
 
 export const getBookingFlowState = (booking, fallbackPaymentStatus) => {
   const rawBooking = booking?.raw || booking || {};
@@ -37,28 +52,28 @@ export const getBookingFlowState = (booking, fallbackPaymentStatus) => {
   const requiresRetryPayment = ['failed', 'declined'].includes(paymentStatus);
 
   const isAwaitingPayment =
-    !isCancelled
-    && !isCompleted
-    && AWAITING_PAYMENT_STATUSES.includes(status)
-    && !hasSuccessfulPayment
-    && paymentStatus !== 'refunded';
+    !isCancelled &&
+    !isCompleted &&
+    AWAITING_PAYMENT_STATUSES.includes(status) &&
+    !hasSuccessfulPayment &&
+    paymentStatus !== 'refunded';
 
   const isAwaitingShowroomProcessing =
-    !isCancelled
-    && !isCompleted
-    && !isAwaitingPayment
-    && paymentStatus !== 'refunded'
-    && hasSuccessfulPayment
-    && SHOWROOM_PROCESSING_STATUSES.includes(status);
+    !isCancelled &&
+    !isCompleted &&
+    !isAwaitingPayment &&
+    paymentStatus !== 'refunded' &&
+    hasSuccessfulPayment &&
+    SHOWROOM_PROCESSING_STATUSES.includes(status);
 
   const isAwaitingPickup =
-    !isCancelled
-    && !isCompleted
-    && !isAwaitingPayment
-    && !isAwaitingShowroomProcessing
-    && paymentStatus !== 'refunded'
-    && hasSuccessfulPayment
-    && AWAITING_PICKUP_STATUSES.includes(status);
+    !isCancelled &&
+    !isCompleted &&
+    !isAwaitingPayment &&
+    !isAwaitingShowroomProcessing &&
+    paymentStatus !== 'refunded' &&
+    hasSuccessfulPayment &&
+    AWAITING_PICKUP_STATUSES.includes(status);
 
   const pickupReadyByTime = startAt ? hasStarted : hasSuccessfulPayment;
   const canConfirmPickup = false;
@@ -69,15 +84,12 @@ export const getBookingFlowState = (booking, fallbackPaymentStatus) => {
   const canHandleReturn = RETURN_READY_STATUSES.includes(status) || timeBasedRentalAccess;
 
   const isUpcoming =
-    !isCancelled
-    && !isCompleted
-    && !timeBasedRentalAccess
-    && (UPCOMING_STATUSES.includes(status) || (hasSuccessfulPayment && !hasStarted));
+    !isCancelled &&
+    !isCompleted &&
+    !timeBasedRentalAccess &&
+    (UPCOMING_STATUSES.includes(status) || (hasSuccessfulPayment && !hasStarted));
 
-  const isActive =
-    !isCancelled
-    && !isCompleted
-    && (ACTIVE_STATUSES.includes(status) || timeBasedRentalAccess);
+  const isActive = !isCancelled && !isCompleted && (ACTIVE_STATUSES.includes(status) || timeBasedRentalAccess);
 
   const effectiveFlowStatus = RENTAL_FLOW_STATUSES.includes(status)
     ? status
@@ -91,13 +103,15 @@ export const getBookingFlowState = (booking, fallbackPaymentStatus) => {
     ? 'Xem biên bản'
     : status === 'waiting_return_confirmation'
       ? 'Đang chờ xác nhận'
-      : canHandleReturn && hasEnded
+      : canHandleReturn && hasEnded && status === 'in_use'
         ? 'Trả xe ngay'
-        : status === 'waiting_handover'
-          ? 'Chờ bàn giao xe'
-          : canOpenRentalFlow
-            ? 'Yêu cầu trả xe'
-            : '';
+        : status === 'handed_over'
+          ? 'Xác nhận đã nhận xe'
+          : status === 'waiting_handover'
+            ? 'Chờ bàn giao xe'
+            : canOpenRentalFlow
+              ? 'Yêu cầu trả xe'
+              : '';
 
   const rentalAccessHint = timeBasedRentalAccess
     ? hasEnded

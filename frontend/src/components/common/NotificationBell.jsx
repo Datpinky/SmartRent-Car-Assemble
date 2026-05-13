@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { FaBell, FaCheckDouble, FaSpinner, FaTimes } from 'react-icons/fa';
 import { MdDirectionsCar, MdPayment, MdVerified, MdWarning } from 'react-icons/md';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import notificationService from '../../services/notificationService';
 
@@ -47,8 +47,10 @@ const NotificationBell = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const isLoggedIn = Boolean(user?._id);
+
   const fetchUnreadCount = useCallback(async () => {
-    if (!user || !notificationsEnabled) {
+    if (!isLoggedIn || !notificationsEnabled) {
       return;
     }
 
@@ -58,10 +60,10 @@ const NotificationBell = () => {
     } catch {
       // Keep the badge quiet if polling fails.
     }
-  }, [notificationsEnabled, user]);
+  }, [notificationsEnabled, isLoggedIn]);
 
   useEffect(() => {
-    if (!user || !notificationsEnabled) {
+    if (!isLoggedIn || !notificationsEnabled) {
       setUnreadCount(0);
       return undefined;
     }
@@ -69,10 +71,10 @@ const NotificationBell = () => {
     fetchUnreadCount();
     const timer = setInterval(fetchUnreadCount, POLL_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [fetchUnreadCount, notificationsEnabled, user]);
+  }, [fetchUnreadCount, notificationsEnabled, isLoggedIn]);
 
   const fetchNotifications = useCallback(async () => {
-    if (!user || !notificationsEnabled) {
+    if (!isLoggedIn || !notificationsEnabled) {
       setNotifications([]);
       setUnreadCount(0);
       setError('');
@@ -91,7 +93,7 @@ const NotificationBell = () => {
     } finally {
       setLoading(false);
     }
-  }, [notificationsEnabled, user]);
+  }, [notificationsEnabled, isLoggedIn]);
 
   useEffect(() => {
     if (open) {
@@ -111,9 +113,9 @@ const NotificationBell = () => {
   }, []);
 
   const markRead = async (id) => {
-    setNotifications((previous) => previous.map((item) => (
-      String(item.id) === String(id) ? { ...item, read: true } : item
-    )));
+    setNotifications((previous) =>
+      previous.map((item) => (String(item.id) === String(id) ? { ...item, read: true } : item)),
+    );
     setUnreadCount((previous) => Math.max(0, previous - 1));
 
     try {
@@ -235,9 +237,7 @@ const NotificationBell = () => {
             )}
 
             {!loading && !error && notifications.length === 0 && (
-              <div className="text-center text-gray-400 py-10 text-[0.85rem]">
-                Không có thông báo nào
-              </div>
+              <div className="text-center text-gray-400 py-10 text-[0.85rem]">Không có thông báo nào</div>
             )}
 
             {!loading && !error && notifications.length > 0 && (
@@ -263,7 +263,10 @@ const NotificationBell = () => {
                       <div
                         aria-hidden="true"
                         className="w-[34px] h-[34px] rounded-[9px] flex items-center justify-center text-[0.95rem] shrink-0"
-                        style={{ background: `${iconConfig.color}20`, color: iconConfig.color }}
+                        style={{
+                          background: `${iconConfig.color}20`,
+                          color: iconConfig.color,
+                        }}
                       >
                         {iconConfig.icon}
                       </div>

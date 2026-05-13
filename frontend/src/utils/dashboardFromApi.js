@@ -2,7 +2,7 @@
  * Helpers to build dashboard chart/table shapes from API data (no mock files).
  */
 
-export function buildEmptyOwnerRevenueMonths(months = 6) {
+export function buildEmptyRevenueMonths(months = 6) {
   const out = [];
   const now = new Date();
   for (let i = months - 1; i >= 0; i--) {
@@ -54,10 +54,7 @@ export function mapBookingToShowroomTableRow(b) {
     const vm = b.vehicle_id.vehicle_model || b.vehicle_id.model;
     vehicle = [vb, vm].filter(Boolean).join(' ') || b.vehicle_id.vehicle_name || vehicle;
   }
-  const fmt = (dt) =>
-    dt
-      ? new Date(dt).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
-      : '—';
+  const fmt = (dt) => (dt ? new Date(dt).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' }) : '—');
   return {
     id: String(b._id || '').slice(-10) || '—',
     _id: b._id,

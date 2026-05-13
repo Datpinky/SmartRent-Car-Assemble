@@ -1,6 +1,6 @@
 import apiClient from './apiClient';
-import vehicleService from './vehicleService';
 import paymentService from './paymentService';
+import vehicleService from './vehicleService';
 
 const readStoredUser = () => {
   try {
@@ -95,7 +95,7 @@ const isDateInIntervals = (date, intervals = []) => {
   return (intervals || []).some((interval) =>
     Array.isArray(interval?.dateKeys)
       ? interval.dateKeys.includes(key)
-      : dateRangesOverlapByDay(date, date, interval?.start, interval?.end)
+      : dateRangesOverlapByDay(date, date, interval?.start, interval?.end),
   );
 };
 
@@ -187,13 +187,7 @@ const deriveShowroomFromVehicle = (vehicle) => {
   };
 };
 
-const normalizeBooking = ({
-  booking,
-  vehicle = null,
-  showroom = null,
-  payment = null,
-  paymentState = null,
-}) => ({
+const normalizeBooking = ({ booking, vehicle = null, showroom = null, payment = null, paymentState = null }) => ({
   ...booking,
   id: booking?._id || booking?.id || '',
   _id: booking?._id || booking?.id || '',
@@ -211,7 +205,14 @@ const buildBookingFallback = (booking) => {
     booking?.showroom_id && typeof booking.showroom_id === 'object'
       ? toLegacyShowroomShape(booking.showroom_id)
       : showroomId
-        ? { _id: showroomId, id: showroomId, name: 'SmartRent', email: '', phone: '', address: '' }
+        ? {
+            _id: showroomId,
+            id: showroomId,
+            name: 'SmartRent',
+            email: '',
+            phone: '',
+            address: '',
+          }
         : null;
 
   return normalizeBooking({
@@ -223,56 +224,83 @@ const buildBookingFallback = (booking) => {
   });
 };
 
-const enrichBooking = async (booking) => {
+const enrichBooking = (booking, vehicleMap = {}, paymentStateMap = {}) => {
   const vehicleId = resolveId(booking?.vehicle_id);
   const showroomId = resolveId(booking?.showroom_id);
   const bookingId = resolveId(booking);
 
-  const [vehicleResult, paymentResult, paymentStateResult] = await Promise.allSettled([
-    vehicleId ? vehicleService.getById(vehicleId) : Promise.resolve(null),
-    bookingId ? paymentService.getLatestPaymentByBookingId(bookingId) : Promise.resolve(null),
-    bookingId ? paymentService.getPaymentState(bookingId) : Promise.resolve(null),
-  ]);
-
-  const vehicle = vehicleResult.status === 'fulfilled' ? vehicleResult.value : null;
+  const vehicle = vehicleMap[vehicleId] || null;
   const showroomFromVehicle = deriveShowroomFromVehicle(vehicle);
   const fallbackShowroom =
     booking?.showroom_id && typeof booking.showroom_id === 'object'
       ? toLegacyShowroomShape(booking.showroom_id)
       : showroomId
-        ? { _id: showroomId, id: showroomId, name: 'SmartRent', email: '', phone: '', address: '' }
+        ? {
+            _id: showroomId,
+            id: showroomId,
+            name: 'SmartRent',
+            email: '',
+            phone: '',
+            address: '',
+          }
         : null;
+
+  const batchState = paymentStateMap[bookingId] || null;
+  const paymentState = batchState
+    ? { paymentStatus: batchState.paymentStatus, bookingStatus: booking.status }
+    : booking?.paymentState || null;
+  const payment = batchState
+    ? {
+        payment_status: batchState.paymentStatus,
+        amount: batchState.amount,
+        payment_method: batchState.paymentMethod,
+        paid_at: batchState.paidAt,
+      }
+    : booking?.payment || null;
 
   return normalizeBooking({
     booking,
     vehicle,
     showroom: showroomFromVehicle || fallbackShowroom,
-    payment: paymentResult.status === 'fulfilled' ? paymentResult.value : booking?.payment || null,
-    paymentState: paymentStateResult.status === 'fulfilled' ? paymentStateResult.value : booking?.paymentState || null,
+    payment,
+    paymentState,
   });
 };
 
-const enrichBookingsSafely = async (bookings = []) =>
-  Promise.all(
-    (bookings || []).map(async (booking) => {
-      try {
-        return await enrichBooking(booking);
-      } catch {
-        return buildBookingFallback(booking);
-      }
-    })
-  );
+const enrichBookingsSafely = async (bookings = []) => {
+  if (!bookings.length) return [];
+
+  const bookingIds = bookings.map(resolveId).filter(Boolean);
+
+  const [paymentStateMap, vehicleMap] = await Promise.all([
+    apiClient
+      .post('/api/payment/batch-payment-states', { booking_ids: bookingIds })
+      .then((res) => res.data?.data || {})
+      .catch(() => ({})),
+    (() => {
+      const vehicleIds = [...new Set(bookings.map((b) => resolveId(b?.vehicle_id)).filter(Boolean))];
+      return vehicleService.getByIds(vehicleIds).catch(() => ({}));
+    })(),
+  ]);
+
+  return bookings.map((booking) => {
+    try {
+      return enrichBooking(booking, vehicleMap, paymentStateMap);
+    } catch {
+      return buildBookingFallback(booking);
+    }
+  });
+};
 
 export const bookingService = {
   async createBooking(payload = {}) {
-    const currentUser = readStoredUser();
     const vehicleId = resolveId(payload.vehicle_id) || resolveId(payload.vehicleId);
     const showroomId =
-      resolveId(payload.showroom_id)
-      || resolveId(payload.showroomId)
-      || resolveId(payload.showroom)
-      || resolveId(payload.car?.addedBy)
-      || resolveId(payload.vehicle?.addedBy);
+      resolveId(payload.showroom_id) ||
+      resolveId(payload.showroomId) ||
+      resolveId(payload.showroom) ||
+      resolveId(payload.car?.addedBy) ||
+      resolveId(payload.vehicle?.addedBy);
 
     if (!vehicleId || !showroomId) {
       throw new Error('Thieu vehicle_id hoac showroom_id de tao booking.');
@@ -282,22 +310,16 @@ export const bookingService = {
     const note = String(
       payload.delivery_type === 'delivery' && deliveryAddress
         ? `Giao xe: ${deliveryAddress}`
-        : payload.note
-          || (payload.delivery_type === 'delivery'
-            ? `Giao xe: ${deliveryAddress}`.trim()
-            : 'Tu den lay')
+        : payload.note || (payload.delivery_type === 'delivery' ? `Giao xe: ${deliveryAddress}`.trim() : 'Tu den lay'),
     ).slice(0, 500);
 
     const body = {
-      user_id: resolveId(payload.user_id) || resolveId(payload.userId) || resolveId(currentUser),
       vehicle_id: vehicleId,
       showroom_id: showroomId,
       start_date: payload.start_date,
       end_date: payload.end_date,
-      total_price: Number(payload.total_price || 0),
       note,
     };
-
 
     const res = await apiClient.post('/api/booking/createBooking', body);
     return res.data.data;
@@ -372,7 +394,7 @@ export const bookingService = {
     }
 
     try {
-      return await enrichBooking(booking);
+      return await enrichBookingsSafely([booking]).then((arr) => arr[0] || buildBookingFallback(booking));
     } catch {
       return buildBookingFallback(booking);
     }
@@ -451,21 +473,18 @@ export const bookingService = {
     const pageResults =
       totalPages > 1
         ? await Promise.all(
-          Array.from({ length: totalPages - 1 }, (_, index) =>
-            this.getListBookings({
-              vehicle_id: vehicleIdText,
-              page: index + 2,
-              limit: 100,
-              sort_by: -1,
-            }).catch(() => ({ items: [] }))
+            Array.from({ length: totalPages - 1 }, (_, index) =>
+              this.getListBookings({
+                vehicle_id: vehicleIdText,
+                page: index + 2,
+                limit: 100,
+                sort_by: -1,
+              }).catch(() => ({ items: [] })),
+            ),
           )
-        )
         : [];
 
-    const bookings = [
-      ...(firstPage.items || []),
-      ...pageResults.flatMap((page) => page.items || []),
-    ];
+    const bookings = [...(firstPage.items || []), ...pageResults.flatMap((page) => page.items || [])];
 
     const intervals = bookings
       .filter((booking) => resolveId(booking?.vehicle_id) === vehicleIdText)
@@ -476,12 +495,7 @@ export const bookingService = {
         if (!from && !to) {
           return true;
         }
-        return dateRangesOverlapByDay(
-          interval.start,
-          interval.end,
-          from || interval.start,
-          to || interval.end
-        );
+        return dateRangesOverlapByDay(interval.start, interval.end, from || interval.start, to || interval.end);
       });
 
     return { intervals };
@@ -492,12 +506,32 @@ export const bookingService = {
   },
 
   getBookingConflicts({ pickupDate, returnDate, intervals = [], excludeBookingId = '' } = {}) {
-    return rentalWindowOverlapsIntervals({ pickupDate, returnDate, intervals, excludeBookingId });
+    return rentalWindowOverlapsIntervals({
+      pickupDate,
+      returnDate,
+      intervals,
+      excludeBookingId,
+    });
   },
 
   async cancelBooking(id) {
-    const res = await apiClient.patch(`/api/booking/updateBookingStatus/${id}`, { status: 'cancelled' });
-    return res.data.data;
+    const res = await apiClient.patch(`/api/booking/updateBookingStatus/${id}`, {
+      status: 'cancelled',
+    });
+    // Gộp booking data + refund info để getCancelBookingNotice đọc được
+    return {
+      ...res.data.data,
+      paymentStatus: res.data.paymentStatus,
+      refundStatus: res.data.refundStatus,
+      refundResult: res.data.refundResult,
+    };
+  },
+
+  async savePickupImages(bookingId, imageUrls) {
+    const res = await apiClient.patch(`/api/booking/${bookingId}/pickup-images`, {
+      pickup_images: imageUrls,
+    });
+    return res.data;
   },
 
   async createBookingAndPaymentSession(payload = {}) {
@@ -536,16 +570,19 @@ export const bookingService = {
     return res.data.data;
   },
 
-  async confirmPickup(id) {
-    throw new Error('Backend hien chi cho showroom cap nhat buoc ban giao xe. Renter chua the tu xac nhan nhan xe bang status API nay.');
+  // Renter xác nhận nhận xe bằng OTP showroom cung cấp: handed_over → in_use
+  async verifyHandoverOtp(id, otp) {
+    const res = await apiClient.post(`/api/booking/verifyHandoverOtp/${id}`, { otp });
+    return res.data?.data;
   },
 
+  // Renter gửi yêu cầu trả xe: in_use → waiting_return_confirmation
   async requestReturn(id) {
-    throw new Error('Backend hien chua ho tro renter gui yeu cau tra xe bang status API rieng. FE chi co the luu bien ban va anh doi chieu tren trinh duyet hien tai.');
+    return this.updateBookingStatus(id, 'waiting_return_confirmation');
   },
 
-  async confirmPickupForRenter(id) {
-    return this.confirmPickup(id);
+  async confirmPickupForRenter(id, otp) {
+    return this.verifyHandoverOtp(id, otp);
   },
 
   async requestReturnForRenter(id) {
@@ -554,5 +591,3 @@ export const bookingService = {
 };
 
 export default bookingService;
-
-

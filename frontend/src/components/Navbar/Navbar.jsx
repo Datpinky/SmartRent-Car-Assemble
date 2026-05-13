@@ -1,12 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { FaBars, FaSignOutAlt, FaTimes, FaUser } from 'react-icons/fa';
 import { Link, useNavigate } from 'react-router-dom';
-import { FaTimes, FaBars, FaUser, FaSignOutAlt } from 'react-icons/fa';
 import { useAuth } from '../../contexts/AuthContext';
 
 const ROLE_DASHBOARD_PATHS = {
   admin: '/admin/dashboard',
   showroom: '/showroom/dashboard',
-  owner: '/owner/dashboard',
   renter: '/renter/profile',
 };
 
@@ -25,9 +24,20 @@ const Navbar = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleLogout = () => { logout(); setMenuOpen(false); setUserDropdownOpen(false); navigate('/'); };
+  const handleLogout = () => {
+    logout();
+    setMenuOpen(false);
+    setUserDropdownOpen(false);
+    navigate('/');
+  };
 
-  const initials = user?.name?.split(' ').map(w => w[0]).slice(-2).join('').toUpperCase() || 'U';
+  const initials =
+    user?.name
+      ?.split(' ')
+      .map((w) => w[0])
+      .slice(-2)
+      .join('')
+      .toUpperCase() || 'U';
 
   return (
     <nav className="sticky top-0 z-[1000] bg-white border-b border-gray-200 shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
@@ -40,7 +50,8 @@ const Navbar = () => {
             height={44}
             className="h-11 w-auto object-contain"
             style={{
-              filter: 'brightness(0) saturate(100%) invert(27%) sepia(96%) saturate(1057%) hue-rotate(174deg) brightness(90%)',
+              filter:
+                'brightness(0) saturate(100%) invert(27%) sepia(96%) saturate(1057%) hue-rotate(174deg) brightness(90%)',
             }}
           />
         </Link>
@@ -55,23 +66,38 @@ const Navbar = () => {
                 aria-expanded={userDropdownOpen}
                 aria-haspopup="menu"
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-[0.875rem] font-semibold text-gray-800 cursor-pointer transition-[border-color,background-color] hover:border-primary hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                onClick={() => setUserDropdownOpen(o => !o)}
+                onClick={() => setUserDropdownOpen((o) => !o)}
               >
-                <div aria-hidden="true" className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-[0.75rem] font-extrabold">
+                <div
+                  aria-hidden="true"
+                  className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-[0.75rem] font-extrabold"
+                >
                   {initials}
                 </div>
                 <span className="max-w-[120px] overflow-hidden text-ellipsis whitespace-nowrap">{user.name}</span>
-                <span aria-hidden="true" className="text-[0.6rem] text-gray-500 transition-transform duration-200" style={{ display: 'inline-block', transform: userDropdownOpen ? 'rotate(180deg)' : 'none' }}>▼</span>
+                <span
+                  aria-hidden="true"
+                  className="text-[0.6rem] text-gray-500 transition-transform duration-200"
+                  style={{ display: 'inline-block', transform: userDropdownOpen ? 'rotate(180deg)' : 'none' }}
+                >
+                  ▼
+                </span>
               </button>
               {userDropdownOpen && (
-                <div role="menu" className="absolute top-[calc(100%+6px)] right-0 z-[1001] min-w-[200px] bg-white border border-gray-200 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.12)] py-1.5 animate-[slideDown_0.15s_ease] motion-reduce:animate-none">
+                <div
+                  role="menu"
+                  className="absolute top-[calc(100%+6px)] right-0 z-[1001] min-w-[200px] bg-white border border-gray-200 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.12)] py-1.5 animate-[slideDown_0.15s_ease] motion-reduce:animate-none"
+                >
                   {user.role === 'renter' && (
                     <>
                       <button
                         type="button"
                         role="menuitem"
                         className="flex items-center gap-2 w-full px-3.5 py-2.5 text-[0.85rem] text-gray-700 hover:bg-gray-100 text-left focus-visible:outline-none focus-visible:bg-gray-100"
-                        onClick={() => { navigate('/renter/profile'); setUserDropdownOpen(false); }}
+                        onClick={() => {
+                          navigate('/renter/profile');
+                          setUserDropdownOpen(false);
+                        }}
                       >
                         <FaUser aria-hidden="true" /> Quản lý tài khoản
                       </button>
@@ -83,7 +109,10 @@ const Navbar = () => {
                       type="button"
                       role="menuitem"
                       className="flex items-center gap-2 w-full px-3.5 py-2.5 text-[0.85rem] text-gray-700 hover:bg-gray-100 text-left focus-visible:outline-none focus-visible:bg-gray-100"
-                      onClick={() => { navigate(ROLE_DASHBOARD_PATHS[user.role] || '/'); setUserDropdownOpen(false); }}
+                      onClick={() => {
+                        navigate(ROLE_DASHBOARD_PATHS[user.role] || '/');
+                        setUserDropdownOpen(false);
+                      }}
                     >
                       Vào Dashboard
                     </button>
@@ -129,15 +158,57 @@ const Navbar = () => {
             <>
               {user.role === 'renter' && (
                 <>
-                  <button type="button" className="block w-full px-5 py-3 text-[0.9rem] font-medium text-gray-700 hover:bg-gray-100 text-left" onClick={() => { navigate('/renter/profile'); setMenuOpen(false); }}>Hồ sơ cá nhân</button>
-                  <button type="button" className="block w-full px-5 py-3 text-[0.9rem] font-medium text-gray-700 hover:bg-gray-100 text-left" onClick={() => { navigate('/renter/bookings'); setMenuOpen(false); }}>Chuyến đi của tôi</button>
-                  <button type="button" className="block w-full px-5 py-3 text-[0.9rem] font-medium text-gray-700 hover:bg-gray-100 text-left" onClick={() => { navigate('/renter/sos'); setMenuOpen(false); }}>Hỗ trợ khẩn cấp</button>
+                  <button
+                    type="button"
+                    className="block w-full px-5 py-3 text-[0.9rem] font-medium text-gray-700 hover:bg-gray-100 text-left"
+                    onClick={() => {
+                      navigate('/renter/profile');
+                      setMenuOpen(false);
+                    }}
+                  >
+                    Hồ sơ cá nhân
+                  </button>
+                  <button
+                    type="button"
+                    className="block w-full px-5 py-3 text-[0.9rem] font-medium text-gray-700 hover:bg-gray-100 text-left"
+                    onClick={() => {
+                      navigate('/renter/bookings');
+                      setMenuOpen(false);
+                    }}
+                  >
+                    Chuyến đi của tôi
+                  </button>
+                  <button
+                    type="button"
+                    className="block w-full px-5 py-3 text-[0.9rem] font-medium text-gray-700 hover:bg-gray-100 text-left"
+                    onClick={() => {
+                      navigate('/renter/sos');
+                      setMenuOpen(false);
+                    }}
+                  >
+                    Hỗ trợ khẩn cấp
+                  </button>
                 </>
               )}
               {user.role !== 'renter' && (
-                <button type="button" className="block w-full px-5 py-3 text-[0.9rem] font-medium text-gray-700 hover:bg-gray-100 text-left" onClick={() => { navigate(ROLE_DASHBOARD_PATHS[user.role] || '/'); setMenuOpen(false); }}>Vào Dashboard</button>
+                <button
+                  type="button"
+                  className="block w-full px-5 py-3 text-[0.9rem] font-medium text-gray-700 hover:bg-gray-100 text-left"
+                  onClick={() => {
+                    navigate(ROLE_DASHBOARD_PATHS[user.role] || '/');
+                    setMenuOpen(false);
+                  }}
+                >
+                  Vào Dashboard
+                </button>
               )}
-              <button type="button" className="block w-full px-5 py-3 text-[0.9rem] font-medium text-red-600 hover:bg-red-50 text-left" onClick={handleLogout}>Đăng xuất</button>
+              <button
+                type="button"
+                className="block w-full px-5 py-3 text-[0.9rem] font-medium text-red-600 hover:bg-red-50 text-left"
+                onClick={handleLogout}
+              >
+                Đăng xuất
+              </button>
             </>
           ) : (
             <Link

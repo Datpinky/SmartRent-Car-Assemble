@@ -18,19 +18,26 @@ export const uploadService = {
   },
 
   /**
-   * So sánh ảnh trước/sau thuê qua AI (multipart: before_rental, after_return).
-   * Trả về object JSON phân tích từ backend (damage_detected, severity, summary, …).
+   * So sánh nhiều vị trí xe trong một lần gọi AI.
+   * positions: [{ key: string, label: string, beforeFile: File, afterFile: File }]
+   * Chỉ gửi các vị trí có đủ cả hai ảnh.
    */
-  async compareVehicleDamage(beforeFile, afterFile) {
-    const formData = new FormData();
-    formData.append('before_rental', beforeFile);
-    formData.append('after_return', afterFile);
+  async compareMultiPosition(positions) {
+    const valid = positions.filter((p) => p.beforeFile && p.afterFile);
+    if (valid.length === 0) throw new Error('Cần ít nhất một cặp ảnh để phân tích');
 
-    const res = await apiClient.post('/api/uploads/image/vehicle-damage', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 120000,
+    const formData = new FormData();
+    formData.append('count', valid.length);
+    valid.forEach((p, i) => {
+      formData.append(`pos_${i}_before`, p.beforeFile);
+      formData.append(`pos_${i}_after`, p.afterFile);
+      formData.append(`label_${i}`, p.label);
     });
 
+    const res = await apiClient.post('/api/uploads/image/vehicle-damage-multi', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 180000,
+    });
     return res.data?.data ?? null;
   },
 };

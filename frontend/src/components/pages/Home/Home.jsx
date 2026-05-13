@@ -1,12 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
-import CarGrid from '../../CarGrid/CarGrid';
-import FilterBar from '../../FilterBar/FilterBar';
-import SearchBar from '../../SearchBar/SearchBar';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
-import bookingService from '../../../services/bookingService';
 import reviewService from '../../../services/reviewService';
 import vehicleLocationService from '../../../services/vehicleLocationService';
 import vehicleService from '../../../services/vehicleService';
+import CarGrid from '../../CarGrid/CarGrid';
+import FilterBar from '../../FilterBar/FilterBar';
+import SearchBar from '../../SearchBar/SearchBar';
 
 const DEFAULT_FILTERS = {
   seats: 'all',
@@ -98,15 +97,13 @@ const applyFilters = (baseVehicles, filters, search, sortValue) => {
   return sortVehicles(filtered, sortValue);
 };
 
-const hasAvailabilityRange = (search) => Boolean(search?.pickupDate && search?.returnDate);
-
 const mergeVehiclesWithLocation = async (vehicles = [], canReadVehicleLocation = false) => {
   if (!canReadVehicleLocation || vehicles.length === 0) {
     return vehicles;
   }
 
   const locationResults = await Promise.allSettled(
-    vehicles.map((vehicle) => vehicleLocationService.getByVehicleId(vehicle._id || vehicle.id))
+    vehicles.map((vehicle) => vehicleLocationService.getByVehicleId(vehicle._id || vehicle.id)),
   );
 
   return vehicles.map((vehicle, index) => {
@@ -140,147 +137,113 @@ const Home = () => {
   const [allCars, setAllCars] = useState([]);
   const [filteredCars, setFilteredCars] = useState([]);
   const [loadingVehicles, setLoadingVehicles] = useState(true);
-  const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [apiError, setApiError] = useState('');
-  const [availabilityError, setAvailabilityError] = useState('');
 
   const currentFilters = useRef(DEFAULT_FILTERS);
   const currentSearch = useRef({ location: '', carName: '', pickupDate: '', returnDate: '' });
   const currentSort = useRef('all');
-  const availabilityRequestRef = useRef(0);
+  const currentDatesRef = useRef({ pickupDate: '', returnDate: '' });
+  const filterRequestRef = useRef(0);
   const isMountedRef = useRef(true);
+  const loadVehiclesRef = useRef(null);
 
-  const syncVisibleCars = async (
+  const syncVisibleCars = (
     baseVehicles,
     nextFilters = currentFilters.current,
     nextSearch = currentSearch.current,
-    nextSort = currentSort.current
+    nextSort = currentSort.current,
   ) => {
-    const requestId = ++availabilityRequestRef.current;
+    const requestId = ++filterRequestRef.current;
     const locallyFiltered = applyFilters(baseVehicles, nextFilters, nextSearch, nextSort);
-
-    if (!hasAvailabilityRange(nextSearch) || locallyFiltered.length === 0) {
-      if (!isMountedRef.current || requestId !== availabilityRequestRef.current) {
-        return;
-      }
-
-      setFilteredCars(locallyFiltered);
-      setAvailabilityError('');
-      setCheckingAvailability(false);
-      return;
-    }
-
-    setCheckingAvailability(true);
-
-    const availabilityResults = await Promise.allSettled(
-      locallyFiltered.map((vehicle) =>
-        bookingService.checkAvailability({
-          vehicleId: vehicle.id,
-          pickupDate: nextSearch.pickupDate,
-          returnDate: nextSearch.returnDate,
-        })
-      )
-    );
-
-    if (!isMountedRef.current || requestId !== availabilityRequestRef.current) {
-      return;
-    }
-
-    let failedCount = 0;
-
-    const availableCars = locallyFiltered.filter((vehicle, index) => {
-      const result = availabilityResults[index];
-
-      if (result?.status !== 'fulfilled') {
-        failedCount += 1;
-        return true;
-      }
-
-      if (result.value?.isAvailable === false) {
-        return false;
-      }
-
-      return true;
-    });
-
-    setFilteredCars(availableCars);
-    setAvailabilityError(
-      failedCount > 0
-        ? 'Không thể kiểm tra lịch của một số xe. Vui lòng kiểm tra lại!'
-        : ''
-    );
-    setCheckingAvailability(false);
+    if (!isMountedRef.current || requestId !== filterRequestRef.current) return;
+    setFilteredCars(locallyFiltered);
   };
 
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
-      availabilityRequestRef.current += 1;
     };
   }, []);
 
+  // Expose loadVehicles via ref so handleSearch can call it without stale closure
   useEffect(() => {
-    let cancelled = false;
-
-    const loadVehicles = async () => {
+    loadVehiclesRef.current = async ({ pickupDate = '', returnDate = '', carName = '' } = {}) => {
       setLoadingVehicles(true);
       try {
-        const { data } = await vehicleService.getList({ limit: 100 });
-        const vehiclesWithLocation = await mergeVehiclesWithLocation(data, Boolean(user));
-        const vehiclesWithReviewSummary = await reviewService.enrichVehiclesWithSummary(vehiclesWithLocation, { limit: 100 });
-        if (cancelled) {
-          return;
+        const listParams = { limit: 100 };
+        if (pickupDate && returnDate) {
+          listParams.available_from = pickupDate;
+          listParams.available_to = returnDate;
         }
-
+        if (carName && carName.trim()) {
+          listParams.search = carName.trim();
+        }
+        const { data } = await vehicleService.getList(listParams);
+        const vehiclesWithLocation = await mergeVehiclesWithLocation(data, Boolean(user));
+        const vehiclesWithReviewSummary = await reviewService.enrichVehiclesWithSummary(vehiclesWithLocation, {
+          limit: 100,
+        });
+        if (!isMountedRef.current) return;
         setAllCars(vehiclesWithReviewSummary);
-        await syncVisibleCars(vehiclesWithReviewSummary);
+        syncVisibleCars(vehiclesWithReviewSummary);
         setApiError('');
       } catch (error) {
-        if (cancelled) {
-          return;
-        }
-
+        if (!isMountedRef.current) return;
         setAllCars([]);
         setFilteredCars([]);
         setApiError(error.message || 'Không thể tải dữ liệu!');
       } finally {
-        if (!cancelled) {
-          setLoadingVehicles(false);
-        }
+        if (isMountedRef.current) setLoadingVehicles(false);
       }
     };
+  });
 
-    loadVehicles();
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (cancelled) return;
+      await loadVehiclesRef.current?.();
+    };
+    run();
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user?._id]);
 
   const handleFilter = (payload) => {
     if (payload === 'all') {
       currentFilters.current = DEFAULT_FILTERS;
-      void syncVisibleCars(allCars, DEFAULT_FILTERS, currentSearch.current, currentSort.current);
+      syncVisibleCars(allCars, DEFAULT_FILTERS, currentSearch.current, currentSort.current);
       return;
     }
-
     if (typeof payload === 'object' && payload !== null) {
       currentFilters.current = { ...currentFilters.current, ...payload };
-      void syncVisibleCars(allCars, currentFilters.current, currentSearch.current, currentSort.current);
+      syncVisibleCars(allCars, currentFilters.current, currentSearch.current, currentSort.current);
     }
   };
 
   const handleSearch = ({ location, carName, pickupDate = '', returnDate = '' }) => {
+    const prevDates = currentDatesRef.current;
+    const prevCarName = currentSearch.current.carName || '';
     currentSearch.current = { location, carName, pickupDate, returnDate };
-    void syncVisibleCars(allCars, currentFilters.current, currentSearch.current, currentSort.current);
+
+    const datesChanged = prevDates.pickupDate !== pickupDate || prevDates.returnDate !== returnDate;
+    const nameChanged = prevCarName !== (carName || '');
+    if (datesChanged || nameChanged) {
+      currentDatesRef.current = { pickupDate, returnDate };
+      void loadVehiclesRef.current?.({ pickupDate, returnDate, carName });
+    } else {
+      syncVisibleCars(allCars, currentFilters.current, currentSearch.current, currentSort.current);
+    }
   };
 
   const handleSort = (sortValue) => {
     currentSort.current = sortValue;
-    void syncVisibleCars(allCars, currentFilters.current, currentSearch.current, currentSort.current);
+    syncVisibleCars(allCars, currentFilters.current, currentSearch.current, currentSort.current);
   };
 
-  const loading = loadingVehicles || checkingAvailability;
+  const loading = loadingVehicles;
 
   return (
     <main>
@@ -288,14 +251,6 @@ const Home = () => {
         <div className="mx-auto max-w-[1280px] px-5 pt-3">
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-[0.82rem] text-red-700">
             <span className="font-semibold">Không thể tải danh sách xe!</span> {apiError}
-          </div>
-        </div>
-      )}
-
-      {availabilityError && (
-        <div className="mx-auto max-w-[1280px] px-5 pt-3">
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-[0.82rem] text-amber-800">
-            <span className="font-semibold">Không thể kiểm tra trùng lịch</span> {availabilityError}
           </div>
         </div>
       )}

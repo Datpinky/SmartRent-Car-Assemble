@@ -1,25 +1,28 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import {
   FaCheckCircle,
+  FaFileSignature,
   FaHome,
   FaList,
   FaMoneyBillWave,
   FaSpinner,
   FaTimesCircle,
 } from 'react-icons/fa';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import ContractModal from '../../../components/common/ContractModal';
 import bookingService from '../../../services/bookingService';
 import paymentService from '../../../services/paymentService';
 
 const formatDate = (value) => {
   if (!value) return 'N/A';
-
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return 'N/A';
-  }
-
-  return date.toLocaleString('vi-VN');
+  if (Number.isNaN(date.getTime())) return 'N/A';
+  const dd = String(date.getDate()).padStart(2, '0');
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const yyyy = date.getFullYear();
+  const hh = String(date.getHours()).padStart(2, '0');
+  const min = String(date.getMinutes()).padStart(2, '0');
+  return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
 };
 
 const deriveResultStatus = (booking, fallbackStatus) => {
@@ -49,18 +52,23 @@ const PaymentResult = () => {
   const bookingId = params.get('bookingId') || params.get('booking_id') || routeParams.bookingId || '';
   const paymentIntentId = params.get('payment_intent') || '';
   const redirectStatus = params.get('redirect_status') || '';
-  const fallbackStatus = params.get('status')
-    || (redirectStatus === 'succeeded'
+  const fallbackStatus =
+    params.get('status') ||
+    (redirectStatus === 'succeeded'
       ? 'success'
-      : (redirectStatus === 'processing'
+      : redirectStatus === 'processing'
         ? 'pending'
-        : (redirectStatus === 'failed' ? 'error' : 'pending')));
+        : redirectStatus === 'failed'
+          ? 'error'
+          : 'pending');
   const [status, setStatus] = useState('loading');
   const [booking, setBooking] = useState(null);
+  const [showContractModal, setShowContractModal] = useState(false);
+  const [contractSigned, setContractSigned] = useState(false);
   const canRetryPayment =
-    ['pending', 'waiting_payment'].includes(booking?.paymentState?.bookingStatus || booking?.status || '')
-    && ['pending', 'failed', 'declined'].includes(
-      booking?.payment?.payment_status || booking?.paymentState?.paymentStatus || 'pending'
+    ['pending', 'waiting_payment'].includes(booking?.paymentState?.bookingStatus || booking?.status || '') &&
+    ['pending', 'failed', 'declined'].includes(
+      booking?.payment?.payment_status || booking?.paymentState?.paymentStatus || 'pending',
     );
 
   const isSuccess = status === 'success';
@@ -78,20 +86,16 @@ const PaymentResult = () => {
           return;
         }
 
+        let syncedStatus = null;
+
         if (paymentIntentId) {
           try {
             const syncResult = await paymentService.confirmPayment(paymentIntentId);
-            if (mounted && syncResult?.paymentStatus) {
-              if (syncResult.paymentStatus === 'successful') {
-                setStatus('success');
-              } else if (syncResult.paymentStatus === 'pending') {
-                setStatus('pending');
-              } else if (['failed', 'declined'].includes(syncResult.paymentStatus)) {
-                setStatus('error');
-              }
-            }
+            if (syncResult?.paymentStatus === 'successful') syncedStatus = 'success';
+            else if (syncResult?.paymentStatus === 'pending') syncedStatus = 'pending';
+            else if (['failed', 'declined'].includes(syncResult?.paymentStatus)) syncedStatus = 'error';
           } catch {
-            // Keep loading booking/payment state below as the main source of truth.
+            // Fall through to booking-based derivation.
           }
         }
 
@@ -101,7 +105,8 @@ const PaymentResult = () => {
         }
 
         setBooking(data || null);
-        setStatus(deriveResultStatus(data, fallbackStatus));
+        // Sync result (from Stripe) takes priority over stale booking state
+        setStatus(syncedStatus || deriveResultStatus(data, fallbackStatus));
       } catch (err) {
         if (!mounted) {
           return;
@@ -125,77 +130,165 @@ const PaymentResult = () => {
     : bookingId
       ? `BK${String(bookingId).slice(-6).toUpperCase()}`
       : 'N/A';
-  const totalPrice = booking?.total_price != null
-    ? `${Number(booking.total_price).toLocaleString('vi-VN')}d`
-    : 'N/A';
+  const totalPrice = booking?.total_price != null ? `${Number(booking.total_price).toLocaleString('vi-VN')}d` : 'N/A';
 
   if (status === 'loading') {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '70vh' }}>
-        <FaSpinner className="animate-spin" style={{ fontSize: '3rem', color: '#00b14f' }} />
-        <p style={{ marginTop: 16, color: '#6b7280' }}>Đang tải thông tin giao dịch...</p>
+      <div className="flex flex-col items-center justify-center min-h-[70vh]">
+        <FaSpinner className="animate-spin text-5xl text-[#00b14f]" />
+        <p className="mt-4 text-gray-500">Đang tải thông tin giao dịch...</p>
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '70vh', padding: 24 }}>
-      <div style={{ background: '#fff', borderRadius: 20, padding: '48px 40px', maxWidth: 480, width: '100%', textAlign: 'center', boxShadow: '0 4px 32px rgba(0,0,0,0.10)', border: '1px solid #f0f0f0' }}>
+    <div className="flex flex-col items-center justify-center min-h-[70vh] p-6">
+      <div className="bg-white rounded-2xl px-10 py-12 max-w-[480px] w-full text-center shadow-lg border border-gray-100">
         {isSuccess ? (
           <>
-            <div style={{ width: 88, height: 88, borderRadius: '50%', background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', animation: 'popIn 0.4s ease' }}>
-              <FaCheckCircle style={{ fontSize: '3rem', color: '#059669' }} />
+            <div
+              className="w-22 h-22 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-5"
+              style={{ width: 88, height: 88, animation: 'popIn 0.4s ease' }}
+            >
+              <FaCheckCircle className="text-5xl text-emerald-600" />
             </div>
-            <h2 style={{ fontWeight: 800, fontSize: '1.3rem', color: '#111827', marginBottom: 8 }}>Thanh toán thành công</h2>
-            <p style={{ color: '#6b7280', fontSize: '0.88rem', lineHeight: 1.6, marginBottom: 24 }}>
+            <h2 className="font-extrabold text-xl text-gray-900 mb-2">Thanh toán thành công</h2>
+            <p className="text-gray-500 text-sm leading-relaxed mb-5">
               Booking của bạn đã được ghi nhận thanh toán thành công trên hệ thống.
             </p>
+
+            {/* Step flow */}
+            <div className="flex items-center justify-center gap-1 mb-5 text-xs">
+              <div className="flex flex-col items-center gap-1">
+                <div className="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center">
+                  <FaCheckCircle className="text-white text-sm" />
+                </div>
+                <span className="text-emerald-600 font-semibold">Thanh toán</span>
+              </div>
+              <div className={`flex-1 h-0.5 mx-1 mb-3 ${contractSigned ? 'bg-emerald-400' : 'bg-blue-400'}`} />
+              <div className="flex flex-col items-center gap-1">
+                <div
+                  className={`w-7 h-7 rounded-full flex items-center justify-center ${
+                    contractSigned ? 'bg-emerald-500' : 'bg-blue-600 ring-4 ring-blue-100'
+                  }`}
+                >
+                  {contractSigned ? (
+                    <FaCheckCircle className="text-white text-sm" />
+                  ) : (
+                    <FaFileSignature className="text-white text-sm" />
+                  )}
+                </div>
+                <span className={`font-bold ${contractSigned ? 'text-emerald-600' : 'text-blue-700'}`}>
+                  Ký hợp đồng
+                </span>
+              </div>
+              <div className={`flex-1 h-0.5 mx-1 mb-3 ${contractSigned ? 'bg-emerald-400' : 'bg-gray-200'}`} />
+              <div className="flex flex-col items-center gap-1">
+                <div
+                  className={`w-7 h-7 rounded-full flex items-center justify-center ${
+                    contractSigned ? 'bg-emerald-500 ring-4 ring-emerald-100' : 'bg-gray-200'
+                  }`}
+                >
+                  {contractSigned ? (
+                    <FaCheckCircle className="text-white text-sm" />
+                  ) : (
+                    <span className="text-gray-400 font-bold text-xs">3</span>
+                  )}
+                </div>
+                <span className={`font-medium ${contractSigned ? 'text-emerald-600 font-bold' : 'text-gray-400'}`}>
+                  Nhận xe
+                </span>
+              </div>
+            </div>
+
+            {contractSigned ? (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 mb-5 text-left">
+                <p className="text-emerald-800 text-xs font-semibold mb-0.5">✅ Đã ký hợp đồng thành công</p>
+                <p className="text-emerald-700 text-xs leading-relaxed">
+                  Hợp đồng đã được ký. Showroom sẽ liên hệ và tiến hành bàn giao xe cho bạn.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-5 text-left">
+                  <p className="text-blue-800 text-xs font-semibold mb-0.5">📋 Bước tiếp theo — bắt buộc</p>
+                  <p className="text-blue-700 text-xs leading-relaxed">
+                    Vui lòng ký xác nhận hợp đồng thuê xe để hoàn tất thủ tục. Showroom sẽ tiến hành bàn giao xe sau khi
+                    hợp đồng được ký.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowContractModal(true)}
+                  className="flex items-center justify-center gap-2 w-full mb-4 px-6 py-3 bg-blue-700 border-none rounded-xl text-white font-bold cursor-pointer text-sm hover:bg-blue-800 transition-colors shadow-md"
+                >
+                  <FaFileSignature /> Ký xác nhận hợp đồng
+                </button>
+              </>
+            )}
           </>
         ) : isPending ? (
           <>
-            <div style={{ width: 88, height: 88, borderRadius: '50%', background: '#fffbeb', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-              <FaSpinner className="animate-spin" style={{ fontSize: '2.4rem', color: '#d97706' }} />
+            <div
+              className="rounded-full bg-amber-50 flex items-center justify-center mx-auto mb-5"
+              style={{ width: 88, height: 88 }}
+            >
+              <FaSpinner className="animate-spin text-4xl text-amber-600" />
             </div>
-            <h2 style={{ fontWeight: 800, fontSize: '1.3rem', color: '#111827', marginBottom: 8 }}>Thanh toán đang chờ xử lý</h2>
-            <p style={{ color: '#6b7280', fontSize: '0.88rem', lineHeight: 1.6, marginBottom: 24 }}>
-              Backend đã tạo booking và payment record, nhưng giao dịch chưa ở trạng thái thành công.
+            <h2 className="font-extrabold text-xl text-gray-900 mb-2">Thanh toán đang chờ xử lý</h2>
+            <p className="text-gray-500 text-sm leading-relaxed mb-6">
+              Giao dịch đang được xử lý, vui lòng chờ trong giây lát. Chúng tôi sẽ cập nhật ngay khi có kết quả.
             </p>
           </>
         ) : (
           <>
-            <div style={{ width: 88, height: 88, borderRadius: '50%', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-              <FaTimesCircle style={{ fontSize: '3rem', color: '#dc2626' }} />
+            <div
+              className="rounded-full bg-red-50 flex items-center justify-center mx-auto mb-5"
+              style={{ width: 88, height: 88 }}
+            >
+              <FaTimesCircle className="text-5xl text-red-600" />
             </div>
-            <h2 style={{ fontWeight: 800, fontSize: '1.3rem', color: '#111827', marginBottom: 8 }}>Thanh toán thất bại</h2>
-            <p style={{ color: '#6b7280', fontSize: '0.88rem', lineHeight: 1.6, marginBottom: 24 }}>
+            <h2 className="font-extrabold text-xl text-gray-900 mb-2">Thanh toán thất bại</h2>
+            <p className="text-gray-500 text-sm leading-relaxed mb-6">
               Giao dịch không thể thực hiện hoặc chưa được ghi nhận thành công.
             </p>
           </>
         )}
 
-        <div style={{ background: '#f9fafb', borderRadius: 12, padding: 16, marginBottom: 24, textAlign: 'left' }}>
+        <div className="bg-gray-50 rounded-xl p-4 mb-6 text-left">
           {[
-            ['Mã booking', bookingCode],
+            ['Mã đặt xe', bookingCode],
             ['Xe', booking?.vehicle?.name || booking?.vehicle_id?.vehicle_name || 'Đang tải...'],
-            ['Thời gian thuê', booking ? `${formatDate(booking.start_date)} -> ${formatDate(booking.end_date)}` : 'N/A'],
+            ['Thời gian thuê', booking ? `${formatDate(booking.start_date)} → ${formatDate(booking.end_date)}` : 'N/A'],
             ['Tổng tiền', totalPrice],
-            ['Payment method', booking?.payment?.payment_method || 'Chưa có'],
-            ['Payment status', booking?.payment?.payment_status || booking?.paymentState?.paymentStatus || 'pending'],
-            ['Booking status', booking?.paymentState?.bookingStatus || booking?.status || 'N/A'],
-            ['Paid at', formatDate(booking?.payment?.paid_at)],
-            ['Transaction code', booking?.payment?.transaction_code || booking?.payment?.stripe_payment_intent_id || 'Chưa có'],
+            ...(isSuccess && booking?.payment?.paid_at
+              ? [['Thanh toán lúc', formatDate(booking.payment.paid_at)]]
+              : []),
+            ...(!isSuccess
+              ? [
+                  [
+                    'Trạng thái',
+                    booking?.payment?.payment_status === 'successful'
+                      ? 'Thành công'
+                      : booking?.payment?.payment_status === 'pending'
+                        ? 'Đang chờ'
+                        : booking?.payment?.payment_status === 'failed'
+                          ? 'Thất bại'
+                          : booking?.payment?.payment_status || 'Đang cập nhật',
+                  ],
+                ]
+              : []),
           ].map(([label, value]) => (
-            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 8, fontSize: '0.82rem' }}>
-              <span style={{ color: '#9ca3af' }}>{label}</span>
-              <span style={{ fontWeight: 600, color: '#111827', textAlign: 'right' }}>{value}</span>
+            <div key={label} className="flex justify-between gap-3 mb-2 text-xs last:mb-0">
+              <span className="text-gray-400">{label}</span>
+              <span className="font-semibold text-gray-900 text-right">{value}</span>
             </div>
           ))}
         </div>
 
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div className="flex gap-2.5">
           <button
             onClick={() => navigate('/')}
-            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '11px 0', background: '#fff', border: '1.5px solid #e5e7eb', borderRadius: 10, color: '#374151', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}
+            className="flex-1 flex items-center justify-center gap-1.5 py-3 bg-white border-2 border-gray-200 rounded-xl text-gray-700 font-semibold cursor-pointer text-sm hover:bg-gray-50 transition-colors"
           >
             <FaHome /> Trang chủ
           </button>
@@ -203,36 +296,46 @@ const PaymentResult = () => {
           {isSuccess ? (
             <button
               onClick={() => navigate('/renter/pending-pickups')}
-              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '11px 0', background: '#00b14f', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem' }}
+              className="flex-1 flex items-center justify-center gap-1.5 py-3 bg-[#00b14f] border-none rounded-xl text-white font-bold cursor-pointer text-sm hover:bg-[#009f45] transition-colors"
             >
               <FaList /> Chờ nhận xe
             </button>
           ) : isPending ? (
             <button
-              onClick={() => navigate(canRetryPayment ? `/renter/retry-payment/${bookingId}` : '/renter/pending-pickups')}
-              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '11px 0', background: '#d97706', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem' }}
+              onClick={() =>
+                navigate(canRetryPayment ? `/renter/retry-payment/${bookingId}` : '/renter/pending-pickups')
+              }
+              className="flex-1 flex items-center justify-center gap-1.5 py-3 bg-amber-600 border-none rounded-xl text-white font-bold cursor-pointer text-sm hover:bg-amber-700 transition-colors"
             >
               <FaMoneyBillWave /> Thanh toán lại
             </button>
           ) : (
             <button
               onClick={() => navigate(canRetryPayment ? `/renter/retry-payment/${bookingId}` : '/renter/transactions')}
-              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '11px 0', background: '#00b14f', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem' }}
+              className="flex-1 flex items-center justify-center gap-1.5 py-3 bg-[#00b14f] border-none rounded-xl text-white font-bold cursor-pointer text-sm hover:bg-[#009f45] transition-colors"
             >
               Thanh toán lại
             </button>
           )}
         </div>
 
-        <button
-          className="renter-btn-soft"
-          onClick={() => navigate('/renter/transactions')}
-          style={{ width: '100%', marginTop: 10 }}
-        >
+        <button className="renter-btn-soft w-full mt-2.5" onClick={() => navigate('/renter/transactions')}>
           <FaMoneyBillWave /> Lịch sử giao dịch
         </button>
       </div>
       <style>{`@keyframes popIn { from { transform: scale(0.5); opacity: 0 } to { transform: scale(1); opacity: 1 } }`}</style>
+
+      {bookingId && (
+        <ContractModal
+          bookingId={bookingId}
+          isOpen={showContractModal}
+          onClose={() => setShowContractModal(false)}
+          onSigned={() => {
+            setShowContractModal(false);
+            setContractSigned(true);
+          }}
+        />
+      )}
     </div>
   );
 };

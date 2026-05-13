@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { FaCheckCircle, FaFileSignature, FaMapMarkerAlt, FaSave, FaSpinner } from 'react-icons/fa';
 import FileUpload from '../../../components/common/FileUpload';
-import { FaSave, FaMapMarkerAlt, FaSpinner } from 'react-icons/fa';
-import authService from '../../../services/authService';
+import SignaturePad from '../../../components/common/SignaturePad';
 import { useAuth } from '../../../contexts/AuthContext';
+import authService from '../../../services/authService';
 
 const ShowroomProfile = () => {
   const { user, updateUser } = useAuth();
@@ -24,12 +25,22 @@ const ShowroomProfile = () => {
   const [saved, setSaved] = useState(false);
   const [activeTab, setActiveTab] = useState('info');
 
+  // Chữ ký điện tử
+  const [currentSignature, setCurrentSignature] = useState(null); // URL hiện tại
+  const [newSignature, setNewSignature] = useState(null); // data URI vừa vẽ
+  const [sigSaving, setSigSaving] = useState(false);
+  const [sigSaved, setSigSaved] = useState(false);
+  const [sigError, setSigError] = useState('');
+  const [sigConfirming, setSigConfirming] = useState(false);
+  const sigPadKey = useRef(0);
+
   const hydrate = useCallback(async () => {
     setLoading(true);
     setLoadError('');
     try {
       const u = await authService.getMe();
       if (u) {
+        setCurrentSignature(u.signature || null);
         setForm({
           business_name: u.business_name || '',
           showroom_representative_name: u.showroom_representative_name || '',
@@ -81,6 +92,28 @@ const ShowroomProfile = () => {
     }
   };
 
+  const handleSaveSignature = async () => {
+    if (!newSignature) {
+      setSigError('Vui lòng vẽ chữ ký trước khi lưu.');
+      return;
+    }
+    setSigError('');
+    setSigSaving(true);
+    try {
+      const updated = await authService.updateSignature(newSignature);
+      updateUser(updated);
+      setCurrentSignature(newSignature);
+      setNewSignature(null);
+      sigPadKey.current += 1;
+      setSigSaved(true);
+      setTimeout(() => setSigSaved(false), 2500);
+    } catch (e) {
+      setSigError(e?.response?.data?.message || e.message || 'Lưu chữ ký thất bại.');
+    } finally {
+      setSigSaving(false);
+    }
+  };
+
   const displayName = form.business_name || user?.business_name || user?.name || 'Showroom';
   const initials = String(displayName).trim().slice(0, 1).toUpperCase() || 'S';
   const statusLabel =
@@ -99,12 +132,7 @@ const ShowroomProfile = () => {
           <h1 className="page-title">Hồ sơ Showroom</h1>
           <p className="page-subtitle">Quản lý thông tin hiển thị và chính sách showroom</p>
         </div>
-        <button
-          type="button"
-          className="btn-primary"
-          onClick={handleSave}
-          disabled={saving || loading}
-        >
+        <button type="button" className="btn-primary" onClick={handleSave} disabled={saving || loading}>
           {saving ? <FaSpinner className="animate-spin inline" aria-hidden="true" /> : <FaSave aria-hidden="true" />}{' '}
           {saved ? 'Đã lưu!' : 'Lưu thay đổi'}
         </button>
@@ -192,6 +220,7 @@ const ShowroomProfile = () => {
               ['info', 'Thông tin cơ bản'],
               ['policy', 'Chính sách'],
               ['logo', 'Logo & Hình ảnh'],
+              ['signature', 'Chữ ký điện tử'],
             ].map(([key, label]) => (
               <button
                 type="button"
@@ -226,7 +255,16 @@ const ShowroomProfile = () => {
                   ['Giấy phép / GPKD (công khai)', 'showroom_license_public'],
                 ].map(([label, key]) => (
                   <div key={key} style={key === 'email' ? { gridColumn: 'span 1' } : {}}>
-                    <label htmlFor={`sp-${key}`} style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: 5 }}>
+                    <label
+                      htmlFor={`sp-${key}`}
+                      style={{
+                        fontSize: '0.82rem',
+                        fontWeight: 600,
+                        color: '#374151',
+                        display: 'block',
+                        marginBottom: 5,
+                      }}
+                    >
                       {label}
                     </label>
                     <input
@@ -248,7 +286,16 @@ const ShowroomProfile = () => {
                   </div>
                 ))}
                 <div style={{ gridColumn: 'span 2' }}>
-                  <label htmlFor="sp-address" style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: 5 }}>
+                  <label
+                    htmlFor="sp-address"
+                    style={{
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      color: '#374151',
+                      display: 'block',
+                      marginBottom: 5,
+                    }}
+                  >
                     Địa chỉ công khai
                   </label>
                   <input
@@ -256,11 +303,27 @@ const ShowroomProfile = () => {
                     value={form.public_address}
                     onChange={(e) => setForm((f) => ({ ...f, public_address: e.target.value }))}
                     className="focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                    style={{ width: '100%', border: '1.5px solid #e5e7eb', borderRadius: 9, padding: '9px 12px', fontSize: '0.85rem', boxSizing: 'border-box' }}
+                    style={{
+                      width: '100%',
+                      border: '1.5px solid #e5e7eb',
+                      borderRadius: 9,
+                      padding: '9px 12px',
+                      fontSize: '0.85rem',
+                      boxSizing: 'border-box',
+                    }}
                   />
                 </div>
                 <div style={{ gridColumn: 'span 2' }}>
-                  <label htmlFor="sp-description" style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: 5 }}>
+                  <label
+                    htmlFor="sp-description"
+                    style={{
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      color: '#374151',
+                      display: 'block',
+                      marginBottom: 5,
+                    }}
+                  >
                     Mô tả ngắn
                   </label>
                   <textarea
@@ -269,14 +332,25 @@ const ShowroomProfile = () => {
                     onChange={(e) => setForm((f) => ({ ...f, showroom_description: e.target.value }))}
                     rows={3}
                     className="focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                    style={{ width: '100%', border: '1.5px solid #e5e7eb', borderRadius: 9, padding: '9px 12px', fontSize: '0.85rem', resize: 'vertical', boxSizing: 'border-box' }}
+                    style={{
+                      width: '100%',
+                      border: '1.5px solid #e5e7eb',
+                      borderRadius: 9,
+                      padding: '9px 12px',
+                      fontSize: '0.85rem',
+                      resize: 'vertical',
+                      boxSizing: 'border-box',
+                    }}
                   />
                 </div>
               </div>
             )}
             {activeTab === 'policy' && (
               <div>
-                <label htmlFor="sp-policy" style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: 5 }}>
+                <label
+                  htmlFor="sp-policy"
+                  style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: 5 }}
+                >
                   Nội dung chính sách (đặt cọc, hủy chuyến, phụ phí…)
                 </label>
                 <textarea
@@ -286,21 +360,39 @@ const ShowroomProfile = () => {
                   rows={12}
                   placeholder="Nhập chính sách hiển thị cho khách hàng…"
                   className="focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  style={{ width: '100%', border: '1.5px solid #e5e7eb', borderRadius: 9, padding: '9px 12px', fontSize: '0.85rem', resize: 'vertical', boxSizing: 'border-box' }}
+                  style={{
+                    width: '100%',
+                    border: '1.5px solid #e5e7eb',
+                    borderRadius: 9,
+                    padding: '9px 12px',
+                    fontSize: '0.85rem',
+                    resize: 'vertical',
+                    boxSizing: 'border-box',
+                  }}
                 />
               </div>
             )}
             {activeTab === 'logo' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 <div>
-                  <div style={{ fontWeight: 700, marginBottom: 10, fontSize: '0.9rem', color: '#111827' }}>URL logo (hoặc tải ảnh)</div>
+                  <div style={{ fontWeight: 700, marginBottom: 10, fontSize: '0.9rem', color: '#111827' }}>
+                    URL logo (hoặc tải ảnh)
+                  </div>
                   <input
                     id="sp-logo-url"
                     value={form.logo_url}
                     onChange={(e) => setForm((f) => ({ ...f, logo_url: e.target.value }))}
                     placeholder="https://…"
                     className="focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                    style={{ width: '100%', border: '1.5px solid #e5e7eb', borderRadius: 9, padding: '9px 12px', fontSize: '0.85rem', boxSizing: 'border-box', marginBottom: 12 }}
+                    style={{
+                      width: '100%',
+                      border: '1.5px solid #e5e7eb',
+                      borderRadius: 9,
+                      padding: '9px 12px',
+                      fontSize: '0.85rem',
+                      boxSizing: 'border-box',
+                      marginBottom: 12,
+                    }}
                   />
                   <FileUpload
                     label="Tải logo lên"
@@ -310,6 +402,241 @@ const ShowroomProfile = () => {
                       if (urls && urls[0]) setForm((f) => ({ ...f, logo_url: urls[0] }));
                     }}
                   />
+                </div>
+              </div>
+            )}
+            {activeTab === 'signature' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 560 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827', marginBottom: 4 }}>
+                    Chữ ký điện tử của Showroom
+                  </div>
+                  <p style={{ fontSize: '0.82rem', color: '#6b7280', marginBottom: 16, lineHeight: 1.6 }}>
+                    Chữ ký này sẽ được tự động in vào hợp đồng thuê xe (Bên A).
+                    {!currentSignature && (
+                      <>
+                        {' '}
+                        Vẽ chữ ký bằng chuột hoặc ngón tay, sau đó nhấn <strong>Lưu chữ ký</strong>.
+                      </>
+                    )}
+                  </p>
+
+                  {currentSignature ? (
+                    /* ── Đã có chữ ký: hiển thị + khoá ── */
+                    <div>
+                      <div
+                        style={{
+                          border: '1.5px solid #e5e7eb',
+                          borderRadius: 12,
+                          padding: 16,
+                          marginBottom: 16,
+                          background: '#f9fafb',
+                        }}
+                      >
+                        <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#374151', marginBottom: 8 }}>
+                          Chữ ký đang sử dụng:
+                        </div>
+                        <div
+                          style={{
+                            background: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: 8,
+                            padding: 8,
+                            display: 'inline-block',
+                          }}
+                        >
+                          <img
+                            src={currentSignature}
+                            alt="Chữ ký hiện tại"
+                            style={{ maxHeight: 80, maxWidth: 300, objectFit: 'contain', display: 'block' }}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                          <FaCheckCircle style={{ color: '#16a34a', fontSize: '0.8rem' }} />
+                          <span style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: 600 }}>
+                            Đã thiết lập chữ ký
+                          </span>
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          border: '1.5px solid #fde68a',
+                          borderRadius: 12,
+                          padding: 14,
+                          background: '#fffbeb',
+                        }}
+                      >
+                        <p style={{ fontSize: '0.82rem', fontWeight: 700, color: '#92400e', marginBottom: 6 }}>
+                          🔒 Chữ ký đã được khoá
+                        </p>
+                        <p style={{ fontSize: '0.78rem', color: '#78350f', lineHeight: 1.6, marginBottom: 10 }}>
+                          Để đảm bảo tính pháp lý của hợp đồng, chữ ký điện tử không thể tự thay đổi sau khi đã được sử
+                          dụng. Nếu cần cập nhật, vui lòng liên hệ quản trị viên.
+                        </p>
+                        <a
+                          href="mailto:admin@smartrent.vn?subject=Y%C3%AAu%20c%E1%BA%A7u%20thay%20%C4%91%E1%BB%95i%20ch%E1%BB%AF%20k%C3%BD%20showroom"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '7px 14px',
+                            border: '1.5px solid #d97706',
+                            borderRadius: 8,
+                            background: '#fff',
+                            fontSize: '0.8rem',
+                            fontWeight: 600,
+                            color: '#b45309',
+                            textDecoration: 'none',
+                          }}
+                        >
+                          ✉️ Gửi yêu cầu thay đổi cho Admin
+                        </a>
+                      </div>
+                    </div>
+                  ) : (
+                    /* ── Chưa có chữ ký: pad + confirm ── */
+                    <div>
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151', marginBottom: 8 }}>
+                          Vẽ chữ ký của bạn:
+                        </div>
+                        <SignaturePad
+                          key={sigPadKey.current}
+                          width={480}
+                          height={150}
+                          label=""
+                          onSign={(s) => {
+                            setNewSignature(s);
+                            setSigConfirming(false);
+                          }}
+                          onClear={() => {
+                            setNewSignature(null);
+                            setSigConfirming(false);
+                          }}
+                        />
+                      </div>
+
+                      {sigError && (
+                        <div
+                          style={{
+                            background: '#fef2f2',
+                            border: '1px solid #fecaca',
+                            borderRadius: 8,
+                            padding: '8px 12px',
+                            fontSize: '0.8rem',
+                            color: '#b91c1c',
+                            marginBottom: 12,
+                          }}
+                        >
+                          {sigError}
+                        </div>
+                      )}
+
+                      {sigSaved && (
+                        <div
+                          style={{
+                            background: '#f0fdf4',
+                            border: '1px solid #bbf7d0',
+                            borderRadius: 8,
+                            padding: '8px 12px',
+                            fontSize: '0.8rem',
+                            color: '#15803d',
+                            marginBottom: 12,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                          }}
+                        >
+                          <FaCheckCircle /> Đã lưu chữ ký thành công!
+                        </div>
+                      )}
+
+                      {!sigConfirming ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!newSignature) {
+                              setSigError('Vui lòng vẽ chữ ký trước khi lưu.');
+                              return;
+                            }
+                            setSigError('');
+                            setSigConfirming(true);
+                          }}
+                          disabled={!newSignature}
+                          className="btn-primary"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            opacity: !newSignature ? 0.6 : 1,
+                            cursor: !newSignature ? 'not-allowed' : 'pointer',
+                          }}
+                        >
+                          <FaFileSignature aria-hidden /> Lưu chữ ký
+                        </button>
+                      ) : (
+                        <div
+                          style={{
+                            border: '2px solid #f59e0b',
+                            borderRadius: 12,
+                            padding: 14,
+                            background: '#fffbeb',
+                          }}
+                        >
+                          <p style={{ fontSize: '0.82rem', fontWeight: 700, color: '#92400e', marginBottom: 6 }}>
+                            ⚠️ Xác nhận lưu chữ ký
+                          </p>
+                          <p style={{ fontSize: '0.78rem', color: '#78350f', lineHeight: 1.6, marginBottom: 12 }}>
+                            Sau khi lưu, <strong>chữ ký sẽ được khoá vĩnh viễn</strong> và không thể tự thay đổi. Nếu
+                            cần cập nhật sau này phải liên hệ admin.
+                          </p>
+                          <div style={{ display: 'flex', gap: 10 }}>
+                            <button
+                              type="button"
+                              onClick={() => setSigConfirming(false)}
+                              style={{
+                                flex: 1,
+                                padding: '8px 0',
+                                border: '1.5px solid #e5e7eb',
+                                borderRadius: 8,
+                                background: '#fff',
+                                fontSize: '0.85rem',
+                                fontWeight: 600,
+                                color: '#374151',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Hủy
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleSaveSignature}
+                              disabled={sigSaving}
+                              className="btn-primary"
+                              style={{
+                                flex: 1,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 6,
+                                opacity: sigSaving ? 0.6 : 1,
+                                cursor: sigSaving ? 'not-allowed' : 'pointer',
+                              }}
+                            >
+                              {sigSaving ? (
+                                <>
+                                  <FaSpinner className="animate-spin" aria-hidden /> Đang lưu...
+                                </>
+                              ) : (
+                                <>✓ Xác nhận lưu</>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

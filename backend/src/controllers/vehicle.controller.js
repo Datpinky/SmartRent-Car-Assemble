@@ -31,6 +31,19 @@ class VeHicleController {
         }
     }
 
+    async getVehiclesByIds(req, res, next) {
+        try {
+            const { vehicle_ids } = req.body;
+            if (!Array.isArray(vehicle_ids) || vehicle_ids.length === 0) {
+                return res.status(400).json({ message: "vehicle_ids phải là mảng không rỗng" });
+            }
+            const data = await vehicleService.getVehiclesByIds(vehicle_ids);
+            return res.status(200).json({ message: "Lấy batch vehicles thành công", data });
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async deleteVehicleById(req, res, next) {
         try {
             const vehicleId = req.params.vehicleId;

@@ -11,24 +11,16 @@ router.post(
     "/get-by-vehicle",
     reviewValidation.getReviewsByVehicleId,
     validate,
-    reviewController.getReviewsByVehicleId
+    reviewController.getReviewsByVehicleId,
 );
+
+router.post("/batch-summary", reviewController.getBatchSummary);
 
 router.use(authMiddleware);
 router.use(authorizeRoles("user"));
 
-router.post(
-    "/create",
-    reviewValidation.createReview,
-    validate,
-    reviewController.createReview
-);
+router.post("/create", reviewValidation.createReview, validate, reviewController.createReview);
 
-router.patch(
-    "/update",
-    reviewValidation.updateReview,
-    validate,
-    reviewController.updateReview
-);
+router.patch("/update", reviewValidation.updateReview, validate, reviewController.updateReview);
 
 module.exports = router;

@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
 import { BsLightningChargeFill } from 'react-icons/bs';
 import { FaGasPump, FaHeart, FaMapMarkerAlt, FaRegHeart, FaStar, FaStore } from 'react-icons/fa';
 import { MdDirectionsCar, MdPeople, MdSettings } from 'react-icons/md';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import favoriteService from '../../services/favoriteService';
 import { buildRentalWindowQuery } from '../../utils/rentalWindow';
@@ -27,7 +27,9 @@ const CarColorBg = ({ color, name }) => {
   return (
     <div
       className="flex h-full w-full items-center justify-center"
-      style={{ background: `linear-gradient(135deg, hsl(${hue},30%,88%) 0%, hsl(${hue},20%,95%) 100%)` }}
+      style={{
+        background: `linear-gradient(135deg, hsl(${hue},30%,88%) 0%, hsl(${hue},20%,95%) 100%)`,
+      }}
     >
       <MdDirectionsCar
         style={{
@@ -63,7 +65,7 @@ const extractFavoriteIds = (payload) => {
     items
       .map((item) => item?.vehicle_id?._id || item?.vehicle_id?.id || item?.vehicle_id)
       .filter(Boolean)
-      .map(String)
+      .map(String),
   );
 };
 
@@ -95,14 +97,15 @@ const CarCard = ({ car, rentalSearch = null }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [liked, setLiked] = useState(
-    typeof car?.isFavorited === 'boolean' ? car.isFavorited : null
-  );
+  const [liked, setLiked] = useState(typeof car?.isFavorited === 'boolean' ? car.isFavorited : null);
   const [likeLoading, setLikeLoading] = useState(false);
   const [imgError, setImgError] = useState(false);
 
   const carId = car.id || car._id;
-  const imageUrl = useMemo(() => car.image || (Array.isArray(car.images) ? car.images[0] : ''), [car.image, car.images]);
+  const imageUrl = useMemo(
+    () => car.image || (Array.isArray(car.images) ? car.images[0] : ''),
+    [car.image, car.images],
+  );
   const locationText = car.address || car.pickupAddress || car.location || '';
   const displayAddress = locationText;
   const ratingValue = Number(car.rating || 0);
@@ -137,7 +140,7 @@ const CarCard = ({ car, rentalSearch = null }) => {
     return () => {
       mounted = false;
     };
-  }, [car?.isFavorited, carId, user]);
+  }, [car?.isFavorited, carId, user?._id, user?.role]);
 
   const handleLike = async (event) => {
     event.stopPropagation();
@@ -198,8 +201,9 @@ const CarCard = ({ car, rentalSearch = null }) => {
 
         <button
           type="button"
-          className={`absolute right-3 top-3 z-[2] flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-transform hover:scale-110 ${liked === true ? 'text-red-500' : liked === false ? 'text-gray-400' : 'text-gray-300'
-            } ${likeLoading ? 'cursor-wait opacity-50' : ''}`}
+          className={`absolute right-3 top-3 z-[2] flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-transform hover:scale-110 ${
+            liked === true ? 'text-red-500' : liked === false ? 'text-gray-400' : 'text-gray-300'
+          } ${likeLoading ? 'cursor-wait opacity-50' : ''}`}
           onClick={handleLike}
           disabled={likeLoading}
           aria-label="Yêu thích"
@@ -236,9 +240,7 @@ const CarCard = ({ car, rentalSearch = null }) => {
 
         <div className="flex items-center gap-1.5 mt-0.5">
           <StarRating rating={ratingValue} />
-          {reviewCount > 0 && (
-            <span className="text-[0.8rem] font-bold text-gray-800">{ratingValue.toFixed(1)}</span>
-          )}
+          {reviewCount > 0 && <span className="text-[0.8rem] font-bold text-gray-800">{ratingValue.toFixed(1)}</span>}
           <span className={`text-[0.75rem] ${reviewCount > 0 ? 'text-gray-500' : 'text-gray-400'}`}>
             {reviewCount > 0 ? `(${reviewCount} đánh giá)` : 'Chưa có đánh giá'}
           </span>
@@ -255,13 +257,17 @@ const CarCard = ({ car, rentalSearch = null }) => {
         <div className="flex items-center border-t border-gray-100 mt-2 pt-2.5">
           {[
             { icon: <MdPeople size={18} />, label: `${car.seats || 0} chỗ` },
-            { icon: <MdSettings size={18} />, label: car.transmission || 'Đang cập nhật' },
+            {
+              icon: <MdSettings size={18} />,
+              label: car.transmission || 'Đang cập nhật',
+            },
             { icon: fuelIcon, label: car.fuel || 'Đang cập nhật' },
           ].map(({ icon, label }, index, all) => (
             <div
               key={`${label}-${index}`}
-              className={`flex flex-1 flex-col items-center gap-[3px] text-center text-[0.72rem] font-medium text-gray-500 ${index < all.length - 1 ? 'border-r border-gray-100' : ''
-                }`}
+              className={`flex flex-1 flex-col items-center gap-[3px] text-center text-[0.72rem] font-medium text-gray-500 ${
+                index < all.length - 1 ? 'border-r border-gray-100' : ''
+              }`}
             >
               <span className="text-primary">{icon}</span>
               <span>{label}</span>
