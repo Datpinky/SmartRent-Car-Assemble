@@ -222,6 +222,14 @@ function UploadSlot({ label, hint, file, onFile, type }) {
       setPreview(null);
       return;
     }
+    if (typeof file === 'string') {
+      setPreview(file);
+      return;
+    }
+    if (typeof file?.url === 'string') {
+      setPreview(file.url);
+      return;
+    }
     const url = file.type?.startsWith('image/') ? URL.createObjectURL(file) : null;
     setPreview(url);
     return () => {

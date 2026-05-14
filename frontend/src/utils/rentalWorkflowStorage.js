@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'smartrent:rental-workflows';
+const RETURN_POSITION_KEYS = ['front', 'rear', 'left', 'right', 'interior', 'odometer'];
 
 /** Chỉ draft cục bộ (checklist, ghi chú, URL ảnh tạm). Báo cáo AI chính lấy từ server theo bookingId. */
 const DEFAULT_WORKFLOW = {
@@ -17,8 +18,38 @@ const DEFAULT_WORKFLOW = {
         fuelLevel: false,
     },
     returnNote: '',
-    returnImages: [],
+    returnImages: {},
     updatedAt: '',
+};
+
+const normalizeImageList = (value) => {
+    if (Array.isArray(value)) {
+        return value.filter((item) => typeof item === 'string' && item.trim());
+    }
+    if (typeof value === 'string' && value.trim()) {
+        return [value.trim()];
+    }
+    return [];
+};
+
+const normalizeReturnImages = (value) => {
+    if (Array.isArray(value)) {
+        return RETURN_POSITION_KEYS.reduce((acc, key, index) => {
+            const normalized = normalizeImageList(value[index]);
+            if (normalized.length) acc[key] = normalized;
+            return acc;
+        }, {});
+    }
+
+    if (value && typeof value === 'object') {
+        return Object.entries(value).reduce((acc, [key, images]) => {
+            const normalized = normalizeImageList(images);
+            if (normalized.length) acc[key] = normalized;
+            return acc;
+        }, {});
+    }
+
+    return {};
 };
 
 const readAll = () => {
@@ -55,7 +86,7 @@ export const getRentalWorkflow = (bookingId) => {
             ...(stored.returnChecklist || {}),
         },
         receiveImages: Array.isArray(stored.receiveImages) ? stored.receiveImages : [],
-        returnImages: Array.isArray(stored.returnImages) ? stored.returnImages : [],
+        returnImages: normalizeReturnImages(stored.returnImages),
     };
 };
 
@@ -79,6 +110,7 @@ export const saveRentalWorkflow = (bookingId, updates) => {
             ...current.returnChecklist,
             ...(updatesSafe.returnChecklist || {}),
         },
+        returnImages: normalizeReturnImages(updatesSafe.returnImages ?? current.returnImages),
         updatedAt: new Date().toISOString(),
     };
 

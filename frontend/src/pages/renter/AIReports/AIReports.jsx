@@ -4,6 +4,7 @@ import { FaArrowRight, FaDownload, FaImage, FaRobot } from 'react-icons/fa';
 import AIInspectionReportView from '../../../components/common/AIInspectionReportView';
 import StatusBadge from '../../../components/common/StatusBadge';
 import bookingService from '../../../services/bookingService';
+import inspectionService, { attachLatestAiInspectionToBookings } from '../../../services/inspectionService';
 import { getAiInspectionSummaryMeta, mapServerAiInspectionToViewModel } from '../../../utils/aiInspectionReport';
 
 const formatDateTime = (value) => {
@@ -59,12 +60,16 @@ const AIReports = () => {
     const loadReports = async () => {
       setLoading(true);
       try {
-        const bookings = await bookingService.getCurrentRoleBookingsDetailed();
+        const [bookings, inspectionResponse] = await Promise.all([
+          bookingService.getCurrentRoleBookingsDetailed(),
+          inspectionService.list({ inspection_type: 'return', page: 1, limit: 200 }),
+        ]);
         if (!mounted) {
           return;
         }
 
-        const mapped = (bookings || [])
+        const withAi = attachLatestAiInspectionToBookings(bookings || [], inspectionResponse?.items || []);
+        const mapped = withAi
           .map(mapReportBooking)
           .filter((row) => Boolean(row.report))
           .sort(

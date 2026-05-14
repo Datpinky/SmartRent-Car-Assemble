@@ -25,19 +25,21 @@ class InspectionController {
       // Normalize role: 'user' in DB means 'renter'
       const normalizedUserRole = user_role === 'user' ? 'renter' : user_role;
       const inspected_by_name = req.user.name || req.user.email || '';
+      const effectiveInspectedByRole =
+        normalizedUserRole === 'admin' ? inspected_by_role || 'showroom' : normalizedUserRole;
 
       // Access control: ensure user role matches inspection role
-      if (inspected_by_role && inspected_by_role !== normalizedUserRole && normalizedUserRole !== 'renter') {
+      if (inspected_by_role && inspected_by_role !== normalizedUserRole && normalizedUserRole !== 'admin') {
         return res.status(403).json({ message: 'Khong co quyen tao kiem tra voi vai tro nay' });
       }
 
       const doc = await VehicleInspection.create({
         vehicle_id,
         booking_id: booking_id || null,
-        showroom_id: inspected_by_role === 'showroom' ? user_id : null,
+        showroom_id: effectiveInspectedByRole === 'showroom' ? user_id : null,
         inspected_by_id: inspected_by_id || user_id,
         inspection_type: inspection_type || 'pickup',
-        inspected_by_role: inspected_by_role || normalizedUserRole,
+        inspected_by_role: effectiveInspectedByRole,
         inspected_by_name,
         vehicle_name: vehicle_name || '',
         vehicle_plate: vehicle_plate || '',
@@ -61,12 +63,14 @@ class InspectionController {
       const user_id = req.user.userId;
       const user_role = req.user.role || 'showroom';
       const normalizedUserRole = user_role === 'user' ? 'renter' : user_role;
-      const { page = 1, limit = 30, vehicle_id, booking_id } = req.query;
+      const { page = 1, limit = 30, vehicle_id, booking_id, inspection_type, inspected_by_role } = req.query;
 
       // For showroom: filter by showroom_id. For renter/user: filter by inspected_by_id
       const baseFilter = normalizedUserRole === 'showroom' ? { showroom_id: user_id } : { inspected_by_id: user_id };
       if (vehicle_id) baseFilter.vehicle_id = vehicle_id;
       if (booking_id) baseFilter.booking_id = booking_id;
+      if (inspection_type) baseFilter.inspection_type = inspection_type;
+      if (inspected_by_role) baseFilter.inspected_by_role = inspected_by_role;
 
       const skip = (Number(page) - 1) * Number(limit);
 
@@ -91,12 +95,13 @@ class InspectionController {
         bookingIds = userInspections.filter((i) => i.booking_id).map((i) => i.booking_id._id || i.booking_id);
       }
 
-      if (bookingIds.length > 0) {
+      if (bookingIds.length > 0 && !inspected_by_role) {
         // Fetch inspections from OTHER roles for the same bookings
         const otherRoleFilter = {
           booking_id: { $in: bookingIds },
           inspected_by_role: { $ne: normalizedUserRole }, // Get inspections from OTHER roles
         };
+        if (inspection_type) otherRoleFilter.inspection_type = inspection_type;
         const otherInspections = await VehicleInspection.find(otherRoleFilter)
           .populate('vehicle_id', 'vehicle_name vehicle_brand vehicle_model vehicle_plate_number')
           .populate('booking_id', '_id start_date end_date');

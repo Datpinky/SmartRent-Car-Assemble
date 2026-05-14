@@ -43,6 +43,17 @@ const SEVERITY_LABEL = {
 
 const makeInitialPosFiles = () => Object.fromEntries(POSITIONS.map((p) => [p.key, { after: null }]));
 
+const getFirstStoredImage = (imagesByPosition, positionKey) => {
+  const value = imagesByPosition?.[positionKey];
+  if (Array.isArray(value)) {
+    return value.find((item) => typeof item === 'string' && item.trim()) || '';
+  }
+  if (typeof value === 'string' && value.trim()) {
+    return value.trim();
+  }
+  return '';
+};
+
 const ReturnInspectionHistory = () => {
   const [tab, setTab] = useState('new');
   const [step, setStep] = useState(1);
@@ -80,9 +91,10 @@ const ReturnInspectionHistory = () => {
     setLoadingBookings(true);
     try {
       const all = await bookingService.getCurrentRoleBookings();
-      // Filter only completed bookings
-      const completed = (all || []).filter((b) => b.status === 'completed');
-      setBookings(completed);
+      const eligible = (all || []).filter((b) =>
+        ['in_use', 'waiting_return_confirmation', 'completed'].includes(b.status),
+      );
+      setBookings(eligible);
     } catch {
       setBookings([]);
     } finally {
@@ -93,6 +105,7 @@ const ReturnInspectionHistory = () => {
   // ── Load pickup images from selected booking + renter's return images ──
   const loadPickupImages = useCallback(async (bookingId) => {
     setPickupImagesUrls([]);
+    setPosFiles(makeInitialPosFiles());
     if (!bookingId) return;
     try {
       console.log('🔍 loadPickupImages START for booking:', bookingId);
@@ -110,6 +123,8 @@ const ReturnInspectionHistory = () => {
 
       // Load from localStorage (checklist images uploaded by renter)
       const workflow = getRentalWorkflow(bookingId);
+      const checklistImagesByPosition =
+        workflow?.returnImages && !Array.isArray(workflow.returnImages) ? workflow.returnImages : {};
       console.log('💾 Raw localStorage workflow:', workflow);
       console.log('💾 workflow.returnImages structure:', {
         type: typeof workflow?.returnImages,
@@ -130,7 +145,7 @@ const ReturnInspectionHistory = () => {
       });
 
       // Load renter's inspection record (return inspection) to get uploaded after_urls
-      let returnInspectionImages = [];
+      let returnInspectionImages = {};
       try {
         console.log('🔍 Querying inspections with params:', {
           booking_id: bookingId,
@@ -140,6 +155,7 @@ const ReturnInspectionHistory = () => {
         const { items } = await inspectionService.list({
           booking_id: bookingId,
           inspection_type: 'return',
+          inspected_by_role: 'renter',
           limit: 1,
         });
         console.log('🔍 Inspection query result:', items?.length || 0, 'inspections', 'Full items:', items);
@@ -147,16 +163,15 @@ const ReturnInspectionHistory = () => {
           const returnInspection = items[0];
           if (Array.isArray(returnInspection.positions)) {
             // Extract after_urls from inspection positions
-            const inspectionImages = new Array(POSITIONS.length);
+            const inspectionImages = {};
             returnInspection.positions.forEach((pos) => {
-              const posIdx = POSITIONS.findIndex((p) => p.key === pos.position_key);
-              if (posIdx >= 0 && pos.after_url) {
-                inspectionImages[posIdx] = pos.after_url;
+              if (pos.position_key && pos.after_url) {
+                inspectionImages[pos.position_key] = pos.after_url;
               }
             });
             returnInspectionImages = inspectionImages;
             console.log('✅ Loaded renter return inspection images:', {
-              count: returnInspectionImages.filter(Boolean).length,
+              count: Object.keys(returnInspectionImages).length,
               images: returnInspectionImages,
             });
           }
@@ -171,23 +186,32 @@ const ReturnInspectionHistory = () => {
         // Priority: inspection images (uploaded) > localStorage > booking images
         mergedImages[i] = returnInspectionImages[i] || checklistImages[i] || bookingImages[i] || '';
       }
+      const showroomBeforeImages = POSITIONS.map((_, index) => bookingImages[index] || '');
+      const hydratedPosFiles = makeInitialPosFiles();
+      POSITIONS.forEach((position) => {
+        hydratedPosFiles[position.key].after =
+          returnInspectionImages[position.key] || getFirstStoredImage(checklistImagesByPosition, position.key) || null;
+      });
 
       console.log('✨ loadPickupImages COMPLETE:', {
         bookingId,
-        totalSlots: mergedImages.length,
-        filled: mergedImages.filter(Boolean).length,
+        totalSlots: showroomBeforeImages.length,
+        filled: showroomBeforeImages.filter(Boolean).length,
         breakdown: {
           fromBooking: bookingImages.length,
-          fromChecklist: checklistImages.length,
-          fromInspection: returnInspectionImages.filter(Boolean).length,
+          fromChecklist: Object.keys(checklistImagesByPosition).length,
+          fromInspection: Object.keys(returnInspectionImages).length,
         },
-        images: mergedImages,
+        images: showroomBeforeImages,
+        renterAfterImages: hydratedPosFiles,
       });
 
-      setPickupImagesUrls(Array.isArray(mergedImages) ? mergedImages : []);
+      setPickupImagesUrls(Array.isArray(showroomBeforeImages) ? showroomBeforeImages : []);
+      setPosFiles(hydratedPosFiles);
     } catch (err) {
       console.error('🚨 loadPickupImages ERROR:', err);
       setPickupImagesUrls([]);
+      setPosFiles(makeInitialPosFiles());
     }
   }, []);
 
@@ -199,6 +223,7 @@ const ReturnInspectionHistory = () => {
         page: 1,
         limit: 50,
         inspection_type: 'return',
+        inspected_by_role: 'renter',
       });
       setHistoryRows(Array.isArray(items) ? items : []);
     } catch {
@@ -245,6 +270,7 @@ const ReturnInspectionHistory = () => {
 
     try {
       let analysisData = null;
+      let analyzedPositionsCount = 0;
 
       // Only call AI if showroom has uploaded before images
       if (hasSomeShowroomImages) {
@@ -253,6 +279,8 @@ const ReturnInspectionHistory = () => {
           validPositions.map(async (p) => {
             const posIdx = POSITIONS.findIndex((pp) => pp.key === p.key);
             let beforeFile = posFiles[p.key].before;
+            let afterFile = posFiles[p.key].after;
+            const afterUrl = typeof afterFile === 'string' ? afterFile : '';
             const pickupUrl = pickupImagesUrls[posIdx];
 
             // Fetch showroom image if available
@@ -266,17 +294,34 @@ const ReturnInspectionHistory = () => {
               }
             }
 
+            if (afterUrl) {
+              try {
+                const resp = await fetch(afterUrl);
+                const blob = await resp.blob();
+                afterFile = new File([blob], `return_${p.key}.jpg`, { type: blob.type || 'image/jpeg' });
+              } catch {
+                afterFile = null;
+              }
+            }
+
             return {
               key: p.key,
               label: p.label,
               beforeFile,
-              afterFile: posFiles[p.key].after,
+              afterFile,
+              afterUrl,
             };
           }),
         );
 
+        const analyzablePositions = positionsInput.filter((position) => position.beforeFile && position.afterFile);
+        if (analyzablePositions.length === 0) {
+          throw new Error('Cần ít nhất một cặp ảnh TRƯỚC và SAU hợp lệ để phân tích AI.');
+        }
+
         // Call AI comparison
-        analysisData = await uploadService.compareMultiPosition(positionsInput);
+        analysisData = await uploadService.compareMultiPosition(analyzablePositions);
+        analyzedPositionsCount = analyzablePositions.length;
         setAnalysisResult(analysisData);
       }
 
@@ -297,7 +342,8 @@ const ReturnInspectionHistory = () => {
           }
 
           // Upload after image
-          if (posFiles[p.key].after) {
+          const existingAfterUrl = typeof posFiles[p.key].after === 'string' ? posFiles[p.key].after : '';
+          if (!existingAfterUrl && posFiles[p.key].after) {
             filesToUpload.push(posFiles[p.key].after);
             uploadMap.push({ posKey: p.key, type: 'after' });
           }
@@ -313,7 +359,8 @@ const ReturnInspectionHistory = () => {
         validPositions.forEach((p) => {
           const posIdx = POSITIONS.findIndex((pp) => pp.key === p.key);
           const beforeUrl = pickupImagesUrls[posIdx] || urlByPosType[`${p.key}_before`] || '';
-          const afterUrl = urlByPosType[`${p.key}_after`] || '';
+          const existingAfterUrl = typeof posFiles[p.key].after === 'string' ? posFiles[p.key].after : '';
+          const afterUrl = existingAfterUrl || urlByPosType[`${p.key}_after`] || '';
 
           positionsRecord.push({
             position_key: p.key,
@@ -352,7 +399,7 @@ const ReturnInspectionHistory = () => {
         vehicle_plate: selectedBooking.vehicle_plate || selectedBooking.plate || '',
         booking_code: bCode,
         positions: positionsRecord,
-        positions_analyzed: validPositions.length,
+        positions_analyzed: analyzedPositionsCount,
         ai_payload: analysisData || {},
         damage_detected: !!analysisData?.damage_detected,
         severity: analysisData?.severity || 'none',

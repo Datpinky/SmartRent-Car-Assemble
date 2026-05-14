@@ -1,7 +1,26 @@
 const { GoogleGenerativeAI, SchemaType } = require('@google/generative-ai');
 const throwError = require('../utils/throwError');
 
-/** Schema Gemini JSON mode — giảm lỗi parse so với chỉ dùng prompt. */
+const SEVERITY_VALUES = ['none', 'minor', 'moderate', 'severe'];
+const DEFAULT_DISCLAIMER =
+  'Danh gia AI chi mang tinh ho tro, khong thay the cho kiem tra thuc te, nghiep vu hoac phap ly.';
+const JSON_ONLY_SYSTEM_INSTRUCTION = [
+  'You are an expert vehicle inspection assistant.',
+  'Return exactly one valid JSON object that matches the response schema.',
+  'Do not include markdown, code fences, prose, or extra keys outside the schema.',
+  'Use Vietnamese for human-readable string fields.',
+].join(' ');
+
+const DIFFERENCE_SCHEMA = {
+  type: SchemaType.OBJECT,
+  properties: {
+    area: { type: SchemaType.STRING },
+    description: { type: SchemaType.STRING },
+    likely_new_damage: { type: SchemaType.BOOLEAN },
+  },
+  required: ['area', 'description', 'likely_new_damage'],
+};
+
 const DAMAGE_RESPONSE_SCHEMA = {
   type: SchemaType.OBJECT,
   properties: {
@@ -9,24 +28,56 @@ const DAMAGE_RESPONSE_SCHEMA = {
     severity: {
       type: SchemaType.STRING,
       format: 'enum',
-      enum: ['none', 'minor', 'moderate', 'severe'],
+      enum: SEVERITY_VALUES,
     },
     summary: { type: SchemaType.STRING },
     differences: {
       type: SchemaType.ARRAY,
-      items: {
-        type: SchemaType.OBJECT,
-        properties: {
-          area: { type: SchemaType.STRING },
-          description: { type: SchemaType.STRING },
-          likely_new_damage: { type: SchemaType.BOOLEAN },
-        },
-      },
+      items: DIFFERENCE_SCHEMA,
     },
     conclusion: { type: SchemaType.STRING },
     disclaimer: { type: SchemaType.STRING },
   },
   required: ['damage_detected', 'severity', 'summary', 'differences', 'conclusion', 'disclaimer'],
+};
+
+const POSITION_RESULT_SCHEMA = {
+  type: SchemaType.OBJECT,
+  properties: {
+    position: { type: SchemaType.STRING },
+    damage_detected: { type: SchemaType.BOOLEAN },
+    severity: {
+      type: SchemaType.STRING,
+      format: 'enum',
+      enum: SEVERITY_VALUES,
+    },
+    differences: {
+      type: SchemaType.ARRAY,
+      items: DIFFERENCE_SCHEMA,
+    },
+    notes: { type: SchemaType.STRING },
+  },
+  required: ['position', 'damage_detected', 'severity', 'differences', 'notes'],
+};
+
+const MULTI_DAMAGE_RESPONSE_SCHEMA = {
+  type: SchemaType.OBJECT,
+  properties: {
+    damage_detected: { type: SchemaType.BOOLEAN },
+    severity: {
+      type: SchemaType.STRING,
+      format: 'enum',
+      enum: SEVERITY_VALUES,
+    },
+    summary: { type: SchemaType.STRING },
+    positions: {
+      type: SchemaType.ARRAY,
+      items: POSITION_RESULT_SCHEMA,
+    },
+    conclusion: { type: SchemaType.STRING },
+    disclaimer: { type: SchemaType.STRING },
+  },
+  required: ['damage_detected', 'severity', 'summary', 'positions', 'conclusion', 'disclaimer'],
 };
 
 class AiService {
@@ -37,7 +88,7 @@ class AiService {
   getGenAI() {
     const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     if (!apiKey) {
-      throwError('GEMINI_API_KEY (hoặc GOOGLE_API_KEY) chưa được cấu hình', 503);
+      throwError('GEMINI_API_KEY (hoac GOOGLE_API_KEY) chua duoc cau hinh', 503);
     }
     if (!this._genAI) {
       this._genAI = new GoogleGenerativeAI(apiKey);
@@ -45,75 +96,157 @@ class AiService {
     return this._genAI;
   }
 
-  /**
-   * So sánh ảnh xe trước cho thuê (doanh nghiệp) và sau khi trả (người thuê).
-   * @param {{ buffer: Buffer, mimetype: string }} before - ảnh tham chiếu trước thuê
-   * @param {{ buffer: Buffer, mimetype: string }} after - ảnh khi trả xe
-   */
-  async compareVehicleRentalDamage(before, after) {
+  _getModel(schema, maxOutputTokens = 8192) {
     const genAI = this.getGenAI();
     const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 
-    const model = genAI.getGenerativeModel({
+    return genAI.getGenerativeModel({
       model: modelName,
-      systemInstruction:
-        'Bạn là chuyên gia đánh giá tình trạng xe cho thuê. Trả lời bằng tiếng Việt, đúng schema JSON.',
+      systemInstruction: JSON_ONLY_SYSTEM_INSTRUCTION,
       generationConfig: {
-        maxOutputTokens: 4096,
+        temperature: 0,
+        maxOutputTokens,
         responseMimeType: 'application/json',
-        responseSchema: DAMAGE_RESPONSE_SCHEMA,
+        responseSchema: schema,
       },
     });
-
-    const userText = [
-      'Bạn nhận hai ảnh xe ô tô (hoặc xe máy) theo thứ tự:',
-      'ẢNH 1: tình trạng xe TRƯỚC KHI cho thuê (ảnh chuẩn của doanh nghiệp).',
-      'ẢNH 2: tình trạng xe KHI TRẢ (ảnh do người thuê cung cấp).',
-      '',
-      'Nhiệm vụ: so sánh để phát hiện thiệt hại hoặc hư hỏng mới có khả năng xảy ra trong thời gian thuê.',
-      'Nếu góc chụp hoặc ánh sáng khác nhau nhiều, hãy nêu rõ độ tin cậy bị ảnh hưởng và tránh kết luận quá chắc chắn.',
-      'Trường "disclaimer" phải nhắc rằng đánh giá mang tính hỗ trợ, không thay thế kiểm tra thực tế / pháp lý.',
-    ].join('\n');
-
-    const result = await model.generateContent([
-      { text: userText },
-      {
-        inlineData: {
-          mimeType: before.mimetype,
-          data: before.buffer.toString('base64'),
-        },
-      },
-      {
-        inlineData: {
-          mimeType: after.mimetype,
-          data: after.buffer.toString('base64'),
-        },
-      },
-    ]);
-
-    const response = result.response;
-    let raw = '';
-    try {
-      raw = response.text()?.trim() || '';
-    } catch {
-      raw = this._concatCandidateTextParts(response);
-    }
-
-    if (!raw) {
-      const blockReason = response.promptFeedback?.blockReason;
-      throwError(blockReason ? `Gemini từ chối yêu cầu (${blockReason})` : 'Gemini không trả về nội dung', 502);
-    }
-
-    return this._parseJsonResponse(raw);
   }
 
-  /** Khi response.text() ném lỗi (finish reason), vẫn thử lấy text từ parts. */
+  _toInlineData(file) {
+    return {
+      inlineData: {
+        mimeType: file.mimetype,
+        data: file.buffer.toString('base64'),
+      },
+    };
+  }
+
+  _toString(value, fallback = '') {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed || fallback;
+    }
+    if (value === null || value === undefined) return fallback;
+    return String(value).trim() || fallback;
+  }
+
+  _toBoolean(value) {
+    return value === true;
+  }
+
+  _normalizeSeverity(value, fallback = 'none') {
+    const normalized = this._toString(value, '').toLowerCase();
+    return SEVERITY_VALUES.includes(normalized) ? normalized : fallback;
+  }
+
+  _severityRank(value) {
+    return Math.max(0, SEVERITY_VALUES.indexOf(this._normalizeSeverity(value)));
+  }
+
+  _maxSeverity(values = []) {
+    return values.reduce(
+      (current, candidate) =>
+        this._severityRank(candidate) > this._severityRank(current) ? this._normalizeSeverity(candidate) : current,
+      'none',
+    );
+  }
+
+  _normalizeDifference(item) {
+    return {
+      area: this._toString(item?.area, 'Khong xac dinh'),
+      description: this._toString(item?.description, ''),
+      likely_new_damage: this._toBoolean(item?.likely_new_damage),
+    };
+  }
+
+  _defaultSingleSummary(damageDetected) {
+    return damageDetected
+      ? 'AI phat hien thay doi can kiem tra them giua anh truoc va anh sau.'
+      : 'AI chua phat hien hu hong moi ro rang giua hai anh.';
+  }
+
+  _defaultSingleConclusion(damageDetected) {
+    return damageDetected
+      ? 'Nen kiem tra truc tiep de xac nhan muc do va nguyen nhan thay doi.'
+      : 'Xe co ve khong co thay doi ro rang canh bao trong cap anh nay.';
+  }
+
+  _defaultMultiSummary(damageDetected, count) {
+    return damageDetected
+      ? `AI phat hien it nhat mot vi tri can luu y trong ${count} vi tri da so sanh.`
+      : `AI chua phat hien hu hong moi ro rang trong ${count} vi tri da so sanh.`;
+  }
+
+  _defaultMultiConclusion(damageDetected) {
+    return damageDetected
+      ? 'Nen doi chieu truc tiep tung vi tri duoc canh bao de xac nhan ket qua.'
+      : 'Khong co dau hieu bat thuong ro rang trong cac vi tri da duoc AI so sanh.';
+  }
+
+  _normalizePositionResult(item, fallbackLabel) {
+    const differences = Array.isArray(item?.differences) ? item.differences.map((entry) => this._normalizeDifference(entry)) : [];
+    const damageDetected = this._toBoolean(item?.damage_detected) || differences.some((entry) => entry.likely_new_damage);
+    const rawSeverity = this._normalizeSeverity(item?.severity, damageDetected ? 'minor' : 'none');
+
+    return {
+      position: this._toString(item?.position, fallbackLabel),
+      damage_detected: damageDetected,
+      severity: damageDetected ? rawSeverity : 'none',
+      differences,
+      notes: this._toString(
+        item?.notes,
+        damageDetected ? 'Can doi chieu thuc te de xac nhan thay doi.' : 'Khong thay thay doi moi ro rang.',
+      ),
+    };
+  }
+
+  _normalizeSingleDamagePayload(payload) {
+    const differences = Array.isArray(payload?.differences) ? payload.differences.map((entry) => this._normalizeDifference(entry)) : [];
+    const damageDetected = this._toBoolean(payload?.damage_detected) || differences.some((entry) => entry.likely_new_damage);
+    const rawSeverity = this._normalizeSeverity(payload?.severity, damageDetected ? 'minor' : 'none');
+
+    return {
+      damage_detected: damageDetected,
+      severity: damageDetected ? rawSeverity : 'none',
+      summary: this._toString(payload?.summary, this._defaultSingleSummary(damageDetected)),
+      differences,
+      conclusion: this._toString(payload?.conclusion, this._defaultSingleConclusion(damageDetected)),
+      disclaimer: this._toString(payload?.disclaimer, DEFAULT_DISCLAIMER),
+    };
+  }
+
+  _normalizeMultiDamagePayload(payload, expectedLabels = []) {
+    const sourcePositions = Array.isArray(payload?.positions) ? payload.positions : [];
+    const fallbackLabels =
+      expectedLabels.length > 0 ? expectedLabels : sourcePositions.map((_, index) => `Vi tri ${index + 1}`);
+
+    const normalizedPositions = fallbackLabels.map((label, index) =>
+      this._normalizePositionResult(sourcePositions[index], label),
+    );
+
+    const damageDetected =
+      this._toBoolean(payload?.damage_detected) || normalizedPositions.some((position) => position.damage_detected);
+    const derivedSeverity = this._maxSeverity(normalizedPositions.map((position) => position.severity));
+    const topSeverity = damageDetected
+      ? this._normalizeSeverity(payload?.severity, derivedSeverity === 'none' ? 'minor' : derivedSeverity)
+      : 'none';
+
+    return {
+      damage_detected: damageDetected,
+      severity: topSeverity,
+      summary: this._toString(payload?.summary, this._defaultMultiSummary(damageDetected, normalizedPositions.length)),
+      positions: normalizedPositions,
+      conclusion: this._toString(payload?.conclusion, this._defaultMultiConclusion(damageDetected)),
+      disclaimer: this._toString(payload?.disclaimer, DEFAULT_DISCLAIMER),
+    };
+  }
+
   _concatCandidateTextParts(response) {
     try {
       const parts = response?.candidates?.[0]?.content?.parts;
       if (!Array.isArray(parts)) return '';
       return parts
-        .map((p) => (typeof p.text === 'string' ? p.text : ''))
+        .map((part) => (typeof part.text === 'string' ? part.text : ''))
         .join('')
         .trim();
     } catch {
@@ -121,52 +254,55 @@ class AiService {
     }
   }
 
-  /**
-   * Cắt object JSON đầu tiên có ngoặc cân bằng (kể cả chuỗi có dấu " escape).
-   * Tránh lỗi khi model thêm markdown / lời dẫn quanh JSON.
-   */
   _extractBalancedJsonObject(str) {
     const start = str.indexOf('{');
     if (start === -1) return null;
+
     let depth = 0;
     let inString = false;
     let escape = false;
+
     for (let i = start; i < str.length; i++) {
-      const c = str[i];
+      const char = str[i];
+
       if (escape) {
         escape = false;
         continue;
       }
+
       if (inString) {
-        if (c === '\\') {
+        if (char === '\\') {
           escape = true;
           continue;
         }
-        if (c === '"') inString = false;
+        if (char === '"') inString = false;
         continue;
       }
-      if (c === '"') {
+
+      if (char === '"') {
         inString = true;
         continue;
       }
-      if (c === '{') depth++;
-      else if (c === '}') {
+
+      if (char === '{') depth++;
+      if (char === '}') {
         depth--;
         if (depth === 0) return str.slice(start, i + 1);
       }
     }
+
     return null;
   }
 
-  _parseJsonResponse(raw) {
+  _parseJsonResponse(raw, contextLabel = 'gemini') {
     let text = String(raw ?? '')
       .replace(/^\uFEFF/, '')
       .trim();
+
     if (!text) {
-      throwError('Không phân tích được kết quả AI (JSON không hợp lệ)', 502);
+      throwError('Khong phan tich duoc ket qua AI (JSON khong hop le)', 502);
     }
 
-    // Fence ```json ... ``` ở bất kỳ đâu trong chuỗi (SDK đôi khi nối thêm executableCode)
     const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
     if (fenced) {
       text = fenced[1].trim();
@@ -180,142 +316,116 @@ class AiService {
     const candidates = [];
     const balanced = this._extractBalancedJsonObject(text);
     if (balanced) candidates.push(balanced);
-    const fb = text.indexOf('{');
-    const lb = text.lastIndexOf('}');
-    if (fb !== -1 && lb > fb) {
-      const slice = text.slice(fb, lb + 1);
-      if (!candidates.includes(slice)) candidates.push(slice);
+
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      const sliced = text.slice(firstBrace, lastBrace + 1);
+      if (!candidates.includes(sliced)) candidates.push(sliced);
     }
+
     if (!candidates.length) candidates.push(text);
 
-    for (const slice of candidates) {
-      const variants = [slice, slice.replace(/,(\s*[}\]])/g, '$1')];
-      for (const v of variants) {
+    for (const candidate of candidates) {
+      const variants = [candidate, candidate.replace(/,(\s*[}\]])/g, '$1')];
+      for (const variant of variants) {
         try {
-          return JSON.parse(v);
+          return JSON.parse(variant);
         } catch {
-          /* thử tiếp */
+          /* try next candidate */
         }
       }
     }
 
-    throwError('Không phân tích được kết quả AI (JSON không hợp lệ)', 502);
+    const preview = text.slice(0, 400).replace(/\s+/g, ' ');
+    console.warn(`[AiService] ${contextLabel} returned non-JSON output`, { preview });
+    throwError('Khong phan tich duoc ket qua AI (JSON khong hop le)', 502);
   }
 
-  /**
-   * So sánh nhiều vị trí xe (tối đa 6) trong một lần gọi Gemini.
-   * @param {Array<{ label: string, before: { buffer: Buffer, mimetype: string }, after: { buffer: Buffer, mimetype: string } }>} positions
-   */
-  async compareMultiPosition(positions) {
-    if (!Array.isArray(positions) || positions.length === 0) {
-      throwError('Cần ít nhất một cặp ảnh để phân tích', 400);
+  _getRawResponseText(response) {
+    try {
+      return response.text()?.trim() || '';
+    } catch {
+      return this._concatCandidateTextParts(response);
+    }
+  }
+
+  _throwIfEmptyResponse(response, raw, contextLabel) {
+    if (raw) return;
+
+    const blockReason = response?.promptFeedback?.blockReason;
+    const finishReason = response?.candidates?.[0]?.finishReason;
+
+    if (blockReason) {
+      throwError(`Gemini tu choi yeu cau (${blockReason})`, 502);
     }
 
-    const genAI = this.getGenAI();
-    const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+    if (finishReason && finishReason !== 'STOP') {
+      throwError(`Gemini khong tra ve JSON hop le (${finishReason})`, 502);
+    }
 
-    const multiSchema = {
-      type: SchemaType.OBJECT,
-      properties: {
-        damage_detected: { type: SchemaType.BOOLEAN },
-        severity: {
-          type: SchemaType.STRING,
-          format: 'enum',
-          enum: ['none', 'minor', 'moderate', 'severe'],
-        },
-        summary: { type: SchemaType.STRING },
-        positions: {
-          type: SchemaType.ARRAY,
-          items: {
-            type: SchemaType.OBJECT,
-            properties: {
-              position: { type: SchemaType.STRING },
-              damage_detected: { type: SchemaType.BOOLEAN },
-              severity: {
-                type: SchemaType.STRING,
-                format: 'enum',
-                enum: ['none', 'minor', 'moderate', 'severe'],
-              },
-              differences: {
-                type: SchemaType.ARRAY,
-                items: {
-                  type: SchemaType.OBJECT,
-                  properties: {
-                    area: { type: SchemaType.STRING },
-                    description: { type: SchemaType.STRING },
-                    likely_new_damage: { type: SchemaType.BOOLEAN },
-                  },
-                },
-              },
-              notes: { type: SchemaType.STRING },
-            },
-            required: ['position', 'damage_detected', 'severity', 'differences', 'notes'],
-          },
-        },
-        conclusion: { type: SchemaType.STRING },
-        disclaimer: { type: SchemaType.STRING },
-      },
-      required: ['damage_detected', 'severity', 'summary', 'positions', 'conclusion', 'disclaimer'],
-    };
+    throwError(`Gemini khong tra ve noi dung (${contextLabel})`, 502);
+  }
 
-    const model = genAI.getGenerativeModel({
-      model: modelName,
-      systemInstruction:
-        'Bạn là chuyên gia đánh giá tình trạng xe cho thuê. Trả lời bằng tiếng Việt, đúng schema JSON.',
-      generationConfig: {
-        maxOutputTokens: 4096,
-        responseMimeType: 'application/json',
-        responseSchema: multiSchema,
-      },
-    });
-
-    // Build image list description for the prompt
-    const positionLines = positions.map((p, i) => {
-      const imgA = i * 2 + 2;
-      const imgB = i * 2 + 3;
-      return `- Vị trí ${i + 1} (${p.label}): ẢNH ${imgA} = trước thuê, ẢNH ${imgB} = khi trả xe.`;
-    });
-
-    const userText = [
-      'Bạn nhận các ảnh xe ô tô theo thứ tự sau:',
-      'ẢNH 1: bỏ qua (placeholder).',
-      ...positionLines,
-      '',
-      'Với từng vị trí, hãy so sánh ảnh TRƯỚC và ảnh SAU để phát hiện hư hỏng, trầy xước, hay thay đổi mới.',
-      'Nếu góc chụp / ánh sáng khác nhiều, hãy ghi rõ độ tin cậy bị ảnh hưởng.',
-      `Trường "positions" phải có đúng ${positions.length} phần tử, theo thứ tự các vị trí trên.`,
-      'Trường "disclaimer" phải nhắc rằng đánh giá mang tính hỗ trợ, không thay thế kiểm tra thực tế / pháp lý.',
+  async compareVehicleRentalDamage(before, after) {
+    const model = this._getModel(DAMAGE_RESPONSE_SCHEMA, 4096);
+    const prompt = [
+      'Ban nhan 2 anh cua cung mot vi tri xe.',
+      'Anh 1 la truoc khi cho thue.',
+      'Anh 2 la khi tra xe.',
+      'So sanh de phat hien hu hong moi, tray xuoc moi, bien dang moi hoac thay doi dang luu y.',
+      'Neu goc chup khac nhau, hay ghi ro muc do anh huong den do tin cay.',
+      'Tra ve DUY NHAT 1 JSON object hop le, khong markdown, khong code fence, khong text ngoai JSON.',
+      'Neu khong thay hu hong moi, van phai giu day du cac key va de differences = [].',
+      'disclaimer phai nhac ro day chi la danh gia ho tro.',
     ].join('\n');
 
-    // Build content array: placeholder text + image pairs
-    const contentParts = [
-      { text: userText },
-      // placeholder image slot — not sent, referenced as "ẢNH 1: bỏ qua"
-    ];
-    for (const p of positions) {
-      contentParts.push({
-        inlineData: { mimeType: p.before.mimetype, data: p.before.buffer.toString('base64') },
-      });
-      contentParts.push({
-        inlineData: { mimeType: p.after.mimetype, data: p.after.buffer.toString('base64') },
-      });
-    }
-
-    const result = await model.generateContent(contentParts);
+    const result = await model.generateContent([{ text: prompt }, this._toInlineData(before), this._toInlineData(after)]);
     const response = result.response;
-    let raw = '';
-    try {
-      raw = response.text()?.trim() || '';
-    } catch {
-      raw = this._concatCandidateTextParts(response);
+    const raw = this._getRawResponseText(response);
+    this._throwIfEmptyResponse(response, raw, 'single-position');
+
+    const parsed = this._parseJsonResponse(raw, 'single-position');
+    return this._normalizeSingleDamagePayload(parsed);
+  }
+
+  async compareMultiPosition(positions) {
+    if (!Array.isArray(positions) || positions.length === 0) {
+      throwError('Can it nhat mot cap anh de phan tich', 400);
     }
 
-    if (!raw) {
-      const blockReason = response.promptFeedback?.blockReason;
-      throwError(blockReason ? `Gemini từ chối yêu cầu (${blockReason})` : 'Gemini không trả về nội dung', 502);
+    const model = this._getModel(MULTI_DAMAGE_RESPONSE_SCHEMA, 8192);
+    const positionLines = positions.map(
+      (position, index) => `- Vi tri ${index + 1}: ${position.label}. Cap anh gui theo thu tu TRUOC roi SAU.`,
+    );
+
+    const prompt = [
+      'Ban nhan nhieu cap anh xe. Moi vi tri co dung 2 anh: TRUOC roi SAU.',
+      ...positionLines,
+      '',
+      'Voi tung vi tri, hay so sanh anh TRUOC va anh SAU de phat hien thay doi moi.',
+      `Mang "positions" bat buoc co dung ${positions.length} phan tu va giu dung thu tu nhu danh sach tren.`,
+      'Tra ve DUY NHAT 1 JSON object hop le, khong markdown, khong code fence, khong text ngoai JSON.',
+      'Neu mot vi tri khong co hu hong moi ro rang, van phai giu du key voi differences = [].',
+      'disclaimer phai nhac ro day chi la danh gia ho tro.',
+    ].join('\n');
+
+    const content = [{ text: prompt }];
+    for (const position of positions) {
+      content.push(this._toInlineData(position.before));
+      content.push(this._toInlineData(position.after));
     }
 
-    return this._parseJsonResponse(raw);
+    const result = await model.generateContent(content);
+    const response = result.response;
+    const raw = this._getRawResponseText(response);
+    this._throwIfEmptyResponse(response, raw, 'multi-position');
+
+    const parsed = this._parseJsonResponse(raw, 'multi-position');
+    return this._normalizeMultiDamagePayload(
+      parsed,
+      positions.map((position) => this._toString(position.label, 'Vi tri can doi chieu')),
+    );
   }
 }
 

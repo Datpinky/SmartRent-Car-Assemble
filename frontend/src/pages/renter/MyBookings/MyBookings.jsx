@@ -4,6 +4,7 @@ import ContractModal from '../../../components/common/ContractModal';
 import Modal from '../../../components/common/Modal';
 import SkeletonCard from '../../../components/common/SkeletonCard';
 import bookingService from '../../../services/bookingService';
+import inspectionService, { attachLatestAiInspectionToBookings } from '../../../services/inspectionService';
 import { mapRenterBooking } from '../../../utils/renterBookingView';
 import BookingCardItem from './components/BookingCardItem';
 import BookingDetailsContent from './components/BookingDetailsContent';
@@ -33,8 +34,12 @@ const MyBookings = () => {
   const loadBookings = async () => {
     setLoading(true);
     try {
-      const data = await bookingService.getCurrentRoleBookingsDetailed();
-      setBookings((data || []).map(mapRenterBooking));
+      const [data, inspectionResponse] = await Promise.all([
+        bookingService.getCurrentRoleBookingsDetailed(),
+        inspectionService.list({ inspection_type: 'return', page: 1, limit: 200 }),
+      ]);
+      const withAi = attachLatestAiInspectionToBookings(data || [], inspectionResponse?.items || []);
+      setBookings(withAi.map(mapRenterBooking));
       setError('');
     } catch (err) {
       setBookings([]);

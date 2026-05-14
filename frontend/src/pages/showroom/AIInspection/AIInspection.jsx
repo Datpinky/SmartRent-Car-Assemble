@@ -16,7 +16,7 @@ const AIInspection = () => {
   const { user } = useAuth();
   const isShowroom = user?.role === 'showroom';
   const isRenter = user?.role === 'renter';
-  const inspectionType = isRenter ? 'return' : 'pickup';
+  const inspectionType = 'return';
   const [tab, setTab] = useState('new');
   const [step, setStep] = useState(1);
 
@@ -46,10 +46,7 @@ const AIInspection = () => {
 
   // ── Derived values ──
   const hasBeforeForPos = (i, key) => !!(pickupImagesUrls[i] || posFiles[key].before);
-  // For showroom (pickup): only need BEFORE images. For renter (return): need both BEFORE and AFTER
-  const validPositions = isShowroom
-    ? POSITIONS.filter((p, i) => hasBeforeForPos(i, p.key))
-    : POSITIONS.filter((p, i) => hasBeforeForPos(i, p.key) && posFiles[p.key].after);
+  const validPositions = POSITIONS.filter((p, i) => hasBeforeForPos(i, p.key) && posFiles[p.key].after);
   const readyToAnalyze = validPositions.length >= 1;
 
   // ── Data fetching ──
@@ -140,12 +137,14 @@ const AIInspection = () => {
     setSelectedVehicle(v);
     setSelectedBookingId('');
     setPickupImagesUrls([]);
+    setPosFiles(makeInitialPosFiles());
     fetchBookingsForVehicle(String(v._id || v.id));
   };
 
   const handleSelectBooking = async (bookingId) => {
     setSelectedBookingId(bookingId);
     setPickupImagesUrls([]);
+    setPosFiles(makeInitialPosFiles());
     if (!bookingId) return;
     try {
       console.log('🚀 handleSelectBooking START:', {
@@ -363,7 +362,12 @@ const AIInspection = () => {
       const errorMsg = isShowroom
         ? 'Cần ít nhất một vị trí có ảnh TRƯỚC để bàn giao.'
         : 'Cần ít nhất một vị trí có đủ cả ảnh TRƯỚC và ảnh SAU.';
-      setAnalysisError(errorMsg);
+      void errorMsg;
+      setAnalysisError(
+        isShowroom
+          ? 'Can it nhat mot vi tri co du anh TRUOC va anh SAU do renter upload de phan tich.'
+          : 'Can it nhat mot vi tri co du ca anh TRUOC va anh SAU.',
+      );
       return;
     }
     if (!selectedVehicle) {
@@ -378,6 +382,8 @@ const AIInspection = () => {
         validPositions.map(async (p) => {
           const posIdx = POSITIONS.findIndex((pp) => pp.key === p.key);
           let beforeFile = posFiles[p.key].before;
+          let afterFile = posFiles[p.key].after;
+          const afterUrl = typeof afterFile === 'string' ? afterFile : '';
           const pickupUrl = pickupImagesUrls[posIdx];
           if (!beforeFile && pickupUrl) {
             try {
@@ -388,11 +394,25 @@ const AIInspection = () => {
               /* keep null */
             }
           }
-          return { key: p.key, label: p.label, beforeFile, afterFile: posFiles[p.key].after };
+          if (afterUrl) {
+            try {
+              const resp = await fetch(afterUrl);
+              const blob = await resp.blob();
+              afterFile = new File([blob], `return_${p.key}.jpg`, { type: blob.type || 'image/jpeg' });
+            } catch {
+              afterFile = null;
+            }
+          }
+          return { key: p.key, label: p.label, beforeFile, afterFile, afterUrl };
         }),
       );
 
-      const data = await uploadService.compareMultiPosition(positionsInput);
+      const analyzablePositions = positionsInput.filter((position) => position.beforeFile && position.afterFile);
+      if (analyzablePositions.length === 0) {
+        throw new Error('Can it nhat mot cap anh TRUOC + SAU hop le de phan tich.');
+      }
+
+      const data = await uploadService.compareMultiPosition(analyzablePositions);
       setAnalysisResult(data);
 
       // Upload files and record positions
@@ -400,14 +420,14 @@ const AIInspection = () => {
       try {
         const filesToUpload = [];
         const uploadMap = [];
-        positionsInput.forEach((p) => {
+        analyzablePositions.forEach((p) => {
           const posIdx = POSITIONS.findIndex((pp) => pp.key === p.key);
           const hasPU = !!pickupImagesUrls[posIdx];
           if (!hasPU && p.beforeFile) {
             filesToUpload.push(p.beforeFile);
             uploadMap.push({ posKey: p.key, type: 'before' });
           }
-          if (p.afterFile) {
+          if (!p.afterUrl && p.afterFile) {
             filesToUpload.push(p.afterFile);
             uploadMap.push({ posKey: p.key, type: 'after' });
           }
@@ -417,19 +437,19 @@ const AIInspection = () => {
         uploadMap.forEach((entry, i) => {
           urlByPosType[`${entry.posKey}_${entry.type}`] = uploadedUrls[i]?.url || '';
         });
-        positionsInput.forEach((p) => {
+        analyzablePositions.forEach((p) => {
           const posIdx = POSITIONS.findIndex((pp) => pp.key === p.key);
           const pickupUrl = pickupImagesUrls[posIdx] || '';
           positionsRecord.push({
             position_key: p.key,
             position_label: p.label,
             before_url: pickupUrl || urlByPosType[`${p.key}_before`] || '',
-            after_url: urlByPosType[`${p.key}_after`] || '',
+            after_url: p.afterUrl || urlByPosType[`${p.key}_after`] || '',
           });
         });
       } catch {
         setSaveNote('Không tải được ảnh lên lưu trữ.');
-        positionsInput.forEach((p) => {
+        analyzablePositions.forEach((p) => {
           positionsRecord.push({ position_key: p.key, position_label: p.label, before_url: '', after_url: '' });
         });
       }
@@ -451,7 +471,7 @@ const AIInspection = () => {
           vehicle_plate: selectedVehicle.vehicle_plate_number || '',
           booking_code: bCode,
           positions: positionsRecord,
-          positions_analyzed: positionsInput.length,
+          positions_analyzed: analyzablePositions.length,
           ai_payload: data || {},
           damage_detected: !!data?.damage_detected,
           severity: data?.severity || 'none',
