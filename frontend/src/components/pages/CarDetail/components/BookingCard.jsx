@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useAuth } from '../../../../contexts/AuthContext';
 import bookingService from '../../../../services/bookingService';
+import profileService from '../../../../services/profileService';
 import {
   buildDefaultPickupDate,
   buildDefaultRentalWindow,
@@ -19,6 +21,7 @@ const ROLE_DEFAULT_PATHS = {
 };
 
 const BookingCard = ({ car, id, navigate, user, initialRentalWindow, onOpenShowroomProfile }) => {
+  const { updateUser } = useAuth();
   const defaultRentalWindow = useMemo(() => buildDefaultRentalWindow(), []);
   const initialPickup = initialRentalWindow?.pickupDate || defaultRentalWindow.pickupDate;
   const initialReturn = initialRentalWindow?.returnDate || defaultRentalWindow.returnDate;
@@ -30,6 +33,7 @@ const BookingCard = ({ car, id, navigate, user, initialRentalWindow, onOpenShowr
   const [showLicenseModal, setShowLicenseModal] = useState(false);
   const [bookError, setBookError] = useState('');
   const [bookLoading, setBookLoading] = useState(false);
+  const [resolvedUser, setResolvedUser] = useState(user);
   const vehicleId = car._id || car.id || id;
 
   useEffect(() => {
@@ -40,6 +44,10 @@ const BookingCard = ({ car, id, navigate, user, initialRentalWindow, onOpenShowr
     setPickupDate(initialPickup);
     setReturnDate(initialReturn);
   }, [initialPickup, initialReturn]);
+
+  useEffect(() => {
+    setResolvedUser(user);
+  }, [user]);
 
   const days = useMemo(
     () => Math.max(1, Math.round((new Date(returnDate).getTime() - new Date(pickupDate).getTime()) / 86_400_000)),
@@ -131,12 +139,58 @@ const BookingCard = ({ car, id, navigate, user, initialRentalWindow, onOpenShowr
   const serviceFee = Math.round(subtotal * 0.05);
   const total = subtotal + serviceFee;
   const currency = car.currency === 'VND' ? 'đ' : car.currency || '';
-  const isRenter = user?.role === 'renter';
-  const roleRedirect = ROLE_DEFAULT_PATHS[user?.role] || '/';
+  const bookingUser = resolvedUser || user;
+  const isRenter = bookingUser?.role === 'renter';
+  const roleRedirect = ROLE_DEFAULT_PATHS[bookingUser?.role] || '/';
   const addedBy = car?.addedBy;
   const showroomUserId = typeof addedBy === 'string' ? addedBy : addedBy?._id || addedBy?.id || '';
   const canOpenShowroomProfile = isMongoId(showroomUserId);
   const showroomLabel = car.showroom || 'Chủ xe SmartRent';
+
+  const hydrateLatestRenterProfile = useCallback(async () => {
+    if (!bookingUser?._id || bookingUser?.role !== 'renter') {
+      return bookingUser;
+    }
+
+    try {
+      const latestProfile = await profileService.getCurrentProfile();
+      if (!latestProfile) {
+        return bookingUser;
+      }
+
+      const mergedUser = { ...bookingUser, ...latestProfile };
+      setResolvedUser(mergedUser);
+      updateUser(mergedUser);
+      return mergedUser;
+    } catch {
+      return bookingUser;
+    }
+  }, [bookingUser, updateUser]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!bookingUser?._id || bookingUser?.role !== 'renter') {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    (async () => {
+      try {
+        if (cancelled) {
+          return;
+        }
+        await hydrateLatestRenterProfile();
+      } catch {
+        /* keep current snapshot */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bookingUser?._id, bookingUser?.role, hydrateLatestRenterProfile]);
 
   const handleOpenShowroomProfile = () => {
     if (!canOpenShowroomProfile) return;
@@ -148,7 +202,7 @@ const BookingCard = ({ car, id, navigate, user, initialRentalWindow, onOpenShowr
   };
 
   const handleBook = async () => {
-    if (!user) {
+    if (!bookingUser) {
       navigate('/login');
       return;
     }
@@ -156,27 +210,33 @@ const BookingCard = ({ car, id, navigate, user, initialRentalWindow, onOpenShowr
       navigate(roleRedirect, { replace: true });
       return;
     }
-    if (!user.driver_license_number || user.driver_license_status !== 'approved') {
+    setBookError('');
+    setBookLoading(true);
+
+    const latestUser = await hydrateLatestRenterProfile();
+    if (!latestUser?.driver_license_number || latestUser?.driver_license_status !== 'approved') {
       setShowLicenseModal(true);
+      setBookLoading(false);
       return;
     }
-    setBookError('');
     const pick = parseLocalDateTime(pickupDate);
     const ret = parseLocalDateTime(returnDate);
     if (!pick || !ret) {
       setBookError('Vui lòng chọn đầy đủ thời gian nhận xe và trả xe.');
+      setBookLoading(false);
       return;
     }
     if (ret <= pick) {
       setBookError('Thời gian trả xe phải sau thời gian nhận xe.');
+      setBookLoading(false);
       return;
     }
     if (isSameCalendarDate(pick, ret)) {
       setBookError('Ngày trả xe không được trùng với ngày nhận xe.');
+      setBookLoading(false);
       return;
     }
     try {
-      setBookLoading(true);
       if (hasBookedDateSelection) {
         setBookError('Xe đã có đơn đặt trong ngày bạn chọn. Vui lòng chọn ngày khác.');
         setBookLoading(false);
@@ -220,8 +280,8 @@ const BookingCard = ({ car, id, navigate, user, initialRentalWindow, onOpenShowr
           width={420}
         >
           <DriverLicenseRequiredModal
-            status={user?.driver_license_status || 'none'}
-            rejectReason={user?.driver_license_reject_reason || ''}
+            status={bookingUser?.driver_license_status || 'none'}
+            rejectReason={bookingUser?.driver_license_reject_reason || ''}
             onClose={() => setShowLicenseModal(false)}
             onGoProfile={() => navigate('/renter/profile')}
           />
@@ -319,10 +379,10 @@ const BookingCard = ({ car, id, navigate, user, initialRentalWindow, onOpenShowr
             </div>
           </div>
 
-          {isRenter && user && (!user.driver_license_number || user.driver_license_status !== 'approved') && (
+          {isRenter && bookingUser && (!bookingUser.driver_license_number || bookingUser.driver_license_status !== 'approved') && (
             <GplxRequirementBanner
-              status={user.driver_license_status || 'none'}
-              rejectReason={user.driver_license_reject_reason || ''}
+              status={bookingUser.driver_license_status || 'none'}
+              rejectReason={bookingUser.driver_license_reject_reason || ''}
               onGoProfile={() => navigate('/renter/profile')}
             />
           )}
