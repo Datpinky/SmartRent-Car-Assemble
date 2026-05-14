@@ -31,7 +31,10 @@ const vehicleInspectionSchema = new Schema(
     // ── Trace ──────────────────────────────────────────────────────────────
     vehicle_id: { type: Schema.Types.ObjectId, ref: 'Vehicle', required: true, index: true },
     booking_id: { type: Schema.Types.ObjectId, ref: 'Booking', default: null, index: true },
-    showroom_id: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    showroom_id: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true }, // only for pickup inspections by showroom
+    inspection_type: { type: String, enum: ['pickup', 'return'], default: 'pickup' }, // pickup (before handover) or return (after)
+    inspected_by_role: { type: String, enum: ['showroom', 'renter'], default: 'showroom' }, // who did the inspection
+    inspected_by_id: { type: Schema.Types.ObjectId, ref: 'User', default: null }, // user who did the inspection
 
     // Denormalised for fast display without populates
     vehicle_name: { type: String, default: '' },

@@ -90,6 +90,34 @@ const BookingCard = ({ car, id, navigate, user, initialRentalWindow, onOpenShowr
     };
   }, [Boolean(user?._id), vehicleId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Listen for booking cancellations and refresh booked dates
+  useEffect(() => {
+    const handleBookingCancelled = (event) => {
+      const { vehicleId: cancelledVehicleId } = event.detail || {};
+      // Only refresh if the cancellation is for this vehicle
+      if (cancelledVehicleId === vehicleId) {
+        // Refresh the booked intervals
+        let mounted = true;
+        bookingService
+          .getUnavailableDateIntervals(vehicleId)
+          .then(({ intervals }) => {
+            if (mounted) setBookedIntervals(Array.isArray(intervals) ? intervals : []);
+          })
+          .catch(() => {
+            if (mounted) setBookedIntervals([]);
+          });
+        return () => {
+          mounted = false;
+        };
+      }
+    };
+
+    window.addEventListener('smartrent:booking:cancelled', handleBookingCancelled);
+    return () => {
+      window.removeEventListener('smartrent:booking:cancelled', handleBookingCancelled);
+    };
+  }, [vehicleId]);
+
   const isBookedDay = useCallback((date) => bookingService.isDateBooked(date, bookedIntervals), [bookedIntervals]);
 
   const selectedBookedConflicts = useMemo(
@@ -150,7 +178,7 @@ const BookingCard = ({ car, id, navigate, user, initialRentalWindow, onOpenShowr
     try {
       setBookLoading(true);
       if (hasBookedDateSelection) {
-        setBookError('Xe đã có booking trong ngày bạn chọn. Vui lòng chọn ngày khác.');
+        setBookError('Xe đã có đơn đặt trong ngày bạn chọn. Vui lòng chọn ngày khác.');
         setBookLoading(false);
         return;
       }
@@ -244,7 +272,7 @@ const BookingCard = ({ car, id, navigate, user, initialRentalWindow, onOpenShowr
             />
           </div>
           <div className="mt-2 text-[0.75rem] text-gray-500">
-            Ngày <span className="font-bold text-red-600">đỏ</span> là ngày xe đã có booking và không thể đặt. Ngày{' '}
+            Ngày <span className="font-bold text-red-600">đỏ</span> là ngày xe đã có đơn đặt và không thể đặt. Ngày{' '}
             <span className="font-bold text-orange-600">cam</span> trong lịch trả xe là ngày trùng ngày nhận và không
             được chọn.
           </div>
@@ -313,7 +341,7 @@ const BookingCard = ({ car, id, navigate, user, initialRentalWindow, onOpenShowr
             {hasSameDaySelection
               ? 'Ngày nhận và trả đang bị trùng'
               : hasBookedDateSelection
-                ? 'Ngày đã có booking'
+                ? 'Ngày đã có đơn đặt'
                 : bookLoading
                   ? 'Đang kiểm tra...'
                   : isRenter || !user
@@ -331,7 +359,7 @@ const BookingCard = ({ car, id, navigate, user, initialRentalWindow, onOpenShowr
           )}
           <div className="mt-3 text-center text-[0.75rem] text-gray-400">
             {user && !isRenter
-              ? 'Tài khoản hiện tại không thể tạo booking theo luồng khách thuê.'
+              ? 'Tài khoản hiện tại không thể tạo đơn đặt xe theo luồng khách thuê.'
               : 'Miễn phí hủy trước 1 giờ · Thanh toán an toàn'}
           </div>
 

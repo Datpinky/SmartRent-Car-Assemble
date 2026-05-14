@@ -1,22 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FaCalendarAlt, FaClock, FaCreditCard, FaMapMarkerAlt, FaMoneyBillWave, FaTimesCircle } from 'react-icons/fa';
+import { FaCreditCard, FaMoneyBillWave, FaTimesCircle } from 'react-icons/fa';
 import { MdDirectionsCar } from 'react-icons/md';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
 import Modal from '../../../components/common/Modal';
 import SkeletonCard from '../../../components/common/SkeletonCard';
-import StatusBadge from '../../../components/common/StatusBadge';
 import bookingService from '../../../services/bookingService';
 import { getCancelBookingNotice } from '../../../utils/bookingCancellationFeedback';
 import { PAYMENT_LABELS, formatDateTime, formatMoney, mapRenterBooking } from '../../../utils/renterBookingView';
-
-const cardInfoStyle = {
-  background: '#fff',
-  borderRadius: 18,
-  border: '1px solid #f1f5f9',
-  padding: 18,
-  boxShadow: '0 8px 24px rgba(15, 23, 42, 0.04)',
-};
+import PaymentBookingCard from './components/PaymentBookingCard';
+import {
+  cardInfoStyle,
+  getCancelActionLabel,
+  getPaymentResultUrl,
+  getRetryPaymentUrl,
+} from './pendingPayments.helpers';
 
 const PendingPayments = () => {
   const navigate = useNavigate();
@@ -37,7 +35,7 @@ const PendingPayments = () => {
     setLoading(true);
     try {
       const data = await bookingService.getCurrentRoleBookingsDetailed();
-      const mapped = (data || []).map(mapRenterBooking).filter((booking) => booking.isAwaitingPayment);
+      const mapped = (data || []).map(mapRenterBooking).filter((b) => b.isAwaitingPayment);
       setBookings(mapped);
       setError('');
     } catch (err) {
@@ -55,65 +53,37 @@ const PendingPayments = () => {
   const summary = useMemo(
     () => ({
       total: bookings.length,
-      pending: bookings.filter((booking) => booking.paymentStatus === 'pending').length,
-      retry: bookings.filter((booking) => booking.canRetryPayment).length,
-      failed: bookings.filter((booking) => ['failed', 'declined'].includes(booking.paymentStatus)).length,
+      pending: bookings.filter((b) => b.paymentStatus === 'pending').length,
+      retry: bookings.filter((b) => b.canRetryPayment).length,
+      failed: bookings.filter((b) => ['failed', 'declined'].includes(b.paymentStatus)).length,
     }),
     [bookings],
   );
 
   useEffect(() => {
-    if (!highlightedBookingId || loading || bookings.length === 0) {
-      return;
-    }
-
-    const handledKey = `${window.location.pathname}:${highlightedBookingId}`;
-    if (handledHighlightRef.current === handledKey) {
-      return;
-    }
-
-    const targetBooking = bookings.find((booking) => String(booking.id) === String(highlightedBookingId));
-    if (!targetBooking) {
-      return;
-    }
-
-    handledHighlightRef.current = handledKey;
-    setDetailModal(targetBooking);
+    if (!highlightedBookingId || loading || bookings.length === 0) return;
+    const key = `${window.location.pathname}:${highlightedBookingId}`;
+    if (handledHighlightRef.current === key) return;
+    const target = bookings.find((b) => String(b.id) === String(highlightedBookingId));
+    if (!target) return;
+    handledHighlightRef.current = key;
+    setDetailModal(target);
   }, [bookings, highlightedBookingId, loading]);
 
   useEffect(() => {
-    if (!fromNotification || !highlightedBookingId || loading || bookings.length === 0) {
-      return;
-    }
-    if (!bookings.some((b) => String(b.id) === String(highlightedBookingId))) {
-      return;
-    }
+    if (!fromNotification || !highlightedBookingId || loading || bookings.length === 0) return;
+    if (!bookings.some((b) => String(b.id) === String(highlightedBookingId))) return;
     const key = `${highlightedBookingId}:scroll`;
-    if (handledScrollRef.current === key) {
-      return;
-    }
+    if (handledScrollRef.current === key) return;
     handledScrollRef.current = key;
     requestAnimationFrame(() => {
-      document.getElementById(`renter-booking-card-${highlightedBookingId}`)?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      });
+      document
+        .getElementById(`renter-booking-card-${highlightedBookingId}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
   }, [bookings, fromNotification, highlightedBookingId, loading]);
 
-  const getPaymentResultUrl = (booking) =>
-    `/renter/payment-result?bookingId=${booking.id}&status=${
-      booking.paymentStatus === 'successful' ? 'success' : booking.paymentStatus === 'pending' ? 'pending' : 'error'
-    }`;
-
-  const getRetryPaymentUrl = (booking) => `/renter/retry-payment/${booking.id}`;
-
-  const getCancelActionLabel = (booking) =>
-    booking.paymentStatus === 'successful' ? 'Hủy booking / hoàn tiền' : 'Hủy booking';
-
-  const handleCancelBooking = (booking) => {
-    setConfirmCancelTarget(booking);
-  };
+  const handleCancelBooking = (booking) => setConfirmCancelTarget(booking);
 
   const executeCancel = async () => {
     const booking = confirmCancelTarget;
@@ -122,14 +92,13 @@ const PendingPayments = () => {
     setCancellingId(booking.id);
     setError('');
     setNotice({ tone: '', text: '' });
-
     try {
       const cancelResult = await bookingService.cancelBooking(booking.id);
       setDetailModal(null);
       await loadBookings();
       setNotice(getCancelBookingNotice(booking, cancelResult));
     } catch (err) {
-      setError(err.message || 'Không thể hủy booking lúc này.');
+      setError(err.message || 'Không thể hủy đơn đặt xe lúc này.');
     } finally {
       setCancellingId('');
     }
@@ -139,13 +108,13 @@ const PendingPayments = () => {
     <div className="pending-payments">
       <ConfirmDialog
         isOpen={!!confirmCancelTarget}
-        title="Xác nhận hủy booking"
+        title="Xác nhận hủy đơn đặt xe"
         message={
           confirmCancelTarget?.paymentStatus === 'successful'
             ? `Bạn có chắc muốn hủy booking xe "${confirmCancelTarget?.vehicleName}"? Vì đã thanh toán, tiền hoàn lại sẽ được xử lý theo chính sách của hệ thống (5–10 ngày làm việc).`
             : `Bạn có chắc muốn hủy booking xe "${confirmCancelTarget?.vehicleName}"?`
         }
-        confirmLabel="Hủy booking"
+        confirmLabel="Hủy đơn"
         cancelLabel="Giữ lại"
         confirmVariant="danger"
         loading={!!cancellingId}
@@ -188,7 +157,6 @@ const PendingPayments = () => {
           {notice.text}
         </div>
       )}
-
       {error && (
         <div
           role="alert"
@@ -209,20 +177,12 @@ const PendingPayments = () => {
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         {[
-          { label: 'Tổng booking', val: summary.total, color: '#374151' },
+          { label: 'Tổng đơn', val: summary.total, color: '#374151' },
           { label: 'Đang chờ thanh toán', val: summary.pending, color: '#d97706' },
           { label: 'Cần thanh toán lại', val: summary.retry, color: '#059669' },
           { label: 'Thất bại / từ chối', val: summary.failed, color: '#dc2626' },
         ].map((item) => (
-          <div
-            key={item.label}
-            style={{
-              ...cardInfoStyle,
-              minWidth: 150,
-              textAlign: 'center',
-              padding: '14px 18px',
-            }}
-          >
+          <div key={item.label} style={{ ...cardInfoStyle, minWidth: 150, textAlign: 'center', padding: '14px 18px' }}>
             <div style={{ fontWeight: 800, fontSize: '1.3rem', color: item.color }}>{item.val}</div>
             <div style={{ fontSize: '0.72rem', color: '#9ca3af' }}>{item.label}</div>
           </div>
@@ -234,7 +194,6 @@ const PendingPayments = () => {
       ) : bookings.length === 0 ? (
         <div
           role="region"
-          aria-label="Không có booking chờ thanh toán"
           className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-gray-100 bg-white px-6 py-16 text-center shadow-sm"
         >
           <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gray-100">
@@ -258,125 +217,15 @@ const PendingPayments = () => {
       ) : (
         <div className="booking-list" aria-label="Danh sách chờ thanh toán" aria-busy={loading}>
           {bookings.map((booking) => (
-            <div
+            <PaymentBookingCard
               key={booking.id}
-              id={`renter-booking-card-${booking.id}`}
-              className="booking-card-item"
-              onClick={() => setDetailModal(booking)}
-              style={
-                String(booking.id) === String(highlightedBookingId)
-                  ? {
-                      border: '1px solid #bfdbfe',
-                      boxShadow: '0 12px 30px rgba(37, 99, 235, 0.12)',
-                      background: '#f8fbff',
-                      cursor: 'pointer',
-                    }
-                  : { cursor: 'pointer' }
-              }
-            >
-              <div className="booking-card-left">
-                <div className="booking-card-img" style={{ overflow: 'hidden', background: '#f3f4f6' }}>
-                  {booking.image ? (
-                    <img
-                      src={booking.image}
-                      alt={booking.vehicleName}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                  ) : (
-                    <MdDirectionsCar style={{ fontSize: '2.5rem', color: '#00b14f' }} />
-                  )}
-                </div>
-
-                <div className="booking-card-info">
-                  <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#111827' }}>{booking.vehicleName}</div>
-                  <div style={{ fontSize: '0.78rem', color: '#6b7280', marginTop: 3 }}>{booking.showroomName}</div>
-                  <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
-                    <span
-                      style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.78rem', color: '#6b7280' }}
-                    >
-                      <FaCalendarAlt size={11} /> {formatDateTime(booking.startDate)} -{' '}
-                      {formatDateTime(booking.endDate)}
-                    </span>
-                    <span
-                      style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.78rem', color: '#6b7280' }}
-                    >
-                      <FaClock size={11} /> {booking.durationDays} ngày
-                    </span>
-                    <span
-                      style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.78rem', color: '#6b7280' }}
-                    >
-                      <FaMapMarkerAlt size={11} /> {booking.locationLabel}
-                    </span>
-                  </div>
-                  <div style={{ marginTop: 8, fontSize: '0.78rem', fontWeight: 800, color: '#334155' }}>
-                    {booking.statusHeadline}
-                  </div>
-                  <div style={{ marginTop: 4, fontSize: '0.76rem', color: '#6b7280', lineHeight: 1.6 }}>
-                    {booking.waitingForLabel}
-                  </div>
-                </div>
-              </div>
-
-              <div className="booking-card-right">
-                <div style={{ textAlign: 'right' }}>
-                  <StatusBadge
-                    status={booking.canRetryPayment ? 'failed' : booking.status}
-                    customLabel={booking.canRetryPayment ? 'Cần thanh toán lại' : undefined}
-                  />
-                  <div style={{ fontWeight: 800, fontSize: '1.1rem', color: '#00b14f', marginTop: 10 }}>
-                    {formatMoney(booking.totalPrice)}
-                  </div>
-                  <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: 3, letterSpacing: '0.04em' }}>
-                    #{String(booking.id).slice(-8).toUpperCase()}
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
-                  {booking.canRetryPayment ? (
-                    <button
-                      className="btn-primary"
-                      style={{ fontSize: '0.78rem', padding: '7px 14px' }}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        navigate(getRetryPaymentUrl(booking));
-                      }}
-                    >
-                      <FaCreditCard /> Thanh toán ngay
-                    </button>
-                  ) : (
-                    <div
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        borderRadius: 8,
-                        padding: '6px 12px',
-                        fontSize: '0.74rem',
-                        fontWeight: 600,
-                        background: '#fef9c3',
-                        color: '#a16207',
-                        border: '1px solid #fde68a',
-                      }}
-                    >
-                      <FaClock style={{ marginRight: 5 }} /> Chờ thanh toán
-                    </div>
-                  )}
-
-                  {booking.canCancel && (
-                    <button
-                      className="renter-btn-soft-danger"
-                      style={{ opacity: cancellingId === booking.id ? 0.65 : 1, fontSize: '0.76rem' }}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleCancelBooking(booking);
-                      }}
-                      disabled={cancellingId === booking.id}
-                    >
-                      {cancellingId === booking.id ? 'Đang hủy...' : getCancelActionLabel(booking)}
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
+              booking={booking}
+              highlightedBookingId={highlightedBookingId}
+              cancellingId={cancellingId}
+              setDetailModal={setDetailModal}
+              handleCancelBooking={handleCancelBooking}
+              navigate={navigate}
+            />
           ))}
         </div>
       )}
@@ -388,15 +237,7 @@ const PendingPayments = () => {
               <div style={{ fontWeight: 800, fontSize: '1rem', color: '#111827' }}>{detailModal.vehicleName}</div>
               <div style={{ fontSize: '0.82rem', color: '#6b7280', marginTop: 4 }}>{detailModal.showroomName}</div>
             </div>
-
-            <div
-              style={{
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                borderRadius: 12,
-                padding: '14px 16px',
-              }}
-            >
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px' }}>
               <div style={{ fontWeight: 800, color: '#111827', marginBottom: 8 }}>{detailModal.statusHeadline}</div>
               <div style={{ fontSize: '0.8rem', color: '#475569', lineHeight: 1.65, marginBottom: 8 }}>
                 {detailModal.waitingForLabel}
@@ -411,13 +252,12 @@ const PendingPayments = () => {
                 Việc bạn nên làm: {detailModal.renterActionHint}
               </div>
             </div>
-
             {[
-              ['Mã booking', detailModal.id],
+              ['Mã đơn', detailModal.id],
               ['Ngày nhận xe', formatDateTime(detailModal.startDate)],
               ['Ngày trả xe', formatDateTime(detailModal.endDate)],
               ['Tổng tiền', formatMoney(detailModal.totalPrice)],
-              ['Trạng thái booking', detailModal.status],
+              ['Trạng thái đơn', detailModal.status],
               ['Trạng thái thanh toán', PAYMENT_LABELS[detailModal.paymentStatus] || detailModal.paymentStatus],
               ['Phương thức thanh toán', detailModal.paymentMethod],
               ['Ghi chú / nhận xe', detailModal.locationLabel],
@@ -438,7 +278,6 @@ const PendingPayments = () => {
                 </span>
               </div>
             ))}
-
             {detailModal.pickupConfirmationHint && (
               <div
                 style={{
@@ -454,7 +293,6 @@ const PendingPayments = () => {
                 {detailModal.pickupConfirmationHint}
               </div>
             )}
-
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button
                 className="btn-primary"
@@ -463,7 +301,6 @@ const PendingPayments = () => {
               >
                 <FaMoneyBillWave /> Xem kết quả thanh toán
               </button>
-
               {detailModal.canRetryPayment && (
                 <button
                   className="renter-btn-soft-success"
@@ -473,7 +310,6 @@ const PendingPayments = () => {
                   <FaCreditCard /> Thanh toán lại
                 </button>
               )}
-
               {detailModal.canCancel && (
                 <button
                   className="renter-btn-soft-danger"

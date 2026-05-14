@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  FaLocationArrow, FaMapMarkerAlt, FaSave, FaSpinner, FaStore, FaUser,
-} from 'react-icons/fa';
+import { FaLocationArrow, FaMapMarkerAlt, FaSave, FaSpinner, FaStore, FaUser } from 'react-icons/fa';
 import { MdAlternateEmail, MdInfoOutline, MdPhoneIphone } from 'react-icons/md';
 import CarLocationMap from '../../../components/Map/CarLocationMap';
 import BecomeShowroomModal from '../../../components/common/BecomeShowroomModal';
@@ -26,10 +24,7 @@ const Profile = () => {
   const [profile, setProfile] = useState(() => profileService.mapProfileUser(user));
   const fallbackProfileRef = useRef(profileService.mapProfileUser(user));
 
-  const activeUser = useMemo(
-    () => (profile?._id ? profile : profileService.mapProfileUser(user)),
-    [profile, user],
-  );
+  const activeUser = useMemo(() => (profile?._id ? profile : profileService.mapProfileUser(user)), [profile, user]);
   const userId = activeUser?._id || activeUser?.id || authUserId || '';
 
   const [form, setForm] = useState(buildInitialForm(activeUser));
@@ -74,7 +69,12 @@ const Profile = () => {
     const parsedCoordinates = parseCoordinateAddress(nextAddress);
     if (parsedCoordinates) {
       setLoadingLocation(false);
-      return { address: nextAddress, latitude: parsedCoordinates.latitude, longitude: parsedCoordinates.longitude, plusCode: '' };
+      return {
+        address: nextAddress,
+        latitude: parsedCoordinates.latitude,
+        longitude: parsedCoordinates.longitude,
+        plusCode: '',
+      };
     }
     if (nextAddress.length >= 4) {
       try {
@@ -82,7 +82,12 @@ const Profile = () => {
         const results = await mapService.directForwardGeocode(nextAddress, { limit: 1 });
         const bestMatch = results[0];
         if (bestMatch) {
-          return { address: nextAddress, latitude: bestMatch.lat, longitude: bestMatch.lng, plusCode: bestMatch.plusCode || '' };
+          return {
+            address: nextAddress,
+            latitude: bestMatch.lat,
+            longitude: bestMatch.lng,
+            plusCode: bestMatch.plusCode || '',
+          };
         }
       } catch {
         // fall through
@@ -106,7 +111,10 @@ const Profile = () => {
     async (profileData) => {
       const nextAddress = String(profileData?.address || '').trim();
       const resolvedLocation = await resolveAddressLocation(nextAddress, profileData?.userLocation);
-      if (resolvedLocation) { setMapLocation(resolvedLocation); return; }
+      if (resolvedLocation) {
+        setMapLocation(resolvedLocation);
+        return;
+      }
       if (applyStoredLocation(profileData?.userLocation, nextAddress)) return;
       setMapLocation(null);
     },
@@ -142,8 +150,12 @@ const Profile = () => {
         setProfile(fallbackProfileRef.current);
         setNotice({ type: 'error', message: error.message || 'Khong the tai ho so' });
       })
-      .finally(() => { if (mounted) setLoadingProfile(false); });
-    return () => { mounted = false; };
+      .finally(() => {
+        if (mounted) setLoadingProfile(false);
+      });
+    return () => {
+      mounted = false;
+    };
   }, [authUserId, hydrateProfileLocation, updateUser]);
 
   useEffect(() => {
@@ -155,21 +167,41 @@ const Profile = () => {
   }, [activeUser, isEditing, savedAddress]);
 
   useEffect(() => {
-    if (!isEditing) { setAddressSuggestions([]); setLoadingSuggestions(false); return undefined; }
+    if (!isEditing) {
+      setAddressSuggestions([]);
+      setLoadingSuggestions(false);
+      return undefined;
+    }
     const normalizedAddress = String(form.address || '').trim();
-    if (!normalizedAddress || normalizedAddress.length < 3 || parseCoordinateAddress(normalizedAddress) || normalizedAddress === mapLocation?.address) {
-      setAddressSuggestions([]); setLoadingSuggestions(false); return undefined;
+    if (
+      !normalizedAddress ||
+      normalizedAddress.length < 3 ||
+      parseCoordinateAddress(normalizedAddress) ||
+      normalizedAddress === mapLocation?.address
+    ) {
+      setAddressSuggestions([]);
+      setLoadingSuggestions(false);
+      return undefined;
     }
     let cancelled = false;
     setLoadingSuggestions(true);
     const timeoutId = window.setTimeout(() => {
       mapService
         .directAutocomplete(normalizedAddress, { limit: 5 })
-        .then((items) => { if (!cancelled) setAddressSuggestions(items || []); })
-        .catch(() => { if (!cancelled) setAddressSuggestions([]); })
-        .finally(() => { if (!cancelled) setLoadingSuggestions(false); });
+        .then((items) => {
+          if (!cancelled) setAddressSuggestions(items || []);
+        })
+        .catch(() => {
+          if (!cancelled) setAddressSuggestions([]);
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingSuggestions(false);
+        });
     }, 350);
-    return () => { cancelled = true; window.clearTimeout(timeoutId); };
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
   }, [form.address, isEditing, mapLocation?.address]);
 
   const handleChange = (field, value) => {
@@ -177,7 +209,12 @@ const Profile = () => {
       const parsedCoordinates = parseCoordinateAddress(value);
       setMapLocation(
         parsedCoordinates
-          ? { address: value, latitude: parsedCoordinates.latitude, longitude: parsedCoordinates.longitude, plusCode: '' }
+          ? {
+              address: value,
+              latitude: parsedCoordinates.latitude,
+              longitude: parsedCoordinates.longitude,
+              plusCode: '',
+            }
           : null,
       );
       if (parsedCoordinates) setAddressSuggestions([]);
@@ -189,11 +226,19 @@ const Profile = () => {
     if (!suggestion?.address) return;
     setForm((current) => ({ ...current, address: suggestion.address }));
     setAddressSuggestions([]);
-    setMapLocation({ address: suggestion.address, latitude: suggestion.lat, longitude: suggestion.lng, plusCode: suggestion.plusCode || '' });
+    setMapLocation({
+      address: suggestion.address,
+      latitude: suggestion.lat,
+      longitude: suggestion.lng,
+      plusCode: suggestion.plusCode || '',
+    });
   };
 
   const handleUseCurrentLocation = () => {
-    if (!navigator.geolocation) { setNotice({ type: 'error', message: 'Trinh duyet khong ho tro lay vi tri.' }); return; }
+    if (!navigator.geolocation) {
+      setNotice({ type: 'error', message: 'Trinh duyet khong ho tro lay vi tri.' });
+      return;
+    }
     setLoadingLocation(true);
     setNotice({ type: '', message: '' });
     navigator.geolocation.getCurrentPosition(
@@ -235,8 +280,14 @@ const Profile = () => {
 
   const handleSave = async () => {
     const validationError = validateForm();
-    if (validationError) { setNotice({ type: 'error', message: validationError }); return; }
-    if (!userId) { setNotice({ type: 'error', message: 'Khong tim thay thong tin de cap nhat' }); return; }
+    if (validationError) {
+      setNotice({ type: 'error', message: validationError });
+      return;
+    }
+    if (!userId) {
+      setNotice({ type: 'error', message: 'Khong tim thay thong tin de cap nhat' });
+      return;
+    }
     setSaving(true);
     setNotice({ type: '', message: '' });
     try {
@@ -250,25 +301,49 @@ const Profile = () => {
       const resolvedFormLocation = trimmedAddress
         ? hasValidCoordinates(mapLocation) && mapLocation.address === trimmedAddress
           ? mapLocation
-          : await resolveAddressLocation(trimmedAddress, shouldReuseCurrentCoordinates ? activeUser?.userLocation : null)
+          : await resolveAddressLocation(
+              trimmedAddress,
+              shouldReuseCurrentCoordinates ? activeUser?.userLocation : null,
+            )
         : null;
-      const nextLatitude = resolvedFormLocation?.latitude ?? mapLocation?.latitude ?? (shouldReuseCurrentCoordinates ? activeUser?.userLocation?.latitude : undefined);
-      const nextLongitude = resolvedFormLocation?.longitude ?? mapLocation?.longitude ?? (shouldReuseCurrentCoordinates ? activeUser?.userLocation?.longitude : undefined);
-      const nextPlusCode = resolvedFormLocation?.plusCode || mapLocation?.plusCode || (shouldReuseCurrentCoordinates ? activeUser?.userLocation?.plusCode : '') || '';
+      const nextLatitude =
+        resolvedFormLocation?.latitude ??
+        mapLocation?.latitude ??
+        (shouldReuseCurrentCoordinates ? activeUser?.userLocation?.latitude : undefined);
+      const nextLongitude =
+        resolvedFormLocation?.longitude ??
+        mapLocation?.longitude ??
+        (shouldReuseCurrentCoordinates ? activeUser?.userLocation?.longitude : undefined);
+      const nextPlusCode =
+        resolvedFormLocation?.plusCode ||
+        mapLocation?.plusCode ||
+        (shouldReuseCurrentCoordinates ? activeUser?.userLocation?.plusCode : '') ||
+        '';
       const currentLatitude = Number(activeUser?.userLocation?.latitude);
       const currentLongitude = Number(activeUser?.userLocation?.longitude);
       const coordinatesChanged =
-        Number.isFinite(Number(nextLatitude)) && Number.isFinite(Number(nextLongitude)) &&
-        (!Number.isFinite(currentLatitude) || !Number.isFinite(currentLongitude) ||
+        Number.isFinite(Number(nextLatitude)) &&
+        Number.isFinite(Number(nextLongitude)) &&
+        (!Number.isFinite(currentLatitude) ||
+          !Number.isFinite(currentLongitude) ||
           Math.abs(Number(nextLatitude) - currentLatitude) > 0.00001 ||
           Math.abs(Number(nextLongitude) - currentLongitude) > 0.00001);
       const hasSupportedChanges =
-        trimmedName !== currentName || normalizedPhone !== currentPhone ||
-        trimmedAddress !== currentAddress || coordinatesChanged;
-      if (!hasSupportedChanges) { setNotice({ type: 'warning', message: 'Khong co thay doi nao de luu' }); return; }
+        trimmedName !== currentName ||
+        normalizedPhone !== currentPhone ||
+        trimmedAddress !== currentAddress ||
+        coordinatesChanged;
+      if (!hasSupportedChanges) {
+        setNotice({ type: 'warning', message: 'Khong co thay doi nao de luu' });
+        return;
+      }
       const updatedProfile = await profileService.updateProfile(userId, {
-        name: trimmedName, phone: normalizedPhone, address: trimmedAddress,
-        latitude: nextLatitude, longitude: nextLongitude, plusCode: nextPlusCode,
+        name: trimmedName,
+        phone: normalizedPhone,
+        address: trimmedAddress,
+        latitude: nextLatitude,
+        longitude: nextLongitude,
+        plusCode: nextPlusCode,
       });
       const hasResolvedCoordinates =
         Number.isFinite(Number(updatedProfile?.userLocation?.latitude)) &&
@@ -282,7 +357,12 @@ const Profile = () => {
         const parsedCoordinates = parseCoordinateAddress(trimmedAddress);
         setMapLocation(
           parsedCoordinates
-            ? { address: trimmedAddress, latitude: parsedCoordinates.latitude, longitude: parsedCoordinates.longitude, plusCode: '' }
+            ? {
+                address: trimmedAddress,
+                latitude: parsedCoordinates.latitude,
+                longitude: parsedCoordinates.longitude,
+                plusCode: '',
+              }
             : null,
         );
       } else {
@@ -291,9 +371,10 @@ const Profile = () => {
       setIsEditing(false);
       setNotice({
         type: trimmedAddress && !hasResolvedCoordinates ? 'warning' : 'success',
-        message: trimmedAddress && !hasResolvedCoordinates
-          ? 'Da cap nhat ho so. Dia chi da duoc luu, nhung he thong chua xac dinh duoc toa do chinh xac.'
-          : 'Da cap nhat ho so thanh cong.',
+        message:
+          trimmedAddress && !hasResolvedCoordinates
+            ? 'Da cap nhat ho so. Dia chi da duoc luu, nhung he thong chua xac dinh duoc toa do chinh xac.'
+            : 'Da cap nhat ho so thanh cong.',
       });
     } catch (error) {
       setNotice({ type: 'error', message: error.message || 'Khong the cap nhat ho so' });
@@ -313,14 +394,19 @@ const Profile = () => {
     <>
       <div className="profile-page">
         <div className="page-header" style={{ marginBottom: 20 }}>
-          <div><h1 className="page-title">Ho so ca nhan</h1></div>
+          <div>
+            <h1 className="page-title">Ho so ca nhan</h1>
+          </div>
         </div>
 
         {notice.message && (
           <div
             style={{
               ...(noticeStyles[notice.type] || noticeStyles.success),
-              borderRadius: 12, padding: '12px 14px', marginBottom: 16, fontSize: '0.84rem',
+              borderRadius: 12,
+              padding: '12px 14px',
+              marginBottom: 16,
+              fontSize: '0.84rem',
             }}
           >
             {notice.message}
@@ -333,27 +419,51 @@ const Profile = () => {
             <div
               className="profile-avatar-big"
               style={{
-                width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                borderRadius: '50%', background: 'linear-gradient(135deg, #00b14f 0%, #059669 100%)',
-                color: '#fff', fontWeight: 800, fontSize: '1.4rem', flexShrink: 0,
+                width: 72,
+                height: 72,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #00b14f 0%, #059669 100%)',
+                color: '#fff',
+                fontWeight: 800,
+                fontSize: '1.4rem',
+                flexShrink: 0,
               }}
             >
               {initials}
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#111827' }}>{activeUser?.name || 'Chua cap nhat'}</div>
-              <div style={{ fontSize: '0.84rem', color: '#6b7280', marginTop: 4 }}>{activeUser?.email || 'Chua cap nhat'}</div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#111827' }}>
+                {activeUser?.name || 'Chua cap nhat'}
+              </div>
+              <div style={{ fontSize: '0.84rem', color: '#6b7280', marginTop: 4 }}>
+                {activeUser?.email || 'Chua cap nhat'}
+              </div>
               <div
                 style={{
-                  marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 8,
+                  marginTop: 10,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
                   background: mapLocation ? '#eff6ff' : '#f9fafb',
                   border: `1px solid ${mapLocation ? '#bfdbfe' : '#e5e7eb'}`,
-                  borderRadius: 999, padding: '6px 12px', fontSize: '0.8rem', fontWeight: 600,
+                  borderRadius: 999,
+                  padding: '6px 12px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
                   color: mapLocation ? '#1d4ed8' : '#6b7280',
                 }}
               >
                 {loadingProfile || loadingLocation ? <FaSpinner className="animate-spin" /> : <FaMapMarkerAlt />}
-                {loadingProfile ? 'Dang cap nhat ho so' : loadingLocation ? 'Dang xac dinh vi tri' : mapLocation ? 'Da xac dinh vi tri' : 'Chua xac dinh duoc vi tri'}
+                {loadingProfile
+                  ? 'Dang cap nhat ho so'
+                  : loadingLocation
+                    ? 'Dang xac dinh vi tri'
+                    : mapLocation
+                      ? 'Da xac dinh vi tri'
+                      : 'Chua xac dinh duoc vi tri'}
               </div>
             </div>
           </div>
@@ -363,7 +473,9 @@ const Profile = () => {
             <div>
               <label className="form-label">Ho va ten</label>
               <div className="form-input" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ color: '#6b7280' }}><FaUser /></span>
+                <span style={{ color: '#6b7280' }}>
+                  <FaUser />
+                </span>
                 <input
                   type="text"
                   value={form.name}
@@ -380,7 +492,9 @@ const Profile = () => {
             <div>
               <label className="form-label">So dien thoai</label>
               <div className="form-input" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ color: '#6b7280' }}><MdPhoneIphone /></span>
+                <span style={{ color: '#6b7280' }}>
+                  <MdPhoneIphone />
+                </span>
                 <input
                   type="text"
                   value={form.phone}
@@ -404,7 +518,9 @@ const Profile = () => {
             <label className="form-label">Dia chi</label>
             <div style={{ position: 'relative' }}>
               <div className="form-input" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ color: '#6b7280' }}><FaMapMarkerAlt /></span>
+                <span style={{ color: '#6b7280' }}>
+                  <FaMapMarkerAlt />
+                </span>
                 <input
                   type="text"
                   value={form.address}
@@ -436,18 +552,19 @@ const Profile = () => {
                       <FaSpinner className="animate-spin" /> Dang tim goi y...
                     </div>
                   )}
-                  {!loadingSuggestions && addressSuggestions.map((suggestion) => (
-                    <button
-                      key={`${suggestion.lat}-${suggestion.lng}-${suggestion.address}`}
-                      type="button"
-                      role="option"
-                      aria-selected="false"
-                      className="block w-full px-3 py-2 text-left text-[0.8rem] text-gray-700 hover:bg-primary-light focus:bg-primary-light focus:outline-none"
-                      onClick={() => handleSelectAddressSuggestion(suggestion)}
-                    >
-                      {suggestion.address}
-                    </button>
-                  ))}
+                  {!loadingSuggestions &&
+                    addressSuggestions.map((suggestion) => (
+                      <button
+                        key={`${suggestion.lat}-${suggestion.lng}-${suggestion.address}`}
+                        type="button"
+                        role="option"
+                        aria-selected="false"
+                        className="block w-full px-3 py-2 text-left text-[0.8rem] text-gray-700 hover:bg-primary-light focus:bg-primary-light focus:outline-none"
+                        onClick={() => handleSelectAddressSuggestion(suggestion)}
+                      >
+                        {suggestion.address}
+                      </button>
+                    ))}
                 </div>
               )}
             </div>
@@ -458,7 +575,10 @@ const Profile = () => {
             <DriverLicenseSection
               userId={userId}
               profile={activeUser}
-              onSaved={(updated) => { setProfile(updated); updateUser(updated); }}
+              onSaved={(updated) => {
+                setProfile(updated);
+                updateUser(updated);
+              }}
             />
           )}
 
@@ -475,16 +595,18 @@ const Profile = () => {
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
                   <h4 className="font-bold text-green-800 flex items-center gap-2 mb-1">
-                    <FaStore /> Muon cho thue xe?
+                    <FaStore /> Muốn cho thuê xe?
                   </h4>
-                  <p className="text-xs text-green-800 m-0">Dang ky tro thanh Showroom de dang xe va quan ly hop dong.</p>
+                  <p className="text-xs text-green-800 m-0">
+                    Đăng ký trở thành Showroom để đăng xe và quản lý hợp đồng.
+                  </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setShowBecomeShowroom(true)}
                   className="flex items-center gap-1.5 px-5 py-2 bg-[#00b14f] border-none rounded-lg text-white font-bold cursor-pointer text-sm whitespace-nowrap hover:bg-[#009f45] transition-colors"
                 >
-                  <FaStore /> Dang ky Showroom
+                  <FaStore /> Đăng ký Showroom
                 </button>
               </div>
             </div>
@@ -492,16 +614,25 @@ const Profile = () => {
 
           {/* Map section */}
           <div style={{ marginTop: 24 }}>
-            <h3 className="profile-section-title" style={{ marginBottom: 12 }}>Vi tri cua ban</h3>
+            <h3 className="profile-section-title" style={{ marginBottom: 12 }}>
+              Vị trí của bạn
+            </h3>
             {loadingLocation ? (
               <div
                 style={{
-                  minHeight: 280, borderRadius: 16, border: '1px solid #e5e7eb', background: '#fff',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                  color: '#6b7280', fontSize: '0.84rem',
+                  minHeight: 280,
+                  borderRadius: 16,
+                  border: '1px solid #e5e7eb',
+                  background: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  color: '#6b7280',
+                  fontSize: '0.84rem',
                 }}
               >
-                <FaSpinner className="animate-spin" /> Dang xac dinh vi tri...
+                <FaSpinner className="animate-spin" /> Đang xác định vị trí...
               </div>
             ) : mapLocation ? (
               <CarLocationMap
@@ -513,16 +644,23 @@ const Profile = () => {
             ) : (
               <div
                 style={{
-                  minHeight: 200, borderRadius: 16, border: '1px dashed #e5e7eb', background: '#f9fafb',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                  gap: 10, color: '#9ca3af', fontSize: '0.84rem', padding: 24,
+                  minHeight: 200,
+                  borderRadius: 16,
+                  border: '1px dashed #e5e7eb',
+                  background: '#f9fafb',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 10,
+                  color: '#9ca3af',
+                  fontSize: '0.84rem',
+                  padding: 24,
                 }}
               >
                 <FaMapMarkerAlt style={{ fontSize: '2rem' }} />
-                <span>Chua xac dinh duoc vi tri</span>
-                {isEditing && (
-                  <span style={{ fontSize: '0.78rem' }}>Nhap dia chi o tren hoac dung nut lay vi tri</span>
-                )}
+                <span>Chưa xác định được vị trí</span>
+                {isEditing && <span style={{ fontSize: '0.78rem' }}>Nhập địa chỉ ở trên hoặc dùng nút lấy vị trí</span>}
               </div>
             )}
           </div>
@@ -531,30 +669,23 @@ const Profile = () => {
           <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
             {isEditing ? (
               <>
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={handleSave}
-                  disabled={saving || loadingProfile}
-                >
-                  {saving ? <FaSpinner className="animate-spin" /> : <FaSave />} Luu thay doi
+                <button type="button" className="btn-primary" onClick={handleSave} disabled={saving || loadingProfile}>
+                  {saving ? <FaSpinner className="animate-spin" /> : <FaSave />} Lưu thay đổi
                 </button>
                 <button type="button" className="btn-outline" onClick={handleCancelEdit} disabled={saving}>
-                  Huy
+                  Hủy bỏ
                 </button>
               </>
             ) : (
               <button type="button" className="btn-outline" onClick={handleStartEdit} disabled={loadingProfile}>
-                Chinh sua ho so
+                Chỉnh sửa hồ sơ
               </button>
             )}
           </div>
         </div>
       </div>
 
-      {showBecomeShowroom && (
-        <BecomeShowroomModal onClose={() => setShowBecomeShowroom(false)} />
-      )}
+      {showBecomeShowroom && <BecomeShowroomModal onClose={() => setShowBecomeShowroom(false)} />}
     </>
   );
 };

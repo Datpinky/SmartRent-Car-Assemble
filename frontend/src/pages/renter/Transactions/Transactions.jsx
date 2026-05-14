@@ -1,13 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { FaCalendarAlt, FaCheckCircle, FaClock, FaCreditCard, FaEye, FaMoneyBillWave } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
-import {
-  FaCalendarAlt,
-  FaCheckCircle,
-  FaClock,
-  FaCreditCard,
-  FaEye,
-  FaMoneyBillWave,
-} from 'react-icons/fa';
 import Modal from '../../../components/common/Modal';
 import StatusBadge from '../../../components/common/StatusBadge';
 import bookingService from '../../../services/bookingService';
@@ -100,7 +93,7 @@ const Transactions = () => {
 
   const filteredTransactions = useMemo(
     () => transactions.filter((transaction) => matchFilter(transaction, activeFilter)),
-    [activeFilter, transactions]
+    [activeFilter, transactions],
   );
 
   const summary = useMemo(
@@ -112,7 +105,7 @@ const Transactions = () => {
         .filter((transaction) => ['successful', 'refunded'].includes(transaction.status))
         .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0),
     }),
-    [transactions]
+    [transactions],
   );
 
   return (
@@ -128,7 +121,17 @@ const Transactions = () => {
       </div>
 
       {error && (
-        <div style={{ marginBottom: 16, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 12, padding: '12px 14px', fontSize: '0.84rem' }}>
+        <div
+          style={{
+            marginBottom: 16,
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
+            color: '#b91c1c',
+            borderRadius: 12,
+            padding: '12px 14px',
+            fontSize: '0.84rem',
+          }}
+        >
           {error}
         </div>
       )}
@@ -140,8 +143,19 @@ const Transactions = () => {
           { label: 'Chờ xử lý', value: summary.pending, color: '#d97706' },
           { label: 'Đã chi', value: formatMoney(summary.totalPaid), color: '#2563eb' },
         ].map((item) => (
-          <div key={item.label} style={{ background: '#fff', borderRadius: 14, border: '1px solid #f0f0f0', padding: '12px 18px', minWidth: 140 }}>
-            <div style={{ fontSize: item.label === 'Đã chi' ? '1.1rem' : '1.35rem', fontWeight: 800, color: item.color }}>
+          <div
+            key={item.label}
+            style={{
+              background: '#fff',
+              borderRadius: 14,
+              border: '1px solid #f0f0f0',
+              padding: '12px 18px',
+              minWidth: 140,
+            }}
+          >
+            <div
+              style={{ fontSize: item.label === 'Đã chi' ? '1.1rem' : '1.35rem', fontWeight: 800, color: item.color }}
+            >
               {item.value}
             </div>
             <div style={{ fontSize: '0.74rem', color: '#9ca3af', marginTop: 2 }}>{item.label}</div>
@@ -188,9 +202,24 @@ const Transactions = () => {
                 alignItems: 'center',
               }}
             >
-              <div style={{ width: 88, height: 68, borderRadius: 12, overflow: 'hidden', background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div
+                style={{
+                  width: 88,
+                  height: 68,
+                  borderRadius: 12,
+                  overflow: 'hidden',
+                  background: '#f3f4f6',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
                 {transaction.image ? (
-                  <img src={transaction.image} alt={transaction.vehicleName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <img
+                    src={transaction.image}
+                    alt={transaction.vehicleName}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
                 ) : (
                   <FaCarFallback />
                 )}
@@ -200,14 +229,39 @@ const Transactions = () => {
                 <div style={{ fontWeight: 800, color: '#111827', fontSize: '0.95rem' }}>{transaction.vehicleName}</div>
                 <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: 3 }}>{transaction.showroomName}</div>
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8 }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.77rem', color: '#6b7280' }}>
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontSize: '0.77rem',
+                      color: '#6b7280',
+                    }}
+                  >
                     <FaCreditCard size={11} /> {transaction.method}
                   </span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.77rem', color: '#6b7280' }}>
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontSize: '0.77rem',
+                      color: '#6b7280',
+                    }}
+                  >
                     <FaCalendarAlt size={11} /> {formatDateTime(transaction.createdAt)}
                   </span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.77rem', color: '#6b7280' }}>
-                    <FaClock size={11} /> {transaction.paidAt ? formatDateTime(transaction.paidAt) : 'Chưa ghi nhận paid_at'}
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontSize: '0.77rem',
+                      color: '#6b7280',
+                    }}
+                  >
+                    <FaClock size={11} />{' '}
+                    {transaction.paidAt ? formatDateTime(transaction.paidAt) : 'Chưa ghi nhận paid_at'}
                   </span>
                 </div>
               </div>
@@ -219,10 +273,18 @@ const Transactions = () => {
                     customLabel={PAYMENT_LABELS[transaction.status] || transaction.status}
                   />
                 </div>
-                <div style={{ fontWeight: 800, color: transaction.status === 'refunded' ? '#2563eb' : '#00b14f', fontSize: '1rem' }}>
+                <div
+                  style={{
+                    fontWeight: 800,
+                    color: transaction.status === 'refunded' ? '#2563eb' : '#00b14f',
+                    fontSize: '1rem',
+                  }}
+                >
                   {formatMoney(transaction.amount)}
                 </div>
-                <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: 4 }}>Booking: {transaction.bookingId}</div>
+                <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: 4 }}>
+                  Booking: {transaction.bookingId}
+                </div>
                 <button
                   type="button"
                   className="btn-icon"
@@ -247,8 +309,8 @@ const Transactions = () => {
             </div>
 
             {[
-              ['Booking ID', detailModal.bookingId],
-              ['Trạng thái booking', detailModal.bookingStatus],
+              ['Mã đơn', detailModal.bookingId],
+              ['Trạng thái đơn', detailModal.bookingStatus],
               ['Trạng thái payment', PAYMENT_LABELS[detailModal.status] || detailModal.status],
               ['Phương thức', detailModal.method],
               ['Số tiền', formatMoney(detailModal.amount)],
@@ -256,9 +318,20 @@ const Transactions = () => {
               ['Thanh toán lúc', formatDateTime(detailModal.paidAt)],
               ['Mã giao dịch', detailModal.transactionCode || 'Chưa có'],
             ].map(([label, value]) => (
-              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, paddingBottom: 10, borderBottom: '1px solid #f3f4f6' }}>
+              <div
+                key={label}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  paddingBottom: 10,
+                  borderBottom: '1px solid #f3f4f6',
+                }}
+              >
                 <span style={{ color: '#6b7280', fontSize: '0.82rem' }}>{label}</span>
-                <span style={{ color: '#111827', fontWeight: 600, fontSize: '0.82rem', textAlign: 'right' }}>{value}</span>
+                <span style={{ color: '#111827', fontWeight: 600, fontSize: '0.82rem', textAlign: 'right' }}>
+                  {value}
+                </span>
               </div>
             ))}
 
@@ -268,12 +341,13 @@ const Transactions = () => {
                 style={{ flex: 1, justifyContent: 'center' }}
                 onClick={() =>
                   navigate(
-                    `/renter/payment-result?bookingId=${detailModal.bookingId}&status=${['successful', 'refunded'].includes(detailModal.status)
-                      ? 'success'
-                      : detailModal.status === 'pending'
-                        ? 'pending'
-                        : 'error'
-                    }`
+                    `/renter/payment-result?bookingId=${detailModal.bookingId}&status=${
+                      ['successful', 'refunded'].includes(detailModal.status)
+                        ? 'success'
+                        : detailModal.status === 'pending'
+                          ? 'pending'
+                          : 'error'
+                    }`,
                   )
                 }
               >

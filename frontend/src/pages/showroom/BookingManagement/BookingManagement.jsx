@@ -1,60 +1,22 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FaArrowRight, FaCamera, FaCheckCircle, FaEye, FaSpinner, FaTimes, FaTimesCircle } from 'react-icons/fa';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FaArrowRight, FaCheckCircle, FaEye, FaSpinner, FaTimes } from 'react-icons/fa';
 import DataTable from '../../../components/common/DataTable';
 import Modal from '../../../components/common/Modal';
 import StatusBadge from '../../../components/common/StatusBadge';
 import bookingService from '../../../services/bookingService';
 import uploadService from '../../../services/uploadService';
-
-const STATUS_ORDER = [
-  'pending',
-  'waiting_payment',
-  'paid',
-  'waiting_handover',
-  'handed_over',
-  'in_use',
-  'waiting_return_confirmation',
-  'completed',
-  'cancel_pending',
-  'cancel_failed',
-  'cancelled',
-];
-
-const STATUS_LABELS = {
-  pending: 'Chờ thanh toán',
-  waiting_payment: 'Đang thanh toán',
-  paid: 'Đã thanh toán',
-  confirmed: 'Đã xác nhận', // giữ để hiển thị booking cũ
-  waiting_handover: 'Chờ bàn giao',
-  handed_over: 'Đã bàn giao',
-  in_use: 'Đang thuê',
-  waiting_return_confirmation: 'Chờ xác nhận trả',
-  completed: 'Hoàn thành',
-  cancel_pending: 'Đang xử lý hủy/hoàn tiền',
-  cancel_failed: 'Hủy/hoàn tiền lỗi',
-  cancelled: 'Đã hủy',
-};
-
-// Showroom chỉ hành động sau khi renter đã thanh toán
-const PRIMARY_ACTIONS = {
-  paid: { nextStatus: 'waiting_handover', label: 'Xác nhận & chốt bàn giao' },
-  waiting_handover: { nextStatus: 'handed_over', label: 'Xác nhận đã bàn giao xe' },
-  waiting_return_confirmation: { nextStatus: 'completed', label: 'Xác nhận trả xe' },
-};
-
-const CANCELLABLE_STATUSES = ['pending', 'paid', 'waiting_handover'];
-
-const HANDOVER_POSITIONS = ['Trước', 'Sau', 'Trái', 'Phải', 'Mui', 'Gầm'];
-
-const fmtDate = (value) =>
-  value
-    ? new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(value))
-    : '—';
-
-const getVehicleName = (vehicle) =>
-  vehicle?.vehicle_name ||
-  [vehicle?.vehicle_brand || vehicle?.brand, vehicle?.vehicle_model || vehicle?.model].filter(Boolean).join(' ') ||
-  '—';
+import {
+  CANCELLABLE_STATUSES,
+  FILTER_TABS,
+  fmtDate,
+  getVehicleName,
+  PRIMARY_ACTIONS,
+  STATUS_LABELS,
+  STATUS_ORDER,
+} from './bookingManagement.helpers';
+import HandoverPhotoModal from './components/HandoverPhotoModal';
+import OtpModal from './components/OtpModal';
+import StatusPipeline from './components/StatusPipeline';
 
 const BookingManagement = () => {
   const [bookings, setBookings] = useState([]);
@@ -64,18 +26,14 @@ const BookingManagement = () => {
   const [cancelModal, setCancelModal] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [updatingId, setUpdatingId] = useState('');
-  const [otpModal, setOtpModal] = useState(null); // { otp, vehicleName, renterName }
-  const [handoverPhotoModal, setHandoverPhotoModal] = useState(null); // { bookingId, vehicleName }
-  const [handoverPhotos, setHandoverPhotos] = useState({}); // { [posIndex]: File }
+  const [otpModal, setOtpModal] = useState(null);
+  const [handoverPhotoModal, setHandoverPhotoModal] = useState(null);
   const [handoverUploading, setHandoverUploading] = useState(false);
-  const photoInputRefs = useRef({});
 
   const fetchBookings = useCallback(async () => {
     setLoading(true);
     setLoadError('');
-
     try {
-      // getCurrentRoleBookingsDetailed bổ sung vehicle + payment state
       const data = await bookingService.getCurrentRoleBookingsDetailed();
       setBookings(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -90,34 +48,15 @@ const BookingManagement = () => {
     fetchBookings();
   }, [fetchBookings]);
 
-  const updateStatus = async (bookingId, nextStatus) => {
-    // Intercept handed_over: offer optional photo step
-    if (nextStatus === 'handed_over') {
-      const row = bookings.find((b) => (b._id || b.id) === bookingId);
-      setHandoverPhotos({});
-      setHandoverPhotoModal({
-        bookingId,
-        vehicleName: row?.vehicleName || row?.vehicle_id?.vehicle_name || 'Xe',
-      });
-      return;
-    }
-    await _doUpdateStatus(bookingId, nextStatus);
-  };
-
   const _doUpdateStatus = async (bookingId, nextStatus) => {
     setUpdatingId(bookingId);
-
     try {
       const updated = await bookingService.updateBookingStatus(bookingId, nextStatus);
-      setBookings((current) =>
-        current.map((booking) => ((booking._id || booking.id) === bookingId ? { ...booking, ...updated } : booking)),
+      const resolvedStatus = updated?.status || nextStatus;
+      setBookings((curr) => curr.map((b) => ((b._id || b.id) === bookingId ? { ...b, status: resolvedStatus } : b)));
+      setViewModal((curr) =>
+        curr && (curr._id || curr.id) === bookingId ? { ...curr, status: resolvedStatus } : curr,
       );
-      setViewModal((current) =>
-        current && (current._id || current.id) === bookingId
-          ? { ...current, ...(updated || {}), status: updated?.status || nextStatus }
-          : current,
-      );
-      // Hiện OTP cho showroom sau khi bàn giao xe thành công
       if (nextStatus === 'handed_over' && updated?.handover_otp) {
         const row = bookings.find((b) => (b._id || b.id) === bookingId);
         const renter = row?.user_id || {};
@@ -129,31 +68,60 @@ const BookingManagement = () => {
         });
       }
     } catch (err) {
-      setLoadError(err?.response?.data?.message || err?.message || 'Không thể cập nhật trạng thái booking.');
+      setLoadError(err?.response?.data?.message || err?.message || 'Không thể cập nhật trạng thái đơn đặt xe.');
       await fetchBookings();
     } finally {
       setUpdatingId('');
     }
   };
 
-  const confirmHandover = async (skipPhotos = false) => {
+  const updateStatus = async (bookingId, nextStatus) => {
+    if (nextStatus === 'handed_over') {
+      const row = bookings.find((b) => (b._id || b.id) === bookingId);
+      setHandoverPhotoModal({ bookingId, vehicleName: row?.vehicleName || row?.vehicle_id?.vehicle_name || 'Xe' });
+      return;
+    }
+    await _doUpdateStatus(bookingId, nextStatus);
+  };
+
+  const confirmHandover = async (handoverPhotos, skipPhotos) => {
     const { bookingId } = handoverPhotoModal;
     setHandoverUploading(true);
     try {
       if (!skipPhotos && Object.keys(handoverPhotos).length > 0) {
         const files = Object.values(handoverPhotos).filter(Boolean);
+        console.log('📸 Uploading handover photos:', files.length, 'files');
         try {
           const uploaded = await uploadService.uploadImages(files);
+          console.log('✅ Uploaded:', uploaded);
           const urls = uploaded.map((u) => u?.url || u).filter(Boolean);
+          console.log('✅ URLs:', urls);
           if (urls.length > 0) {
-            await bookingService.savePickupImages(bookingId, urls);
+            console.log('📝 Saving pickup images to booking:', {
+              bookingId,
+              urlCount: urls.length,
+              urls,
+            });
+            const saveResponse = await bookingService.savePickupImages(bookingId, urls);
+            console.log('✅ Saved pickup images - API Response:', saveResponse);
+
+            // Verify by refetching booking
+            const verifyBooking = await bookingService.getBookingById(bookingId);
+            console.log('🔍 Verify booking after save:', {
+              bookingId,
+              hasPickupImages: !!verifyBooking?.pickup_images,
+              pickupImagesCount: verifyBooking?.pickup_images?.length || 0,
+              pickupImages: verifyBooking?.pickup_images,
+            });
           }
-        } catch {
-          // Photo upload failed — still proceed to handover, don't block
+        } catch (err) {
+          console.error('❌ Upload/save error:', err);
+          /* photo upload failure doesn't block handover */
         }
+      } else {
+        console.log('⏭️ Skipping photos');
       }
       setHandoverPhotoModal(null);
-      setHandoverPhotos({});
     } finally {
       setHandoverUploading(false);
     }
@@ -163,23 +131,18 @@ const BookingManagement = () => {
   const cancelBooking = async (booking) => {
     const bookingId = booking?._id || booking?.id;
     if (!bookingId) return;
-
     setUpdatingId(bookingId);
     setLoadError('');
-
     try {
       const result = await bookingService.cancelBooking(bookingId);
       const nextStatus = result?.bookingStatus || 'cancelled';
-
-      setBookings((current) =>
-        current.map((item) => ((item._id || item.id) === bookingId ? { ...item, status: nextStatus } : item)),
+      setBookings((curr) =>
+        curr.map((item) => ((item._id || item.id) === bookingId ? { ...item, status: nextStatus } : item)),
       );
-      setViewModal((current) =>
-        current && (current._id || current.id) === bookingId ? { ...current, status: nextStatus } : current,
-      );
+      setViewModal((curr) => (curr && (curr._id || curr.id) === bookingId ? { ...curr, status: nextStatus } : curr));
       setCancelModal(null);
     } catch (err) {
-      setLoadError(err?.response?.data?.message || err?.message || 'Không thể hủy booking hoặc hoàn tiền.');
+      setLoadError(err?.response?.data?.message || err?.message || 'Không thể hủy đơn đặt xe hoặc hoàn tiền.');
       await fetchBookings();
     } finally {
       setUpdatingId('');
@@ -191,7 +154,6 @@ const BookingManagement = () => {
       bookings.map((booking) => {
         const renter = booking.user_id || {};
         const vehicle = booking.vehicle_id || {};
-
         return {
           ...booking,
           id: booking._id || booking.id,
@@ -208,15 +170,17 @@ const BookingManagement = () => {
     [bookings],
   );
 
-  const filteredRows = useMemo(
-    () => (statusFilter === 'all' ? rows : rows.filter((row) => row.status === statusFilter)),
-    [rows, statusFilter],
-  );
+  const filteredRows = useMemo(() => {
+    if (statusFilter === 'all') return rows;
+    const tab = FILTER_TABS.find((t) => t.key === statusFilter);
+    const statuses = tab ? tab.statuses : [statusFilter];
+    return rows.filter((row) => statuses.includes(row.status));
+  }, [rows, statusFilter]);
 
   const countsByStatus = useMemo(
     () =>
       STATUS_ORDER.reduce((acc, status) => {
-        acc[status] = rows.filter((row) => row.status === status).length;
+        acc[status] = rows.filter((r) => r.status === status).length;
         return acc;
       }, {}),
     [rows],
@@ -284,7 +248,6 @@ const BookingManagement = () => {
         const primaryAction = PRIMARY_ACTIONS[row.status];
         const canCancel = CANCELLABLE_STATUSES.includes(row.status);
         const isUpdating = updatingId === row.id;
-
         return (
           <div style={{ display: 'flex', gap: 5 }}>
             <button
@@ -296,15 +259,14 @@ const BookingManagement = () => {
             >
               <FaEye aria-hidden="true" />
             </button>
-
             {canCancel && (
               <button
                 type="button"
                 className="btn-icon danger"
                 onClick={() => setCancelModal(row)}
                 disabled={isUpdating}
-                title="Hủy booking"
-                aria-label="Hủy booking"
+                title="Hủy đơn đặt xe"
+                aria-label="Hủy đơn đặt xe"
               >
                 {isUpdating ? (
                   <FaSpinner aria-hidden="true" className="animate-spin" />
@@ -313,7 +275,6 @@ const BookingManagement = () => {
                 )}
               </button>
             )}
-
             {primaryAction && (
               <button
                 type="button"
@@ -348,7 +309,7 @@ const BookingManagement = () => {
       <div className="page-header" style={{ marginBottom: 16 }}>
         <div>
           <h1 className="page-title">Quản lý đặt xe</h1>
-          <p className="page-subtitle">Theo dõi và xử lý các booking của showroom theo đúng trạng thái backend.</p>
+          <p className="page-subtitle">Theo dõi và xử lý các đơn đặt xe của showroom theo đúng trạng thái hệ thống.</p>
         </div>
         {countsByStatus.pending > 0 && (
           <div
@@ -361,80 +322,57 @@ const BookingManagement = () => {
               fontWeight: 600,
             }}
           >
-            {countsByStatus.pending} booking chờ xác nhận
+            {countsByStatus.pending} đơn chờ xác nhận
           </div>
         )}
       </div>
 
-      <div
-        style={{
-          background: '#fff',
-          borderRadius: 14,
-          padding: 16,
-          marginBottom: 16,
-          border: '1px solid #f0f0f0',
-          overflowX: 'auto',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 0, minWidth: 820 }}>
-          {STATUS_ORDER.map((status, index) => (
-            <React.Fragment key={status}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1 }}>
-                <div
-                  style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: '50%',
-                    background: countsByStatus[status] ? '#00b14f' : '#e5e7eb',
-                  }}
-                />
-                <span
-                  style={{
-                    fontSize: '0.68rem',
-                    color: '#6b7280',
-                    fontWeight: 600,
-                    textAlign: 'center',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {STATUS_LABELS[status]}
-                </span>
-                <span className="tabular-nums" style={{ fontSize: '0.7rem', fontWeight: 700, color: '#111827' }}>
-                  {countsByStatus[status]}
-                </span>
-              </div>
-              {index < STATUS_ORDER.length - 1 && <div style={{ height: 1, background: '#e5e7eb', flex: 1.4 }} />}
-            </React.Fragment>
-          ))}
-        </div>
-      </div>
+      <StatusPipeline countsByStatus={countsByStatus} />
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-        {['all', ...STATUS_ORDER].map((status) => (
-          <button
-            type="button"
-            key={status}
-            onClick={() => setStatusFilter(status)}
-            style={{
-              padding: '5px 12px',
-              borderRadius: 50,
-              border: '1.5px solid',
-              borderColor: statusFilter === status ? '#00b14f' : '#e5e7eb',
-              background: statusFilter === status ? '#00b14f' : '#fff',
-              color: statusFilter === status ? '#fff' : '#374151',
-              fontSize: '0.78rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            {status === 'all' ? 'Tất cả' : STATUS_LABELS[status] || status}
-            {status !== 'all' && (
+        <button
+          type="button"
+          onClick={() => setStatusFilter('all')}
+          style={{
+            padding: '5px 12px',
+            borderRadius: 50,
+            border: '1.5px solid',
+            borderColor: statusFilter === 'all' ? '#00b14f' : '#e5e7eb',
+            background: statusFilter === 'all' ? '#00b14f' : '#fff',
+            color: statusFilter === 'all' ? '#fff' : '#374151',
+            fontSize: '0.78rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          Tất cả
+        </button>
+        {FILTER_TABS.map((tab) => {
+          const count = tab.statuses.reduce((sum, s) => sum + (countsByStatus[s] || 0), 0);
+          return (
+            <button
+              type="button"
+              key={tab.key}
+              onClick={() => setStatusFilter(tab.key)}
+              style={{
+                padding: '5px 12px',
+                borderRadius: 50,
+                border: '1.5px solid',
+                borderColor: statusFilter === tab.key ? '#00b14f' : '#e5e7eb',
+                background: statusFilter === tab.key ? '#00b14f' : '#fff',
+                color: statusFilter === tab.key ? '#fff' : '#374151',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              {tab.label}
               <span className="tabular-nums" style={{ marginLeft: 5, opacity: 0.7 }}>
-                ({countsByStatus[status] || 0})
+                ({count})
               </span>
-            )}
-          </button>
-        ))}
+            </button>
+          );
+        })}
       </div>
 
       {loading ? (
@@ -474,7 +412,6 @@ const BookingManagement = () => {
                 customLabel={STATUS_LABELS[viewModal.status] || viewModal.status}
               />
             </div>
-
             {[
               ['Khách thuê', viewModal.renterName],
               ['Email', viewModal.renterEmail],
@@ -500,7 +437,6 @@ const BookingManagement = () => {
                 </span>
               </div>
             ))}
-
             <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>
               {CANCELLABLE_STATUSES.includes(viewModal.status) && (
                 <button
@@ -512,10 +448,9 @@ const BookingManagement = () => {
                     setViewModal(null);
                   }}
                 >
-                  Hủy booking
+                  Hủy đơn đặt xe
                 </button>
               )}
-
               {PRIMARY_ACTIONS[viewModal.status] && (
                 <button
                   type="button"
@@ -537,7 +472,7 @@ const BookingManagement = () => {
       <Modal
         isOpen={!!cancelModal}
         onClose={() => setCancelModal(null)}
-        title="Xác nhận hủy booking"
+        title="Xác nhận hủy đơn đặt xe"
         width={420}
         footer={
           <>
@@ -557,194 +492,19 @@ const BookingManagement = () => {
       >
         {cancelModal && (
           <p style={{ fontSize: '0.85rem', color: '#374151' }}>
-            Bạn đang hủy booking của khách hàng <b>{cancelModal.renterName}</b>. Nếu booking đã thanh toán, hệ thống sẽ
-            gọi API refund trước khi chuyển booking sang trạng thái đã hủy.
+            Bạn đang hủy đơn đặt xe của khách hàng <b>{cancelModal.renterName}</b>. Nếu đơn đã thanh toán, hệ thống sẽ
+            xử lý hoàn tiền trước khi chuyển đơn sang trạng thái đã hủy.
           </p>
         )}
       </Modal>
 
-      {/* Modal hiển thị OTP bàn giao cho showroom */}
-      <Modal isOpen={!!otpModal} onClose={() => setOtpModal(null)} title="Mã xác nhận bàn giao xe" width={400}>
-        {otpModal && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center', textAlign: 'center' }}>
-            <div style={{ fontSize: '0.84rem', color: '#374151' }}>
-              Xe <b>{otpModal.vehicleName}</b> đã được bàn giao cho <b>{otpModal.renterName}</b>.
-            </div>
-            <div style={{ fontSize: '0.82rem', color: '#6b7280' }}>
-              Đọc mã OTP này cho khách hàng. Họ cần nhập mã để xác nhận đã nhận xe.
-            </div>
-            <div
-              style={{
-                background: '#f0fdf4',
-                border: '2px solid #00b14f',
-                borderRadius: 14,
-                padding: '20px 32px',
-                letterSpacing: '0.35em',
-                fontSize: '2.2rem',
-                fontWeight: 900,
-                color: '#00b14f',
-                fontFamily: 'monospace',
-              }}
-            >
-              {otpModal.otp}
-            </div>
-            <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Mã có hiệu lực trong 24 giờ</div>
-            <button type="button" className="btn-primary" style={{ width: '100%' }} onClick={() => setOtpModal(null)}>
-              Đã thông báo cho khách
-            </button>
-          </div>
-        )}
-      </Modal>
-
-      {/* Modal chụp ảnh xe trước khi bàn giao — tuỳ chọn */}
-      <Modal
-        isOpen={!!handoverPhotoModal}
-        onClose={() => !handoverUploading && setHandoverPhotoModal(null)}
-        title="Chụp ảnh xe trước khi bàn giao (không bắt buộc)"
-        width={540}
-      >
-        {handoverPhotoModal && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div
-              style={{
-                background: '#eff6ff',
-                border: '1px solid #bfdbfe',
-                borderRadius: 10,
-                padding: '10px 14px',
-                fontSize: '0.8rem',
-                color: '#1e40af',
-              }}
-            >
-              <strong>Mẹo:</strong> Chụp ảnh xe từng góc trước khi bàn giao giúp AI so sánh tự động khi khách trả xe.
-              Bạn có thể bỏ qua bước này và vẫn bàn giao xe bình thường.
-            </div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: 10,
-              }}
-            >
-              {HANDOVER_POSITIONS.map((label, idx) => {
-                const file = handoverPhotos[idx];
-                const preview = file ? URL.createObjectURL(file) : null;
-                return (
-                  <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#374151' }}>{label}</span>
-                    {preview ? (
-                      <div style={{ position: 'relative' }}>
-                        <img
-                          src={preview}
-                          alt={label}
-                          style={{
-                            width: '100%',
-                            height: 80,
-                            objectFit: 'cover',
-                            borderRadius: 8,
-                            border: '2px solid #2563eb',
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setHandoverPhotos((p) => {
-                              const n = { ...p };
-                              delete n[idx];
-                              return n;
-                            })
-                          }
-                          style={{
-                            position: 'absolute',
-                            top: 2,
-                            right: 2,
-                            background: 'rgba(0,0,0,0.5)',
-                            border: 'none',
-                            borderRadius: '50%',
-                            width: 20,
-                            height: 20,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <FaTimesCircle style={{ color: '#fff', fontSize: '0.7rem' }} />
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => photoInputRefs.current[idx]?.click()}
-                        style={{
-                          width: '100%',
-                          height: 80,
-                          border: '2px dashed #93c5fd',
-                          borderRadius: 8,
-                          background: '#eff6ff',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 4,
-                        }}
-                      >
-                        <FaCamera style={{ color: '#2563eb', fontSize: '1.1rem' }} />
-                        <span style={{ fontSize: '0.65rem', color: '#6b7280' }}>Chọn ảnh</span>
-                      </button>
-                    )}
-                    <input
-                      ref={(el) => {
-                        photoInputRefs.current[idx] = el;
-                      }}
-                      type="file"
-                      accept="image/*"
-                      style={{ display: 'none' }}
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) setHandoverPhotos((p) => ({ ...p, [idx]: f }));
-                        e.target.value = '';
-                      }}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-            <div style={{ fontSize: '0.78rem', color: '#6b7280' }}>
-              {Object.keys(handoverPhotos).length} / {HANDOVER_POSITIONS.length} vị trí đã chụp
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                type="button"
-                className="btn-outline"
-                style={{ flex: 1 }}
-                disabled={handoverUploading}
-                onClick={() => confirmHandover(true)}
-              >
-                Bỏ qua & bàn giao ngay
-              </button>
-              <button
-                type="button"
-                className="btn-primary"
-                style={{ flex: 1 }}
-                disabled={handoverUploading}
-                onClick={() => confirmHandover(false)}
-              >
-                {handoverUploading ? (
-                  <>
-                    <FaSpinner className="animate-spin" aria-hidden="true" /> Đang xử lý...
-                  </>
-                ) : (
-                  <>
-                    <FaCheckCircle aria-hidden="true" />{' '}
-                    {Object.keys(handoverPhotos).length > 0 ? 'Lưu ảnh & bàn giao' : 'Bàn giao xe'}
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        )}
-      </Modal>
+      <OtpModal otpModal={otpModal} onClose={() => setOtpModal(null)} />
+      <HandoverPhotoModal
+        handoverPhotoModal={handoverPhotoModal}
+        handoverUploading={handoverUploading}
+        onConfirm={confirmHandover}
+        onClose={() => setHandoverPhotoModal(null)}
+      />
     </div>
   );
 };

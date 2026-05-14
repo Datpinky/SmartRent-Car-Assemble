@@ -124,12 +124,12 @@ export const getBookingFlowState = (booking, fallbackPaymentStatus) => {
     : requiresRetryPayment
       ? 'Thanh toán trước đó chưa thành công. Vui lòng thanh toán lại để tiếp tục quy trình nhận xe.'
       : !hasSuccessfulPayment
-        ? 'Booking đang chờ thanh toán. Sau khi thanh toán thành công, showroom mới có thể bàn giao xe.'
+        ? 'Đơn đặt xe đang chờ thanh toán. Sau khi thanh toán thành công, showroom mới có thể bàn giao xe.'
         : isAwaitingShowroomProcessing
-          ? 'Showroom đang xử lý booking và chuẩn bị bàn giao xe. Booking sẽ chuyển sang Chờ giao xe khi showroom hoàn tất xử lý.'
+          ? 'Showroom đang xử lý đơn đặt xe và chuẩn bị bàn giao xe. Đơn đặt xe sẽ chuyển sang Chờ giao xe khi showroom hoàn tất xử lý.'
           : !pickupReadyByTime && startAt
             ? `Showroom sẽ hoàn tất bàn giao khi đến mốc ${startAt.toLocaleString('vi-VN')}.`
-            : 'Showroom đã hoàn tất bước bàn giao trên hệ thống. Đây là màn theo dõi — bạn không cần bấm «xác nhận đã nhận xe» ở đây; khi trạng thái đồng bộ, booking sẽ hiện ở Chuyến đi của tôi.';
+            : 'Showroom đã hoàn tất bước bàn giao trên hệ thống. Đây là màn theo dõi — bạn không cần bấm «xác nhận đã nhận xe» ở đây; khi trạng thái đồng bộ, đơn đặt xe sẽ hiện ở Chuyến đi của tôi.';
 
   return {
     canConfirmPickup,

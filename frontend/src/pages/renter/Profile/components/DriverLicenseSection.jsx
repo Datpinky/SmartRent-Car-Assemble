@@ -2,11 +2,7 @@ import { useEffect, useState } from 'react';
 import { FaEdit, FaIdCard, FaSave, FaSpinner, FaUpload } from 'react-icons/fa';
 import apiClient from '../../../../services/apiClient';
 import profileService from '../../../../services/profileService';
-import {
-  formatDateInput,
-  LICENSE_CLASS_OPTIONS,
-  LICENSE_STATUS_BADGE,
-} from '../profile.helpers';
+import { formatDateInput, LICENSE_CLASS_OPTIONS, LICENSE_STATUS_BADGE } from '../profile.helpers';
 
 const DriverLicenseSection = ({ userId, profile, onSaved }) => {
   const hasLicense = Boolean(profile?.driver_license_number);
@@ -97,7 +93,7 @@ const DriverLicenseSection = ({ userId, profile, onSaved }) => {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <h3 className="profile-section-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
           <FaIdCard style={{ color: '#00b14f' }} />
-          Giay phep lai xe
+          Giấy phép lái xe
           <span
             style={{
               background: badge.background,
@@ -117,10 +113,13 @@ const DriverLicenseSection = ({ userId, profile, onSaved }) => {
             className="btn-outline"
             type="button"
             style={{ padding: '6px 14px', fontSize: '0.8rem' }}
-            onClick={() => { setEditing(true); setNotice({ type: '', message: '' }); }}
+            onClick={() => {
+              setEditing(true);
+              setNotice({ type: '', message: '' });
+            }}
           >
             <FaEdit style={{ marginRight: 4 }} />
-            {hasLicense ? 'Chinh sua' : 'Them GPLX'}
+            {hasLicense ? 'Chỉnh sửa' : 'Thêm GPLX'}
           </button>
         )}
       </div>
@@ -146,14 +145,22 @@ const DriverLicenseSection = ({ userId, profile, onSaved }) => {
       {!editing && profile?.driver_license_status === 'approved' && (
         <div
           style={{
-            background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10,
-            padding: '10px 14px', marginBottom: 12, fontSize: '0.82rem', color: '#166534',
-            display: 'flex', alignItems: 'center', gap: 8,
+            background: '#f0fdf4',
+            border: '1px solid #86efac',
+            borderRadius: 10,
+            padding: '10px 14px',
+            marginBottom: 12,
+            fontSize: '0.82rem',
+            color: '#166534',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
           }}
         >
           <span style={{ fontSize: '1rem' }}>🔒</span>
           <span>
-            Giay phep lai xe da duoc xac minh va <strong>khong the chinh sua</strong>. Neu can cap nhat, vui long lien he Admin.
+            Giấy phép lái xe đã được xác minh và <strong>không thể chỉnh sửa</strong>. Nếu cần cập nhật, vui lòng liên
+            hệ Admin.
           </span>
         </div>
       )}
@@ -169,26 +176,28 @@ const DriverLicenseSection = ({ userId, profile, onSaved }) => {
           ].map(([label, value]) => (
             <div key={label}>
               <div className="form-label">{label}</div>
-              <div className="form-input" style={{ background: '#f9fafb' }}>{value}</div>
+              <div className="form-input" style={{ background: '#f9fafb' }}>
+                {value}
+              </div>
             </div>
           ))}
           <div />
           {profile.driver_license_front_image && (
             <div>
-              <div className="form-label">Mat truoc GPLX</div>
+              <div className="form-label">Mặt trước GPLX</div>
               <img
                 src={profile.driver_license_front_image}
-                alt="Mat truoc GPLX"
+                alt="Mặt trước GPLX"
                 style={{ width: '100%', maxWidth: 200, borderRadius: 8, border: '1px solid #e5e7eb' }}
               />
             </div>
           )}
           {profile.driver_license_back_image && (
             <div>
-              <div className="form-label">Mat sau GPLX</div>
+              <div className="form-label">Mặt sau GPLX</div>
               <img
                 src={profile.driver_license_back_image}
-                alt="Mat sau GPLX"
+                alt="Mặt sau GPLX"
                 style={{ width: '100%', maxWidth: 200, borderRadius: 8, border: '1px solid #e5e7eb' }}
               />
             </div>
@@ -198,51 +207,74 @@ const DriverLicenseSection = ({ userId, profile, onSaved }) => {
 
       {!editing && !hasLicense && (
         <div style={{ color: '#9ca3af', fontSize: '0.85rem', padding: '12px 0' }}>
-          Ban chua cung cap thong tin giay phep lai xe. Hay them de co the dat xe.
+          Bạn chưa cung cấp thông tin giấy phép lái xe. Hãy thêm để có thể đặt xe.
         </div>
       )}
 
-      {!editing && hasLicense && profile?.driver_license_status === 'rejected' && profile?.driver_license_reject_reason && (
-        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', fontSize: '0.82rem', color: '#991b1b', marginBottom: 4 }}>
-          <strong>Ly do tu choi:</strong> {profile.driver_license_reject_reason}
-          <div style={{ marginTop: 4, color: '#b91c1c' }}>Vui long chinh sua va nop lai GPLX de duoc xet duyet.</div>
-        </div>
-      )}
+      {!editing &&
+        hasLicense &&
+        profile?.driver_license_status === 'rejected' &&
+        profile?.driver_license_reject_reason && (
+          <div
+            style={{
+              background: '#fef2f2',
+              border: '1px solid #fecaca',
+              borderRadius: 10,
+              padding: '10px 14px',
+              fontSize: '0.82rem',
+              color: '#991b1b',
+              marginBottom: 4,
+            }}
+          >
+            <strong>Lý do từ chối:</strong> {profile.driver_license_reject_reason}
+            <div style={{ marginTop: 4, color: '#b91c1c' }}>Vui lòng chỉnh sửa và nộp lại GPLX để được xét duyệt.</div>
+          </div>
+        )}
 
       {!editing && hasLicense && profile?.driver_license_status === 'pending' && (
-        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', fontSize: '0.82rem', color: '#92400e', marginBottom: 4 }}>
-          GPLX cua ban dang cho admin xac minh. Ban chua the dat xe cho den khi duoc duyet.
+        <div
+          style={{
+            background: '#fffbeb',
+            border: '1px solid #fde68a',
+            borderRadius: 10,
+            padding: '10px 14px',
+            fontSize: '0.82rem',
+            color: '#92400e',
+            marginBottom: 4,
+          }}
+        >
+          GPLX của bạn đang chờ admin xác minh. Bạn chưa thể đặt xe cho đến khi được duyệt.
         </div>
       )}
 
       {editing && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <div>
-            <label className="form-label">So GPLX *</label>
+            <label className="form-label">Số GPLX *</label>
             <div className="form-input" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input
                 type="text"
                 value={form.driver_license_number}
                 onChange={(e) => setForm((p) => ({ ...p, driver_license_number: e.target.value }))}
                 style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%' }}
-                placeholder="Nhap so GPLX"
+                placeholder="Nhập số GPLX"
               />
             </div>
           </div>
           <div>
-            <label className="form-label">Ho ten tren GPLX *</label>
+            <label className="form-label">Họ tên trên GPLX *</label>
             <div className="form-input" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input
                 type="text"
                 value={form.driver_license_fullname}
                 onChange={(e) => setForm((p) => ({ ...p, driver_license_fullname: e.target.value }))}
                 style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%' }}
-                placeholder="Ho ten day du"
+                placeholder="Họ tên đầy đủ"
               />
             </div>
           </div>
           <div>
-            <label className="form-label">Ngay sinh *</label>
+            <label className="form-label">Ngày sinh *</label>
             <div className="form-input">
               <input
                 type="date"
@@ -253,20 +285,24 @@ const DriverLicenseSection = ({ userId, profile, onSaved }) => {
             </div>
           </div>
           <div>
-            <label className="form-label">Hang GPLX</label>
+            <label className="form-label">Hạng GPLX</label>
             <div className="form-input">
               <select
                 value={form.driver_license_class}
                 onChange={(e) => setForm((p) => ({ ...p, driver_license_class: e.target.value }))}
                 style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%' }}
               >
-                <option value="">-- Chon hang --</option>
-                {LICENSE_CLASS_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+                <option value="">-- Chọn hạng --</option>
+                {LICENSE_CLASS_OPTIONS.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
           <div>
-            <label className="form-label">Ngay het han</label>
+            <label className="form-label">Ngày hết hạn</label>
             <div className="form-input">
               <input
                 type="date"
@@ -286,9 +322,17 @@ const DriverLicenseSection = ({ userId, profile, onSaved }) => {
                 <label className="form-label">{label}</label>
                 <label
                   style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                    gap: 8, border: '2px dashed #d1fae5', borderRadius: 10, padding: 16,
-                    cursor: 'pointer', background: '#f9fafb', minHeight: 100,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    border: '2px dashed #d1fae5',
+                    borderRadius: 10,
+                    padding: 16,
+                    cursor: 'pointer',
+                    background: '#f9fafb',
+                    minHeight: 100,
                   }}
                 >
                   {form[field] ? (
@@ -305,7 +349,9 @@ const DriverLicenseSection = ({ userId, profile, onSaved }) => {
                     type="file"
                     accept="image/*"
                     style={{ display: 'none' }}
-                    onChange={(e) => { if (e.target.files?.[0]) uploadImage(e.target.files[0], side); }}
+                    onChange={(e) => {
+                      if (e.target.files?.[0]) uploadImage(e.target.files[0], side);
+                    }}
                   />
                 </label>
               </div>
@@ -318,15 +364,18 @@ const DriverLicenseSection = ({ userId, profile, onSaved }) => {
               onClick={handleSave}
               disabled={saving || uploadingFront || uploadingBack}
             >
-              {saving ? <FaSpinner className="animate-spin" /> : <FaSave />} Luu GPLX
+              {saving ? <FaSpinner className="animate-spin" /> : <FaSave />} Lưu GPLX
             </button>
             <button
               className="btn-outline"
               type="button"
-              onClick={() => { setEditing(false); setNotice({ type: '', message: '' }); }}
+              onClick={() => {
+                setEditing(false);
+                setNotice({ type: '', message: '' });
+              }}
               disabled={saving}
             >
-              Huy
+              Hủy bỏ
             </button>
           </div>
         </div>

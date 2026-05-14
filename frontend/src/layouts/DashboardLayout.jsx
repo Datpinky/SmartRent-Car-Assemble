@@ -65,8 +65,14 @@ const DashboardLayout = ({ children }) => {
     return () => document.removeEventListener('keydown', onEsc);
   }, []);
 
-  const handleLogout = () => { logout(); navigate('/login'); };
-  const handleProfile = () => { setUserDropdownOpen(false); navigate(PROFILE_PATHS[user?.role] || '/'); };
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+  const handleProfile = () => {
+    setUserDropdownOpen(false);
+    navigate(PROFILE_PATHS[user?.role] || '/');
+  };
 
   return (
     <div className="relative flex min-h-screen bg-gray-50">
@@ -98,11 +104,23 @@ const DashboardLayout = ({ children }) => {
         <div className="flex min-h-[64px] shrink-0 items-center justify-between border-b border-gray-100 px-3.5">
           {!collapsed ? (
             <Link to="/" className="min-w-0 flex-1 no-underline" aria-label="SmartRent - Trang chủ">
-              <img src="/logo_transparent.png" alt="SmartRent Car Rental" width={136} height={36} className="h-8 w-auto object-contain" />
+              <img
+                src="/logo_transparent.png"
+                alt="SmartRent Car Rental"
+                width={136}
+                height={36}
+                className="h-8 w-auto object-contain"
+              />
             </Link>
           ) : (
             <Link to="/" className="mx-auto block" aria-label="SmartRent - Trang chủ">
-              <img src="/logo_transparent.png" alt="SmartRent" width={32} height={32} className="h-8 w-8 object-contain" />
+              <img
+                src="/logo_transparent.png"
+                alt="SmartRent"
+                width={32}
+                height={32}
+                className="h-8 w-8 object-contain"
+              />
             </Link>
           )}
 
@@ -113,7 +131,7 @@ const DashboardLayout = ({ children }) => {
             aria-label={collapsed ? 'Mở rộng menu' : 'Thu gọn menu'}
             aria-pressed={collapsed}
           >
-            {collapsed ? <span style={{fontSize:14}}>›</span> : <span style={{fontSize:14}}>‹</span>}
+            {collapsed ? <span style={{ fontSize: 14 }}>›</span> : <span style={{ fontSize: 14 }}>‹</span>}
           </button>
 
           <button
@@ -191,21 +209,24 @@ const DashboardLayout = ({ children }) => {
               </button>
 
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400">SmartRent workspace</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400">
+                  SmartRent workspace
+                </p>
                 <h1 className="text-[1.05rem] font-semibold text-gray-900">{headerTitle}</h1>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
               {user?.role === 'renter' && <NotificationBell />}
-
-              <Link
-                to="/"
-                className="hidden items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 no-underline transition hover:border-[#00b14f]/40 hover:text-[#00b14f] lg:inline-flex"
-              >
-                <Home size={15} className="text-[#00b14f]" />
-                Trang chủ
-              </Link>
+              {user?.role == 'renter' && (
+                <Link
+                  to="/"
+                  className="hidden items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 no-underline transition hover:border-[#00b14f]/40 hover:text-[#00b14f] lg:inline-flex"
+                >
+                  <Home size={15} className="text-[#00b14f]" />
+                  Trang chủ
+                </Link>
+              )}
 
               <div className="relative" ref={dropdownRef}>
                 <button
@@ -222,10 +243,15 @@ const DashboardLayout = ({ children }) => {
                     {initials}
                   </div>
                   <div className="hidden min-w-0 text-left sm:block">
-                    <div className="truncate text-[0.82rem] font-semibold text-gray-900">{user?.name || 'Tài khoản'}</div>
+                    <div className="truncate text-[0.82rem] font-semibold text-gray-900">
+                      {user?.name || 'Tài khoản'}
+                    </div>
                     <div className="truncate text-[0.72rem] text-gray-500">{roleCfg.label}</div>
                   </div>
-                  <ChevronDown size={14} className={`text-gray-400 transition-transform ${userDropdownOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown
+                    size={14}
+                    className={`text-gray-400 transition-transform ${userDropdownOpen ? 'rotate-180' : ''}`}
+                  />
                 </button>
 
                 {userDropdownOpen && (
@@ -255,7 +281,9 @@ const DashboardLayout = ({ children }) => {
           </div>
         </header>
 
-        <main id="main-content" className="flex-1">{children}</main>
+        <main id="main-content" className="flex-1 p-6">
+          {children}
+        </main>
       </div>
     </div>
   );

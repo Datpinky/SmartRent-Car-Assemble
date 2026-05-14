@@ -6,7 +6,7 @@
 export const RENTAL_CONTRACT_UI = {
   previewModalTitle: 'Bản xem trước hợp đồng',
   previewBanner:
-    'Đây là bản xem trước, chưa phải hợp đồng chính thức từ hệ thống. Sau khi thanh toán thành công, bạn có thể mở Hợp đồng chính thức theo mã booking trên các màn theo dõi chuyến.',
+    'Đây là bản xem trước, chưa phải hợp đồng chính thức từ hệ thống. Sau khi thanh toán thành công, bạn có thể mở Hợp đồng chính thức theo mã đơn trên các màn theo dõi chuyến.',
   officialModalTitle: 'Hợp đồng chính thức',
   previewButton: 'Xem trước hợp đồng thuê xe',
   officialButton: 'Xem hợp đồng thuê xe',
@@ -36,21 +36,15 @@ export const RENTAL_CONTRACT_MAIN_CLAUSES = [
   },
   {
     title: 'Điều 2 — Thời hạn thuê',
-    lines: [
-      'Thời hạn thuê theo ngày giờ nhận xe và trả xe đã chọn trên đơn đặt.',
-    ],
+    lines: ['Thời hạn thuê theo ngày giờ nhận xe và trả xe đã chọn trên đơn đặt.'],
   },
   {
     title: 'Điều 3 — Mục đích thuê',
-    lines: [
-      'Bên thuê sử dụng xe ô tô tự lái đúng mục đích hợp pháp và theo thỏa thuận.',
-    ],
+    lines: ['Bên thuê sử dụng xe ô tô tự lái đúng mục đích hợp pháp và theo thỏa thuận.'],
   },
   {
     title: 'Điều 4 — Giá thuê và thanh toán',
-    lines: [
-      'Giá và phương thức thanh toán theo tổng tiền hiển thị trên đơn và cổng thanh toán điện tử (nếu áp dụng).',
-    ],
+    lines: ['Giá và phương thức thanh toán theo tổng tiền hiển thị trên đơn và cổng thanh toán điện tử (nếu áp dụng).'],
   },
   {
     title: 'Điều 5–7 — Giao trả xe, nghĩa vụ & quyền các bên',
@@ -62,8 +56,6 @@ export const RENTAL_CONTRACT_MAIN_CLAUSES = [
   },
   {
     title: 'Điều 8–9 — Cam đoan & điều khoản chung',
-    lines: [
-      'Các bên chịu trách nhiệm về tính trung thực của thông tin; ưu tiên thương lượng khi có tranh chấp.',
-    ],
+    lines: ['Các bên chịu trách nhiệm về tính trung thực của thông tin; ưu tiên thương lượng khi có tranh chấp.'],
   },
 ];

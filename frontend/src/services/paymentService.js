@@ -71,7 +71,7 @@ const paymentService = {
     const bookingId = options.bookingId || options.id || '';
 
     if (!bookingId) {
-      throw new Error('Khong tim thay booking id de tao payment.');
+      throw new Error('Không tìm thấy mã đơn để tạo thanh toán.');
     }
 
     if (options.forceNew && options.previousClientSecret) {

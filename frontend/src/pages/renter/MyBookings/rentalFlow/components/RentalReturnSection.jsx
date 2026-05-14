@@ -1,6 +1,7 @@
 import { FaInfoCircle, FaShieldAlt } from 'react-icons/fa';
 import { BASE_CARD_STYLE, NOTICE_STYLES, RETURN_FIELDS } from '../rentalFlow.constants';
 import { formatFlowDateTime } from '../rentalFlow.utils';
+import ReturnInspectionSection from './ReturnInspectionSection';
 
 const RentalReturnSection = ({
   returnStateMeta,
@@ -12,6 +13,7 @@ const RentalReturnSection = ({
   savingSection,
   onToggleChecklist,
   onChangeReturnNote,
+  onChangeReturnImages,
   onSaveReturn,
 }) => {
   const actionDisabled = returnLocked;
@@ -99,6 +101,12 @@ const RentalReturnSection = ({
           })}
         </div>
       </div>
+
+      <ReturnInspectionSection
+        workflow={workflow}
+        onChangeReturnImages={onChangeReturnImages}
+        returnLocked={returnLocked}
+      />
 
       <div style={BASE_CARD_STYLE}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>

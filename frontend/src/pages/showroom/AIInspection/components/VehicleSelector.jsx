@@ -21,17 +21,17 @@ function VehicleSelector({
 }) {
   return (
     <div className="bg-white rounded-2xl p-5 border border-gray-200">
-      <div className="font-bold text-base text-gray-900 mb-1">Chon xe can kiem tra</div>
+      <div className="font-bold text-base text-gray-900 mb-1">Chọn xe cần kiểm tra</div>
       <p className="text-[0.8rem] text-gray-500 mb-4">
-        Chon xe cua showroom. Sau do lien ket booking (tuy chon) de tu dong dung anh ban giao lam anh "truoc".
+        Chọn xe của showroom. Sau đó liên kết booking (tùy chọn) để tự động dùng ảnh bàn giao làm ảnh "trước".
       </p>
 
       {loadingVehicles ? (
         <div className="flex items-center gap-2 text-gray-500 py-6">
-          <FaSpinner className="animate-spin" /> Dang tai danh sach xe...
+          <FaSpinner className="animate-spin" /> Đang tải danh sách xe...
         </div>
       ) : vehicles.length === 0 ? (
-        <div className="py-6 text-gray-400 text-sm text-center">Chua co xe nao trong showroom.</div>
+        <div className="py-6 text-gray-400 text-sm text-center">Chưa có xe nào trong showroom.</div>
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3 mb-6">
           {vehicles.map((v) => {
@@ -78,18 +78,18 @@ function VehicleSelector({
       {selectedVehicle && (
         <div className="bg-slate-50 rounded-xl p-3.5 border border-gray-200 mb-5">
           <div className="font-bold text-[0.88rem] text-gray-700 mb-1">
-            Lien ket booking <span className="font-normal text-gray-400 text-xs">— tuy chon</span>
+            Liên kết booking <span className="font-normal text-gray-400 text-xs">— tùy chọn</span>
           </div>
           <p className="text-[0.75rem] text-gray-500 mb-2.5">
-            Neu chon booking co anh ban giao, buoc 2 se tu dien anh TRUOC — ban chi can chup anh SAU.
+            Nếu chọn booking có ảnh bàn giao, bước 2 sẽ tự điền ảnh TRƯỚC — bạn chỉ cần chụp ảnh SAU.
           </p>
 
           {loadingBookings ? (
             <div className="text-[0.8rem] text-gray-500 flex gap-1.5 items-center">
-              <FaSpinner className="animate-spin" /> Dang tai...
+              <FaSpinner className="animate-spin" /> Đang tải...
             </div>
           ) : bookings.length === 0 ? (
-            <div className="text-xs text-gray-400">Khong co booking dang thue / cho tra / hoan thanh cho xe nay.</div>
+            <div className="text-xs text-gray-400">Không có booking đang thuê / chờ trả / hoàn thành cho xe này.</div>
           ) : (
             <div className="flex flex-col gap-2">
               <label
@@ -105,7 +105,7 @@ function VehicleSelector({
                   onChange={() => onSelectBooking('')}
                   className="accent-blue-600"
                 />
-                <span className="text-[0.82rem] text-gray-700">Khong lien ket — upload thu cong ca 2 anh</span>
+                <span className="text-[0.82rem] text-gray-700">Không liên kết — upload thủ công cả 2 ảnh</span>
               </label>
               {bookings.map((b) => {
                 const bid = String(b._id || b.id);
@@ -113,11 +113,16 @@ function VehicleSelector({
                 const renter = b.user_id?.name || b.user_id?.email || '\u2014';
                 const hasImg = Array.isArray(b.pickup_images) && b.pickup_images.length > 0;
                 const isSel = selectedBookingId === bid;
+                const isCompleted = b.status === 'completed';
                 return (
                   <label
                     key={bid}
                     className={`flex items-center gap-2.5 p-2.5 rounded-lg border-2 cursor-pointer transition-colors ${
-                      isSel ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:border-gray-300'
+                      isSel
+                        ? 'border-blue-500 bg-blue-50'
+                        : isCompleted
+                          ? 'border-gray-300 bg-gray-50'
+                          : 'border-gray-200 bg-white hover:border-gray-300'
                     }`}
                   >
                     <input
@@ -131,19 +136,29 @@ function VehicleSelector({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="code-badge">{code}</span>
-                        <span className="text-[0.82rem] font-semibold text-gray-900">{renter}</span>
+                        <span
+                          className={`text-[0.82rem] font-semibold ${isCompleted ? 'text-gray-600' : 'text-gray-900'}`}
+                        >
+                          {renter}
+                        </span>
                         <StatusBadge
                           status={b.status === 'completed' ? 'available' : 'pending'}
                           customLabel={BOOKING_STATUS_LABEL[b.status] || b.status}
                         />
+                        {isCompleted && (
+                          <span className="text-[0.65rem] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-semibold">
+                            📋 Đã hoàn thành
+                          </span>
+                        )}
                       </div>
-                      <div className="text-[0.72rem] text-gray-400 mt-0.5">
+                      <div className={`text-[0.72rem] ${isCompleted ? 'text-gray-400' : 'text-gray-400'} mt-0.5`}>
                         {fmtDateShort(b.start_date)} &rarr; {fmtDateShort(b.end_date)}
                       </div>
+                      <div className="text-[0.65rem] text-gray-500 mt-1 font-mono">ID: {bid}</div>
                     </div>
                     {hasImg && (
                       <span className="text-[0.65rem] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold whitespace-nowrap">
-                        📦 {b.pickup_images.length} anh ban giao
+                        📦 {b.pickup_images.length} ảnh bàn giao
                       </span>
                     )}
                   </label>
@@ -160,7 +175,7 @@ function VehicleSelector({
         disabled={!selectedVehicle || loadingVehicles}
         onClick={onNext}
       >
-        Tiep theo &rarr;
+        Tiếp theo &rarr;
       </button>
     </div>
   );

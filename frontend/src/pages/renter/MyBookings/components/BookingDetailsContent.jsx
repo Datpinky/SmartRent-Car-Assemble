@@ -68,17 +68,17 @@ const BookingDetailsContent = ({ booking, onOpenContract, onOpenRentalFlow }) =>
             lineHeight: 1.6,
           }}
         >
-          Báo cáo AI đã được lưu trên server theo booking. Bạn có thể mở trang Báo cáo AI hoặc xuất chi tiết từ đó.
+          Báo cáo AI đã được lưu trên server theo đơn đặt xe. Bạn có thể mở trang Báo cáo AI hoặc xuất chi tiết từ đó.
         </div>
       )}
 
       {[
-        ['Mã booking', booking.id],
+        ['Mã đơn', booking.id],
         ['Ngày nhận xe', formatDateTime(booking.startDate)],
         ['Ngày trả xe', formatDateTime(booking.endDate)],
         ['Số ngày thuê', `${booking.durationDays} ngày`],
         ['Tổng tiền', formatMoney(booking.totalPrice)],
-        ['Trạng thái booking', booking.status],
+        ['Trạng thái đơn', booking.status],
         ['Trạng thái thanh toán', PAYMENT_LABELS[booking.paymentStatus] || booking.paymentStatus],
         ['Địa điểm giao nhận', booking.locationLabel],
       ].map(([label, value]) => (

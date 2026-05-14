@@ -1,23 +1,25 @@
 export const POSITIONS = [
-  { key: 'front', label: 'Dau xe', hint: 'Chup thang tu phia truoc', icon: '⬆️' },
-  { key: 'rear', label: 'Duoi xe', hint: 'Chup thang tu phia sau', icon: '⬇️' },
-  { key: 'left', label: 'Hong trai', hint: 'Chup doc toan bo hong trai', icon: '⬅️' },
-  { key: 'right', label: 'Hong phai', hint: 'Chup doc toan bo hong phai', icon: '➡️' },
-  { key: 'interior', label: 'Noi that', hint: 'Ghe, vo lang, tran, tap-lo', icon: '🪑' },
-  { key: 'odometer', label: 'Dong ho km', hint: 'Chup ro so km hien tai', icon: '🔢' },
+  { key: 'front', label: 'Đầu xe', hint: 'Chụp thẳng từ phía trước', icon: '⬆️' },
+  { key: 'rear', label: 'Đuôi xe', hint: 'Chụp thẳng từ phía sau', icon: '⬇️' },
+  { key: 'left', label: 'Bên trái', hint: 'Chụp dọc toàn bộ hông trái', icon: '⬅️' },
+  { key: 'right', label: 'Bên phải', hint: 'Chụp dọc toàn bộ hông phải', icon: '➡️' },
+  { key: 'interior', label: 'Nội thất', hint: 'Ghế, vô lăng, trần, tap-lô', icon: '🪑' },
+  { key: 'odometer', label: 'Đồng hồ km', hint: 'Chụp rõ số km hiện tại', icon: '🔢' },
 ];
 
 export const BOOKING_STATUS_LABEL = {
-  in_use: 'Dang thue',
-  waiting_return_confirmation: 'Cho xac nhan tra',
-  completed: 'Hoan thanh',
+  waiting_handover: 'Chờ bàn giao',
+  handed_over: 'Đã bàn giao',
+  in_use: 'Đang thuê',
+  waiting_return_confirmation: 'Chờ xác nhận trả xe',
+  completed: 'Hoàn thành',
 };
 
 export const SEVERITY_LABEL = {
-  none: 'Khong dang ke',
-  minor: 'Nhe',
-  moderate: 'Trung binh',
-  severe: 'Nang',
+  none: 'Không đáng kể',
+  minor: 'Nhẹ',
+  moderate: 'Trung bình',
+  severe: 'Nặng',
 };
 
 export const severityToBadge = (sev) => {

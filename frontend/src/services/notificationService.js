@@ -1,5 +1,5 @@
-import bookingService from './bookingService';
 import { mapRenterBooking } from '../utils/renterBookingView';
+import bookingService from './bookingService';
 
 const CACHE_TTL_MS = 20_000;
 const RECENT_DONE_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
@@ -43,7 +43,10 @@ const writeIdSet = (bucket, ids) => {
 
 const addIds = (bucket, ids = []) => {
   const next = readIdSet(bucket);
-  ids.filter(Boolean).map(String).forEach((id) => next.add(id));
+  ids
+    .filter(Boolean)
+    .map(String)
+    .forEach((id) => next.add(id));
   writeIdSet(bucket, next);
 };
 
@@ -53,10 +56,7 @@ const parseDate = (value) => {
 };
 
 const getBookingEventDate = (booking) =>
-  parseDate(booking?.updatedAt)
-  || parseDate(booking?.createdAt)
-  || parseDate(booking?.start_date)
-  || new Date();
+  parseDate(booking?.updatedAt) || parseDate(booking?.createdAt) || parseDate(booking?.start_date) || new Date();
 
 const formatRelativeTime = (value) => {
   const date = parseDate(value);
@@ -95,69 +95,64 @@ const getNotificationCopy = (view) => {
     const needsRetry = ['failed', 'declined'].includes(view.paymentStatus);
     return {
       type: 'payment',
-      title: needsRetry ? 'Can thanh toan lai' : 'Cho thanh toan',
+      title: needsRetry ? 'Cần thanh toán lại' : 'Chờ thanh toán',
       message: needsRetry
-        ? `${view.vehicleName} can tao lai phien thanh toan.`
-        : `${view.vehicleName} dang cho ban hoan tat thanh toan.`,
+        ? `${view.vehicleName} cần tạo lại phiên thanh toán.`
+        : `${view.vehicleName} đang chờ bạn hoàn tất thanh toán.`,
     };
   }
 
   if (view.isAwaitingShowroomProcessing) {
     return {
       type: 'booking',
-      title: 'Showroom dang xu ly booking',
-      message: `${view.vehicleName} dang cho showroom xac nhan hoac chuan bi ban giao.`,
+      title: 'Showroom đang xử lý đơn đặt xe',
+      message: `${view.vehicleName} đang chờ showroom xác nhận hoặc chuẩn bị bàn giao.`,
     };
   }
 
   if (view.isAwaitingPickup) {
     return {
       type: 'booking',
-      title: 'Cho giao nhan xe',
-      message: `${view.vehicleName} dang o buoc giao nhan. Hay theo doi cap nhat tu showroom.`,
+      title: 'Chờ giao nhận xe',
+      message: `${view.vehicleName} đang ở bước giao nhận. Hãy theo dõi cập nhật từ showroom.`,
     };
   }
 
   if (view.isActive) {
     return {
       type: 'booking',
-      title: view.hasRentalEnded ? 'Den han tra xe' : 'Chuyen thue dang dien ra',
+      title: view.hasRentalEnded ? 'Đến hạn trả xe' : 'Chuyến thuê đang diễn ra',
       message: view.hasRentalEnded
-        ? `${view.vehicleName} da den han tra xe.`
-        : `${view.vehicleName} dang trong thoi gian thue.`,
+        ? `${view.vehicleName} đã đến hạn trả xe.`
+        : `${view.vehicleName} đang trong thời gian thuê.`,
     };
   }
 
   if (view.isCompleted) {
     return {
       type: 'verify',
-      title: 'Booking da hoan thanh',
-      message: `${view.vehicleName} da hoan tat quy trinh thue xe.`,
+      title: 'Chuyến đã hoàn thành',
+      message: `${view.vehicleName} đã hoàn tất quy trình thuê xe.`,
     };
   }
 
   if (view.isCancelled) {
     return {
       type: 'system',
-      title: 'Booking da huy',
-      message: `${view.vehicleName} khong con tiep tuc trong quy trinh dat xe.`,
+      title: 'Đã hủy đơn đặt xe',
+      message: `${view.vehicleName} không còn tiếp tục trong quy trình đặt xe.`,
     };
   }
 
   return {
     type: 'system',
-    title: view.statusHeadline || 'Cap nhat booking',
-    message: view.renterActionHint || `${view.vehicleName} co cap nhat moi.`,
+    title: view.statusHeadline || 'Cập nhật đơn đặt xe',
+    message: view.renterActionHint || `${view.vehicleName} có cập nhật mới.`,
   };
 };
 
 const shouldIncludeNotification = (view, eventDate) => {
-  if (
-    view.isAwaitingPayment
-    || view.isAwaitingShowroomProcessing
-    || view.isAwaitingPickup
-    || view.isActive
-  ) {
+  if (view.isAwaitingPayment || view.isAwaitingShowroomProcessing || view.isAwaitingPickup || view.isActive) {
     return true;
   }
 
@@ -220,10 +215,10 @@ const loadGeneratedNotifications = async ({ force = false } = {}) => {
   const now = Date.now();
 
   if (
-    !force
-    && bookingNotificationCache.userId === userId
-    && bookingNotificationCache.at > 0
-    && now - bookingNotificationCache.at < CACHE_TTL_MS
+    !force &&
+    bookingNotificationCache.userId === userId &&
+    bookingNotificationCache.at > 0 &&
+    now - bookingNotificationCache.at < CACHE_TTL_MS
   ) {
     return bookingNotificationCache.items;
   }
@@ -267,7 +262,10 @@ const notificationService = {
 
   async markAllRead() {
     const generated = await loadGeneratedNotifications();
-    addIds('read', generated.map((item) => item.id));
+    addIds(
+      'read',
+      generated.map((item) => item.id),
+    );
   },
 
   async deleteOne(id) {
@@ -276,7 +274,10 @@ const notificationService = {
 
   async deleteAllRead() {
     const { data } = await this.list({ limit: 100, force: true });
-    addIds('deleted', data.filter((item) => item.read).map((item) => item.id));
+    addIds(
+      'deleted',
+      data.filter((item) => item.read).map((item) => item.id),
+    );
   },
 };
 

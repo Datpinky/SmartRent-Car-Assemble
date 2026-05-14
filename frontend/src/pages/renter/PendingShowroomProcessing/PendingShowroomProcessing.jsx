@@ -1,32 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  FaCalendarAlt,
-  FaClock,
-  FaEnvelope,
-  FaEye,
-  FaMapMarkerAlt,
-  FaSpinner,
-  FaStore,
-  FaTimesCircle,
-} from 'react-icons/fa';
+import { FaEnvelope, FaSpinner, FaStore, FaTimesCircle } from 'react-icons/fa';
 import { MdDirectionsCar } from 'react-icons/md';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import ContractModal from '../../../components/common/ContractModal';
 import Modal from '../../../components/common/Modal';
-import StatusBadge from '../../../components/common/StatusBadge';
 import { RENTAL_CONTRACT_UI } from '../../../constants/rentalContractTemplate';
 import bookingService from '../../../services/bookingService';
 import { getCancelBookingNotice } from '../../../utils/bookingCancellationFeedback';
 import { canRenterViewOfficialRentalContract } from '../../../utils/rentalContractEligibility';
 import { PAYMENT_LABELS, formatDateTime, formatMoney, mapRenterBooking } from '../../../utils/renterBookingView';
-
-const cardInfoStyle = {
-  background: '#fff',
-  borderRadius: 18,
-  border: '1px solid #f1f5f9',
-  padding: 18,
-  boxShadow: '0 8px 24px rgba(15, 23, 42, 0.04)',
-};
+import ProcessingBookingCard from './components/ProcessingBookingCard';
+import { cardInfoStyle, getCancelActionLabel } from './pendingShowroomProcessing.helpers';
 
 const PendingShowroomProcessing = () => {
   const navigate = useNavigate();
@@ -48,7 +32,7 @@ const PendingShowroomProcessing = () => {
     setLoading(true);
     try {
       const data = await bookingService.getCurrentRoleBookingsDetailed();
-      const mapped = (data || []).map(mapRenterBooking).filter((booking) => booking.isAwaitingShowroomProcessing);
+      const mapped = (data || []).map(mapRenterBooking).filter((b) => b.isAwaitingShowroomProcessing);
       setBookings(mapped);
       setError('');
     } catch (err) {
@@ -66,66 +50,35 @@ const PendingShowroomProcessing = () => {
   const summary = useMemo(
     () => ({
       total: bookings.length,
-      waitingHandover: bookings.filter((booking) => booking.status === 'waiting_handover').length,
-      paid: bookings.filter((booking) => booking.status === 'paid').length,
-      successfulPayments: bookings.filter((booking) => booking.paymentStatus === 'successful').length,
+      waitingHandover: bookings.filter((b) => b.status === 'waiting_handover').length,
+      paid: bookings.filter((b) => b.status === 'paid').length,
+      successfulPayments: bookings.filter((b) => b.paymentStatus === 'successful').length,
     }),
     [bookings],
   );
 
   useEffect(() => {
-    if (!highlightedBookingId || loading || bookings.length === 0) {
-      return;
-    }
-
-    const handledKey = `${window.location.pathname}:${highlightedBookingId}`;
-    if (handledHighlightRef.current === handledKey) {
-      return;
-    }
-
-    const targetBooking = bookings.find((booking) => String(booking.id) === String(highlightedBookingId));
-    if (!targetBooking) {
-      return;
-    }
-
-    handledHighlightRef.current = handledKey;
-    setDetailModal(targetBooking);
+    if (!highlightedBookingId || loading || bookings.length === 0) return;
+    const key = `${window.location.pathname}:${highlightedBookingId}`;
+    if (handledHighlightRef.current === key) return;
+    const target = bookings.find((b) => String(b.id) === String(highlightedBookingId));
+    if (!target) return;
+    handledHighlightRef.current = key;
+    setDetailModal(target);
   }, [bookings, highlightedBookingId, loading]);
 
   useEffect(() => {
-    if (!fromNotification || !highlightedBookingId || loading || bookings.length === 0) {
-      return;
-    }
-    if (!bookings.some((b) => String(b.id) === String(highlightedBookingId))) {
-      return;
-    }
+    if (!fromNotification || !highlightedBookingId || loading || bookings.length === 0) return;
+    if (!bookings.some((b) => String(b.id) === String(highlightedBookingId))) return;
     const key = `${highlightedBookingId}:scroll`;
-    if (handledScrollRef.current === key) {
-      return;
-    }
+    if (handledScrollRef.current === key) return;
     handledScrollRef.current = key;
     requestAnimationFrame(() => {
-      document.getElementById(`renter-booking-card-${highlightedBookingId}`)?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      });
+      document
+        .getElementById(`renter-booking-card-${highlightedBookingId}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
   }, [bookings, fromNotification, highlightedBookingId, loading]);
-
-  const getCancelActionLabel = (booking) =>
-    booking.paymentStatus === 'successful' ? 'Hủy booking / hoàn tiền' : 'Hủy booking';
-
-  const getProcessingLabel = (booking) => {
-    if (booking.status === 'confirmed') {
-      return 'Showroom đang chuẩn bị bàn giao';
-    }
-
-    if (booking.status === 'paid') {
-      return 'Đang chờ showroom xác nhận';
-    }
-
-    return 'Đang chờ showroom xử lý';
-  };
 
   const handleCancelBooking = (booking) => setCancelConfirmBooking(booking);
 
@@ -134,14 +87,13 @@ const PendingShowroomProcessing = () => {
     setCancellingId(booking.id);
     setError('');
     setNotice({ tone: '', text: '' });
-
     try {
       const cancelResult = await bookingService.cancelBooking(booking.id);
       setDetailModal(null);
       await loadBookings();
       setNotice(getCancelBookingNotice(booking, cancelResult));
     } catch (err) {
-      setError(err.message || 'Không thể hủy booking lúc này.');
+      setError(err.message || 'Không thể hủy đơn đặt xe lúc này.');
     } finally {
       setCancellingId('');
     }
@@ -153,8 +105,7 @@ const PendingShowroomProcessing = () => {
         <div>
           <h1 className="page-title">Chờ showroom xử lý</h1>
           <p className="page-subtitle">
-            Theo dõi các booking đã thanh toán và đang chờ showroom xác nhận, chuẩn bị bàn giao xe. Đây là màn theo dõi
-            trạng thái — showroom cập nhật trên hệ thống; bạn không hoàn tất bàn giao thay showroom tại đây.
+            Theo dõi các booking đã thanh toán và đang chờ showroom xác nhận, chuẩn bị bàn giao xe.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -183,7 +134,6 @@ const PendingShowroomProcessing = () => {
           {notice.text}
         </div>
       )}
-
       {error && (
         <div
           style={{
@@ -202,20 +152,12 @@ const PendingShowroomProcessing = () => {
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         {[
-          { label: 'Tổng booking', val: summary.total, color: '#374151' },
+          { label: 'Tổng đơn', val: summary.total, color: '#374151' },
           { label: 'Đã thanh toán', val: summary.successfulPayments, color: '#059669' },
           { label: 'Chờ showroom chốt bàn giao', val: summary.paid, color: '#d97706' },
           { label: 'Chờ giao xe', val: summary.waitingHandover, color: '#2563eb' },
         ].map((item) => (
-          <div
-            key={item.label}
-            style={{
-              ...cardInfoStyle,
-              minWidth: 155,
-              textAlign: 'center',
-              padding: '14px 18px',
-            }}
-          >
+          <div key={item.label} style={{ ...cardInfoStyle, minWidth: 155, textAlign: 'center', padding: '14px 18px' }}>
             <div style={{ fontWeight: 800, fontSize: '1.3rem', color: item.color }}>{item.val}</div>
             <div style={{ fontSize: '0.72rem', color: '#9ca3af' }}>{item.label}</div>
           </div>
@@ -248,129 +190,15 @@ const PendingShowroomProcessing = () => {
       ) : (
         <div className="booking-list">
           {bookings.map((booking) => (
-            <div
+            <ProcessingBookingCard
               key={booking.id}
-              id={`renter-booking-card-${booking.id}`}
-              className="booking-card-item"
-              style={
-                String(booking.id) === String(highlightedBookingId)
-                  ? {
-                      border: '1px solid #bfdbfe',
-                      boxShadow: '0 12px 30px rgba(37, 99, 235, 0.12)',
-                      background: '#f8fbff',
-                    }
-                  : undefined
-              }
-            >
-              <div className="booking-card-left">
-                <div className="booking-card-img" style={{ overflow: 'hidden', background: '#f3f4f6' }}>
-                  {booking.image ? (
-                    <img
-                      src={booking.image}
-                      alt={booking.vehicleName}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                  ) : (
-                    <MdDirectionsCar style={{ fontSize: '2.5rem', color: '#00b14f' }} />
-                  )}
-                </div>
-
-                <div className="booking-card-info">
-                  <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#111827' }}>{booking.vehicleName}</div>
-                  <div style={{ fontSize: '0.78rem', color: '#6b7280', marginTop: 3 }}>{booking.showroomName}</div>
-                  <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
-                    <span
-                      style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.78rem', color: '#6b7280' }}
-                    >
-                      <FaCalendarAlt size={11} /> {formatDateTime(booking.startDate)} -{' '}
-                      {formatDateTime(booking.endDate)}
-                    </span>
-                    <span
-                      style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.78rem', color: '#6b7280' }}
-                    >
-                      <FaClock size={11} /> {booking.durationDays} ngày
-                    </span>
-                    <span
-                      style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.78rem', color: '#6b7280' }}
-                    >
-                      <FaMapMarkerAlt size={11} /> {booking.locationLabel}
-                    </span>
-                  </div>
-                  <div style={{ marginTop: 8, fontSize: '0.78rem', fontWeight: 800, color: '#334155' }}>
-                    {booking.statusHeadline}
-                  </div>
-                  <div style={{ marginTop: 8, fontSize: '0.76rem', color: '#9a3412', lineHeight: 1.6 }}>
-                    {booking.pickupConfirmationHint ||
-                      'Booking đang chờ showroom xử lý trước khi chuyển sang bước bàn giao xe.'}
-                  </div>
-                </div>
-              </div>
-
-              <div className="booking-card-right">
-                <div style={{ textAlign: 'right' }}>
-                  <StatusBadge status={booking.status} />
-                  <div style={{ marginTop: 6 }}>
-                    <StatusBadge
-                      status={booking.paymentStatus}
-                      customLabel={PAYMENT_LABELS[booking.paymentStatus] || booking.paymentStatus}
-                    />
-                  </div>
-                  <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#00b14f', marginTop: 8 }}>
-                    {formatMoney(booking.totalPrice)}
-                  </div>
-                  <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: 2 }}>Mã: {booking.id}</div>
-                </div>
-
-                <div style={{ display: 'flex', gap: 6, marginTop: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                  <button className="btn-icon" onClick={() => setDetailModal(booking)} title="Chi tiết">
-                    <FaEye />
-                  </button>
-
-                  {canRenterViewOfficialRentalContract(booking) && (
-                    <button
-                      type="button"
-                      className="renter-btn-soft"
-                      style={{ fontSize: '0.75rem', padding: '6px 12px' }}
-                      onClick={() => setContractBookingId(booking.id)}
-                    >
-                      {RENTAL_CONTRACT_UI.officialButton}
-                    </button>
-                  )}
-
-                  {booking.showroomEmail && (
-                    <a className="btn-icon" href={`mailto:${booking.showroomEmail}`} title="Liên hệ showroom">
-                      <FaEnvelope />
-                    </a>
-                  )}
-
-                  <div
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      borderRadius: 8,
-                      padding: '6px 12px',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      background: '#e2e8f0',
-                      color: '#475569',
-                    }}
-                  >
-                    {getProcessingLabel(booking)}
-                  </div>
-
-                  {booking.canCancel && (
-                    <button
-                      className="renter-btn-soft-danger"
-                      style={{ opacity: cancellingId === booking.id ? 0.65 : 1 }}
-                      onClick={() => handleCancelBooking(booking)}
-                      disabled={cancellingId === booking.id}
-                    >
-                      {cancellingId === booking.id ? 'Đang hủy...' : getCancelActionLabel(booking)}
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
+              booking={booking}
+              highlightedBookingId={highlightedBookingId}
+              cancellingId={cancellingId}
+              setDetailModal={setDetailModal}
+              setContractBookingId={setContractBookingId}
+              handleCancelBooking={handleCancelBooking}
+            />
           ))}
         </div>
       )}
@@ -387,15 +215,7 @@ const PendingShowroomProcessing = () => {
               <div style={{ fontWeight: 800, fontSize: '1rem', color: '#111827' }}>{detailModal.vehicleName}</div>
               <div style={{ fontSize: '0.82rem', color: '#6b7280', marginTop: 4 }}>{detailModal.showroomName}</div>
             </div>
-
-            <div
-              style={{
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                borderRadius: 12,
-                padding: '14px 16px',
-              }}
-            >
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px' }}>
               <div style={{ fontWeight: 800, color: '#111827', marginBottom: 8 }}>{detailModal.statusHeadline}</div>
               <div style={{ fontSize: '0.8rem', color: '#475569', lineHeight: 1.65, marginBottom: 8 }}>
                 {detailModal.waitingForLabel}
@@ -410,13 +230,12 @@ const PendingShowroomProcessing = () => {
                 Việc bạn nên làm: {detailModal.renterActionHint}
               </div>
             </div>
-
             {[
-              ['Mã booking', detailModal.id],
+              ['Mã đơn', detailModal.id],
               ['Ngày nhận xe', formatDateTime(detailModal.startDate)],
               ['Ngày trả xe', formatDateTime(detailModal.endDate)],
               ['Tổng tiền', formatMoney(detailModal.totalPrice)],
-              ['Trạng thái booking', detailModal.status],
+              ['Trạng thái đơn', detailModal.status],
               ['Trạng thái thanh toán', PAYMENT_LABELS[detailModal.paymentStatus] || detailModal.paymentStatus],
               ['Địa điểm giao nhận', detailModal.locationLabel],
             ].map(([label, value]) => (
@@ -436,7 +255,6 @@ const PendingShowroomProcessing = () => {
                 </span>
               </div>
             ))}
-
             <div
               style={{
                 background: '#eff6ff',
@@ -449,12 +267,10 @@ const PendingShowroomProcessing = () => {
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, fontWeight: 800 }}>
-                <FaStore />
-                Đang chờ showroom xử lý
+                <FaStore /> Đang chờ showroom xử lý
               </div>
               Showroom cần xác nhận và chuẩn bị bàn giao xe trước khi booking này được chuyển sang "Chờ nhận xe".
             </div>
-
             {detailModal.showroomEmail && (
               <a
                 href={`mailto:${detailModal.showroomEmail}`}
@@ -464,7 +280,6 @@ const PendingShowroomProcessing = () => {
                 <FaEnvelope /> Liên hệ showroom
               </a>
             )}
-
             {canRenterViewOfficialRentalContract(detailModal) && (
               <button
                 type="button"
@@ -475,7 +290,6 @@ const PendingShowroomProcessing = () => {
                 {RENTAL_CONTRACT_UI.officialButton}
               </button>
             )}
-
             {detailModal.canCancel && (
               <button
                 className="renter-btn-soft-danger"
@@ -495,16 +309,15 @@ const PendingShowroomProcessing = () => {
         onClose={() => setContractBookingId(null)}
       />
 
-      {/* Confirm cancel booking modal */}
       <Modal
         isOpen={!!cancelConfirmBooking}
         onClose={() => setCancelConfirmBooking(null)}
-        title="Xác nhận hủy booking"
+        title="Xác nhận hủy đơn đặt xe"
         width={460}
         footer={
           <>
             <button className="btn-outline" onClick={() => setCancelConfirmBooking(null)}>
-              Giữ booking
+              Giữ đơn
             </button>
             <button
               className="btn-primary"
@@ -512,7 +325,7 @@ const PendingShowroomProcessing = () => {
               onClick={() => executeCancelBooking(cancelConfirmBooking)}
               disabled={cancellingId === cancelConfirmBooking?.id}
             >
-              {cancellingId === cancelConfirmBooking?.id ? 'Đang hủy...' : 'Hủy booking'}
+              {cancellingId === cancelConfirmBooking?.id ? 'Đang hủy...' : 'Hủy đơn đặt xe'}
             </button>
           </>
         }
@@ -520,7 +333,7 @@ const PendingShowroomProcessing = () => {
         {cancelConfirmBooking && (
           <div style={{ color: '#374151', fontSize: '0.9rem' }}>
             <p style={{ marginBottom: 8 }}>
-              Bạn có chắc muốn hủy booking cho xe <strong>{cancelConfirmBooking.vehicleName}</strong>?
+              Bạn có chắc muốn hủy đơn đặt xe cho xe <strong>{cancelConfirmBooking.vehicleName}</strong>?
             </p>
             {cancelConfirmBooking.paymentStatus === 'successful' && (
               <p

@@ -195,6 +195,7 @@ const normalizeBooking = ({ booking, vehicle = null, showroom = null, payment = 
   showroom,
   payment,
   paymentState,
+  pickup_images: booking?.pickup_images || [],
   vehicle_id: toLegacyVehicleShape(vehicle) || booking?.vehicle_id || null,
   showroom_id: toLegacyShowroomShape(showroom) || booking?.showroom_id || null,
 });
@@ -303,7 +304,7 @@ export const bookingService = {
       resolveId(payload.vehicle?.addedBy);
 
     if (!vehicleId || !showroomId) {
-      throw new Error('Thieu vehicle_id hoac showroom_id de tao booking.');
+      throw new Error('Thiếu vehicle_id hoặc showroom_id để tạo đơn đặt xe.');
     }
 
     const deliveryAddress = String(payload.delivery_address || '').trim();
@@ -402,7 +403,7 @@ export const bookingService = {
 
   async checkAvailability({ vehicleId, pickupDate, returnDate, excludeBookingId } = {}) {
     if (!vehicleId || !pickupDate || !returnDate) {
-      throw new Error('Thieu vehicleId, pickupDate hoac returnDate de kiem tra lich thue.');
+      throw new Error('Thiếu vehicleId, pickupDate hoặc returnDate để kiểm tra lịch thuê.');
     }
 
     const pickup = parseDateTime(pickupDate);
@@ -444,7 +445,7 @@ export const bookingService = {
         available: false,
         conflicts,
         intervals,
-        message: 'Xe da co booking trong ngay ban chon. Vui long chon ngay khac.',
+        message: 'Xe đã có đơn đặt trong ngày bạn chọn. Vui lòng chọn ngày khác.',
       };
     }
 
@@ -458,7 +459,7 @@ export const bookingService = {
 
   async getUnavailableDateIntervals(vehicleId, { from, to } = {}) {
     if (!vehicleId) {
-      throw new Error('Thieu vehicleId de lay lich ban.');
+      throw new Error('Thiếu vehicleId để lấy lịch bận.');
     }
 
     const vehicleIdText = resolveId(vehicleId);
@@ -519,19 +520,53 @@ export const bookingService = {
       status: 'cancelled',
     });
     // Gộp booking data + refund info để getCancelBookingNotice đọc được
-    return {
+    const cancelledBooking = {
       ...res.data.data,
       paymentStatus: res.data.paymentStatus,
       refundStatus: res.data.refundStatus,
       refundResult: res.data.refundResult,
     };
+    // Trigger event to notify about booking cancellation
+    this.emitBookingCancelled(cancelledBooking);
+    return cancelledBooking;
+  },
+
+  emitBookingCancelled(booking) {
+    // Emit custom event that BookingCard and other components can listen to
+    const vehicleId = resolveId(booking?.vehicle_id);
+    const bookingId = resolveId(booking);
+    if (vehicleId && bookingId) {
+      const event = new CustomEvent('smartrent:booking:cancelled', {
+        detail: { bookingId, vehicleId, booking },
+      });
+      window.dispatchEvent(event);
+    }
   },
 
   async savePickupImages(bookingId, imageUrls) {
-    const res = await apiClient.patch(`/api/booking/${bookingId}/pickup-images`, {
-      pickup_images: imageUrls,
+    console.log('🔔 bookingService.savePickupImages called:', {
+      bookingId,
+      urlsCount: imageUrls?.length,
+      urls: imageUrls,
     });
-    return res.data;
+    try {
+      const res = await apiClient.patch(`/api/booking/${bookingId}/pickup-images`, {
+        pickup_images: imageUrls,
+      });
+      console.log('✅ savePickupImages response:', {
+        status: res.status,
+        bookingPickupImagesCount: res.data?.pickup_images?.length,
+        data: res.data,
+      });
+      return res.data;
+    } catch (err) {
+      console.error('❌ savePickupImages error:', {
+        message: err.message,
+        status: err.response?.status,
+        data: err.response?.data,
+      });
+      throw err;
+    }
   },
 
   async createBookingAndPaymentSession(payload = {}) {

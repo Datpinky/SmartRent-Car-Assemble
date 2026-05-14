@@ -118,12 +118,16 @@ class BookingController {
     try {
       const { bookingId } = req.params;
       const { pickup_images } = req.body;
+      console.log('🔔 Backend savePickupImages called:', { bookingId, imagesCount: pickup_images?.length });
       if (!Array.isArray(pickup_images)) {
+        console.error('❌ pickup_images không phải array:', typeof pickup_images);
         return res.status(400).json({ message: 'pickup_images phải là mảng URL' });
       }
       const result = await bookingService.savePickupImages(bookingId, req.user.userId, pickup_images);
+      console.log('✅ Backend saved:', { bookingId, savedCount: result.pickup_images?.length });
       return res.status(200).json({ message: 'Lưu ảnh bàn giao thành công', data: result });
     } catch (error) {
+      console.error('❌ Backend error:', error);
       next(error);
     }
   }

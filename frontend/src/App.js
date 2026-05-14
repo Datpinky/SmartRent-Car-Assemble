@@ -34,6 +34,7 @@ import PendingShowroomProcessing from './pages/renter/PendingShowroomProcessing/
 import Profile from './pages/renter/Profile/Profile';
 import RenterDashboard from './pages/renter/RenterDashboard/RenterDashboard';
 import RetryPayment from './pages/renter/RetryPayment/RetryPayment';
+import ReturnInspectionHistory from './pages/renter/ReturnInspectionHistory/ReturnInspectionHistory';
 import SOSReport from './pages/renter/SOSReport/SOSReport';
 import Transactions from './pages/renter/Transactions/Transactions';
 import AIInspection from './pages/showroom/AIInspection/AIInspection';
@@ -102,6 +103,7 @@ const RENTER_DASHBOARD_ROUTES = [
   { path: '/renter/pending-showroom-processing', component: <PendingShowroomProcessing /> },
   { path: '/renter/pending-pickups', component: <PendingPickups /> },
   { path: '/renter/bookings', component: <MyBookings /> },
+  { path: '/renter/return-inspections', component: <ReturnInspectionHistory /> },
   { path: '/renter/ai-reports', component: <AIReports /> },
   { path: '/renter/transactions', component: <Transactions /> },
   { path: '/renter/contracts', component: <MyContracts /> },

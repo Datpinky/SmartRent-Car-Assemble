@@ -152,7 +152,7 @@ const MyBookings = () => {
     if (nextStatus === 'waiting_return_confirmation') {
       setNotice({
         tone: 'success',
-        text: 'Trạng thái booking trên hệ thống: chờ showroom xác nhận trả xe (nếu bạn vừa chỉ lưu hồ sơ cục bộ, hãy vẫn liên hệ showroom để đóng booking).',
+        text: 'Trạng thái đơn trên hệ thống: chờ showroom xác nhận trả xe (nếu bạn vừa chỉ lưu hồ sơ cục bộ, hãy vẫn liên hệ showroom để đóng đơn đặt xe).',
       });
     }
   };

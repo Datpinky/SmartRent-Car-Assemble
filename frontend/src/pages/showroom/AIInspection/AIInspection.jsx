@@ -5,12 +5,8 @@ import bookingService from '../../../services/bookingService';
 import inspectionService from '../../../services/inspectionService';
 import uploadService from '../../../services/uploadService';
 import vehicleService from '../../../services/vehicleService';
-import {
-  POSITIONS,
-  bookingCodeShort,
-  getVehicleName,
-  makeInitialPosFiles,
-} from './aiInspection.helpers';
+import { getRentalWorkflow } from '../../../utils/rentalWorkflowStorage';
+import { POSITIONS, bookingCodeShort, makeInitialPosFiles } from './aiInspection.helpers';
 import AnalysisResult from './components/AnalysisResult';
 import ImageUploadStep from './components/ImageUploadStep';
 import InspectionHistory from './components/InspectionHistory';
@@ -18,6 +14,9 @@ import VehicleSelector from './components/VehicleSelector';
 
 const AIInspection = () => {
   const { user } = useAuth();
+  const isShowroom = user?.role === 'showroom';
+  const isRenter = user?.role === 'renter';
+  const inspectionType = isRenter ? 'return' : 'pickup';
   const [tab, setTab] = useState('new');
   const [step, setStep] = useState(1);
 
@@ -47,44 +46,87 @@ const AIInspection = () => {
 
   // ── Derived values ──
   const hasBeforeForPos = (i, key) => !!(pickupImagesUrls[i] || posFiles[key].before);
-  const validPositions = POSITIONS.filter((p, i) => hasBeforeForPos(i, p.key) && posFiles[p.key].after);
+  // For showroom (pickup): only need BEFORE images. For renter (return): need both BEFORE and AFTER
+  const validPositions = isShowroom
+    ? POSITIONS.filter((p, i) => hasBeforeForPos(i, p.key))
+    : POSITIONS.filter((p, i) => hasBeforeForPos(i, p.key) && posFiles[p.key].after);
   const readyToAnalyze = validPositions.length >= 1;
 
   // ── Data fetching ──
   const fetchVehicles = useCallback(async () => {
-    if (!user?._id) { setVehicles([]); setLoadingVehicles(false); return; }
+    if (!user?._id) {
+      setVehicles([]);
+      setLoadingVehicles(false);
+      return;
+    }
     setLoadingVehicles(true);
     try {
-      const { data } = await vehicleService.getList({ added_by: user._id, limit: 80, page: 1 });
-      setVehicles(Array.isArray(data) ? data : []);
-    } catch { setVehicles([]); }
-    finally { setLoadingVehicles(false); }
-  }, [user?._id]);
-
-  useEffect(() => { fetchVehicles(); }, [fetchVehicles]);
-
-  const fetchBookingsForVehicle = useCallback(async (vehicleId) => {
-    setLoadingBookings(true);
-    setBookings([]);
-    try {
-      const all = await bookingService.getCurrentRoleBookings();
-      const filtered = (all || []).filter(
-        (b) =>
-          String(b.vehicle_id?._id || b.vehicle_id) === String(vehicleId) &&
+      // For showroom: fetch vehicles they added. For renter: fetch from their active/recent bookings
+      let fetchedVehicles = [];
+      if (isShowroom) {
+        const { data } = await vehicleService.getList({ added_by: user._id, limit: 80, page: 1 });
+        fetchedVehicles = Array.isArray(data) ? data : [];
+      } else if (isRenter) {
+        // Get unique vehicles from renter's bookings in return phase
+        const bookings = await bookingService.getCurrentRoleBookings();
+        const returnPhaseBookings = (bookings || []).filter((b) =>
           ['in_use', 'waiting_return_confirmation', 'completed'].includes(b.status),
-      );
-      setBookings(filtered);
-    } catch { setBookings([]); }
-    finally { setLoadingBookings(false); }
-  }, []);
+        );
+        fetchedVehicles = returnPhaseBookings
+          .filter(
+            (b, i, arr) =>
+              arr.findIndex(
+                (x) => String(x.vehicle_id?._id || x.vehicle_id) === String(b.vehicle_id?._id || b.vehicle_id),
+              ) === i,
+          )
+          .map((b) => b.vehicle_id)
+          .filter(Boolean);
+      }
+      setVehicles(fetchedVehicles);
+    } catch {
+      setVehicles([]);
+    } finally {
+      setLoadingVehicles(false);
+    }
+  }, [user?._id, isRenter, isShowroom]);
+
+  useEffect(() => {
+    fetchVehicles();
+  }, [fetchVehicles]);
+
+  const fetchBookingsForVehicle = useCallback(
+    async (vehicleId) => {
+      setLoadingBookings(true);
+      setBookings([]);
+      try {
+        const all = await bookingService.getCurrentRoleBookings();
+        // Filter by vehicle AND by inspection phase
+        const allowedStatuses = isRenter
+          ? ['in_use', 'waiting_return_confirmation', 'completed'] // Return phase for renter
+          : ['waiting_handover', 'handed_over', 'in_use', 'completed']; // Pickup + completed (for trace back) for showroom
+        const filtered = (all || []).filter(
+          (b) => String(b.vehicle_id?._id || b.vehicle_id) === String(vehicleId) && allowedStatuses.includes(b.status),
+        );
+        setBookings(filtered);
+      } catch {
+        setBookings([]);
+      } finally {
+        setLoadingBookings(false);
+      }
+    },
+    [isRenter],
+  );
 
   const fetchHistory = useCallback(async () => {
     setLoadingHistory(true);
     try {
       const { items } = await inspectionService.list({ limit: 50, page: 1 });
       setHistoryRows(items || []);
-    } catch { setHistoryRows([]); }
-    finally { setLoadingHistory(false); }
+    } catch {
+      setHistoryRows([]);
+    } finally {
+      setLoadingHistory(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -92,8 +134,7 @@ const AIInspection = () => {
   }, [tab, fetchHistory]);
 
   // ── Callbacks ──
-  const setPosFile = (key, type, file) =>
-    setPosFiles((prev) => ({ ...prev, [key]: { ...prev[key], [type]: file } }));
+  const setPosFile = (key, type, file) => setPosFiles((prev) => ({ ...prev, [key]: { ...prev[key], [type]: file } }));
 
   const handleSelectVehicle = (v) => {
     setSelectedVehicle(v);
@@ -107,10 +148,201 @@ const AIInspection = () => {
     setPickupImagesUrls([]);
     if (!bookingId) return;
     try {
+      console.log('🚀 handleSelectBooking START:', {
+        bookingId,
+        userRole: user?.role,
+        isRenter,
+        isShowroom,
+      });
+
+      // Start with showroom's pickup_images from booking
       const booking = await bookingService.getBookingById(bookingId);
-      const imgs = booking?.pickup_images || [];
-      setPickupImagesUrls(Array.isArray(imgs) ? imgs : []);
-    } catch { setPickupImagesUrls([]); }
+
+      console.log('📋 BOOKING DATA FULL:', booking);
+      console.log('📋 Selected booking:', {
+        bookingId,
+        hasPickupImages: !!booking?.pickup_images,
+        pickupImagesLength: booking?.pickup_images?.length || 0,
+        count: booking?.pickup_images?.filter(Boolean).length || 0,
+      });
+
+      let mergedImages = [];
+
+      // ✅ PRIORITY 1: Load từ booking.pickup_images (từ handoff)
+      if (Array.isArray(booking?.pickup_images) && booking.pickup_images.length > 0) {
+        const validUrls = booking.pickup_images.filter((url) => url && typeof url === 'string' && url.trim());
+        console.log('✅ Loaded', validUrls.length, 'valid images from booking.pickup_images');
+        console.log('✅ URLs:', validUrls);
+        mergedImages = validUrls;
+      } else {
+        console.log('⚠️ No pickup_images in booking');
+      }
+
+      // ✅ PRIORITY 1.5: Load từ localStorage (renter's checklist images) nếu là renter
+      let checklistImages = [];
+      if (isRenter) {
+        try {
+          const workflow = getRentalWorkflow(bookingId);
+          checklistImages = workflow?.returnImages ? Object.values(workflow.returnImages).flat() : [];
+          console.log('📝 Renter checklist images from localStorage:', {
+            total: checklistImages.length,
+            data: checklistImages,
+            workflow,
+          });
+        } catch (err) {
+          console.warn('Failed to load renter checklist images:', err);
+        }
+      }
+
+      // Get vehicle ID for additional lookup
+      const vehicleId = booking?.vehicle_id?._id || booking?.vehicle_id;
+
+      // Load inspection records for this booking
+      let inspections = [];
+      try {
+        const bookingResponse = await inspectionService.list({
+          booking_id: bookingId,
+          limit: 100,
+        });
+        console.log('🔍 Inspections by booking_id:', bookingResponse?.items?.length || 0);
+        if (bookingResponse?.items && Array.isArray(bookingResponse.items)) {
+          inspections = bookingResponse.items;
+        }
+      } catch (err) {
+        console.warn('Failed to load inspections by booking_id:', err);
+      }
+
+      // If no inspections found by booking, try loading by vehicle + filter manually
+      if (inspections.length === 0 && vehicleId) {
+        try {
+          const vehicleResponse = await inspectionService.list({
+            vehicle_id: vehicleId,
+            limit: 100,
+          });
+          console.log('🔍 Inspections by vehicle_id:', vehicleResponse?.items?.length || 0);
+          if (vehicleResponse?.items && Array.isArray(vehicleResponse.items)) {
+            // Filter to only this booking
+            const filtered = vehicleResponse.items.filter((i) => {
+              const iBookingId = String(i.booking_id?._id || i.booking_id || '');
+              const match = iBookingId === String(bookingId);
+              return match;
+            });
+            console.log('🔍 Filtered by booking:', filtered.length);
+            inspections = filtered;
+          }
+        } catch (err) {
+          console.warn('Failed to load inspections by vehicle_id:', err);
+        }
+      }
+
+      // ✅ PRIORITY 2: Fill lỗ từ inspection records
+      if (Array.isArray(inspections) && inspections.length > 0) {
+        console.log('📸 Processing', inspections.length, 'inspections for filling gaps');
+        inspections.forEach((inspection, idx) => {
+          if (!Array.isArray(inspection.positions)) {
+            console.warn(`Inspection ${idx} has no positions array`);
+            return;
+          }
+
+          inspection.positions.forEach((pos) => {
+            // Find the position index
+            const posIdx = POSITIONS.findIndex((p) => p.key === pos.position_key || p.label === pos.position_label);
+            if (posIdx < 0) {
+              console.warn(`Position not found: key=${pos.position_key}, label=${pos.position_label}`);
+              return;
+            }
+
+            if (isShowroom) {
+              // 📌 SHOWROOM viewing:
+              // - Load showroom's BEFORE images (pickup inspection)
+              // - Load renter's AFTER images (return inspection) into posFiles for display
+              if (inspection.inspected_by_role === 'renter' && inspection.inspection_type === 'return') {
+                // Renter's return inspection - load AFTER images
+                if (pos.after_url) {
+                  console.log(`✅ Showroom sees renter's after_url for pos ${posIdx} (${pos.position_key})`);
+                  setPosFile(pos.position_key, 'after', pos.after_url); // ← Store for display
+                }
+              } else if (inspection.inspection_type === 'pickup') {
+                // Showroom's pickup inspection - load BEFORE images
+                if (pos.before_url && !mergedImages[posIdx]) {
+                  console.log(`✅ Filled pos ${posIdx} with showroom's before_url`);
+                  mergedImages[posIdx] = pos.before_url;
+                }
+              }
+            } else {
+              // 📌 RENTER viewing:
+              // - Load showroom's BEFORE images (pickup inspection) AND booking.pickup_images
+              // - Load renter's AFTER images (return inspection) AND checklist images
+              if (inspection.inspection_type === 'pickup') {
+                // Showroom's pickup images - load BEFORE
+                if (pos.before_url && !mergedImages[posIdx]) {
+                  console.log(`✅ Renter sees showroom's before_url for pos ${posIdx}`);
+                  mergedImages[posIdx] = pos.before_url;
+                }
+              } else if (inspection.inspected_by_role === 'renter' && inspection.inspection_type === 'return') {
+                // Renter's own return images - load AFTER (from inspection record)
+                if (pos.after_url && !mergedImages[posIdx]) {
+                  console.log(`✅ Renter sees their own after_url (from inspection) for pos ${posIdx}`);
+                  mergedImages[posIdx] = pos.after_url;
+                }
+              }
+            }
+          });
+        });
+      }
+
+      // ✅ PRIORITY 3: Fill gaps từ renter's checklist images (localStorage)
+      if (isRenter && checklistImages.length > 0) {
+        console.log('🔄 Filling gaps from renter checklist images...');
+        checklistImages.forEach((checklistImg, idx) => {
+          if (idx < mergedImages.length && !mergedImages[idx] && checklistImg) {
+            console.log(`✅ Filled pos ${idx} from checklist`);
+            mergedImages[idx] = checklistImg;
+          }
+        });
+        console.log('📝 After filling checklist:', {
+          total: mergedImages.length,
+          filled: mergedImages.filter(Boolean).length,
+        });
+      }
+
+      console.log('✨ Final merged images:', {
+        totalSlots: mergedImages.length,
+        filledCount: mergedImages.filter(Boolean).length,
+        urls: mergedImages,
+      });
+
+      // Đảm bảo array chứa đúng các URLs ở vị trí chính xác
+      const finalImages = [];
+      for (let i = 0; i < POSITIONS.length; i++) {
+        finalImages[i] = mergedImages[i] || undefined;
+      }
+
+      console.log('✨ Final images state:', {
+        length: finalImages.length,
+        filled: finalImages.filter(Boolean).length,
+        images: finalImages,
+      });
+
+      setPickupImagesUrls(finalImages);
+
+      console.log('✅ handleSelectBooking COMPLETE:', {
+        bookingId,
+        userRole: user?.role,
+        totalImages: finalImages.length,
+        filledSlots: finalImages.filter(Boolean).length,
+        sourceBreakdown: isRenter
+          ? {
+              fromBookingPickupImages: mergedImages.filter(Boolean).length,
+              fromChecklistImages: checklistImages.length,
+              fromInspectionRecords: inspections.length,
+            }
+          : 'showroom',
+      });
+    } catch (err) {
+      console.error('Failed to load booking details:', err);
+      setPickupImagesUrls([]);
+    }
   };
 
   const resetFlow = () => {
@@ -127,8 +359,17 @@ const AIInspection = () => {
   };
 
   const handleAnalyze = async () => {
-    if (!readyToAnalyze) { setAnalysisError('Can it nhat mot vi tri co du ca anh TRUOC va anh SAU.'); return; }
-    if (!selectedVehicle) { setAnalysisError('Vui long chon xe o buoc 1.'); return; }
+    if (!readyToAnalyze) {
+      const errorMsg = isShowroom
+        ? 'Cần ít nhất một vị trí có ảnh TRƯỚC để bàn giao.'
+        : 'Cần ít nhất một vị trí có đủ cả ảnh TRƯỚC và ảnh SAU.';
+      setAnalysisError(errorMsg);
+      return;
+    }
+    if (!selectedVehicle) {
+      setAnalysisError('Vui lòng chọn xe ở bước 1.');
+      return;
+    }
     setAnalyzing(true);
     setAnalysisError('');
     setSaveNote('');
@@ -143,7 +384,9 @@ const AIInspection = () => {
               const resp = await fetch(pickupUrl);
               const blob = await resp.blob();
               beforeFile = new File([blob], `pickup_${p.key}.jpg`, { type: blob.type || 'image/jpeg' });
-            } catch { /* keep null */ }
+            } catch {
+              /* keep null */
+            }
           }
           return { key: p.key, label: p.label, beforeFile, afterFile: posFiles[p.key].after };
         }),
@@ -160,12 +403,20 @@ const AIInspection = () => {
         positionsInput.forEach((p) => {
           const posIdx = POSITIONS.findIndex((pp) => pp.key === p.key);
           const hasPU = !!pickupImagesUrls[posIdx];
-          if (!hasPU && p.beforeFile) { filesToUpload.push(p.beforeFile); uploadMap.push({ posKey: p.key, type: 'before' }); }
-          if (p.afterFile) { filesToUpload.push(p.afterFile); uploadMap.push({ posKey: p.key, type: 'after' }); }
+          if (!hasPU && p.beforeFile) {
+            filesToUpload.push(p.beforeFile);
+            uploadMap.push({ posKey: p.key, type: 'before' });
+          }
+          if (p.afterFile) {
+            filesToUpload.push(p.afterFile);
+            uploadMap.push({ posKey: p.key, type: 'after' });
+          }
         });
         const uploadedUrls = filesToUpload.length > 0 ? await uploadService.uploadImages(filesToUpload) : [];
         const urlByPosType = {};
-        uploadMap.forEach((entry, i) => { urlByPosType[`${entry.posKey}_${entry.type}`] = uploadedUrls[i]?.url || ''; });
+        uploadMap.forEach((entry, i) => {
+          urlByPosType[`${entry.posKey}_${entry.type}`] = uploadedUrls[i]?.url || '';
+        });
         positionsInput.forEach((p) => {
           const posIdx = POSITIONS.findIndex((pp) => pp.key === p.key);
           const pickupUrl = pickupImagesUrls[posIdx] || '';
@@ -177,7 +428,7 @@ const AIInspection = () => {
           });
         });
       } catch {
-        setSaveNote('Khong tai duoc anh len luu tru.');
+        setSaveNote('Không tải được ảnh lên lưu trữ.');
         positionsInput.forEach((p) => {
           positionsRecord.push({ position_key: p.key, position_label: p.label, before_url: '', after_url: '' });
         });
@@ -193,6 +444,9 @@ const AIInspection = () => {
         await inspectionService.create({
           vehicle_id: selectedVehicle._id || selectedVehicle.id,
           booking_id: selectedBookingId || undefined,
+          inspection_type: inspectionType, // 'pickup' or 'return'
+          inspected_by_role: isRenter ? 'renter' : 'showroom',
+          inspected_by_id: user._id,
           vehicle_name: vehicleName,
           vehicle_plate: selectedVehicle.vehicle_plate_number || '',
           booking_code: bCode,
@@ -203,18 +457,18 @@ const AIInspection = () => {
           severity: data?.severity || 'none',
           position_results: Array.isArray(data?.positions) ? data.positions : [],
         });
-        setSaveNote((s) => `${s ? s + ' ' : ''}Da luu bao cao kiem tra.`.trim());
+        setSaveNote((s) => `${s ? s + ' ' : ''}Đã lưu báo cáo kiểm tra.`.trim());
         fetchHistory();
       } catch (saveErr) {
         setSaveNote((s) =>
-          `${s ? s + ' ' : ''}Phan tich xong nhung khong luu duoc: ${saveErr.message || 'Loi server'}`.trim(),
+          `${s ? s + ' ' : ''}Phân tích xong nhưng không lưu được: ${saveErr.message || 'Lỗi server'}`.trim(),
         );
       }
 
       setAnalyzed(true);
       setStep(3);
     } catch (err) {
-      setAnalysisError(err.message || 'Phan tich that bai. Vui long thu lai.');
+      setAnalysisError(err.message || 'Phân tích thất bại. Vui lòng thử lại.');
     } finally {
       setAnalyzing(false);
     }
@@ -224,16 +478,22 @@ const AIInspection = () => {
     <div className="max-w-[900px] mx-auto">
       <div className="page-header mb-5">
         <div>
-          <h1 className="page-title">Kiem tra AI — So sanh xe</h1>
-          <p className="page-subtitle">So sanh anh xe truoc va sau khi thue de phat hien hu hong moi</p>
+          <h1 className="page-title">
+            {isRenter ? 'Kiểm tra AI — Xe trả về (Kiểm tra hướng' : 'Kiểm tra AI — Xe bàn giao'}
+          </h1>
+          <p className="page-subtitle">
+            {isRenter
+              ? 'Tải ảnh hướng và nhận ảnh để phát hiện hư hỏng và tình trạng'
+              : 'Upload ảnh xe trước khi bàn giao cho khách thuê. Ảnh này sẽ dùng để so sánh khi xe trả về.'}
+          </p>
         </div>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-2 mb-5">
         {[
-          { key: 'new', icon: <FaCamera aria-hidden />, label: 'Kiem tra moi' },
-          { key: 'history', icon: <FaHistory aria-hidden />, label: 'Lich su kiem tra' },
+          { key: 'new', icon: <FaCamera aria-hidden />, label: 'Kiểm tra mới' },
+          { key: 'history', icon: <FaHistory aria-hidden />, label: 'Lịch sử kiểm tra' },
         ].map(({ key, icon, label }) => (
           <button
             key={key}
@@ -256,9 +516,9 @@ const AIInspection = () => {
           {/* Step indicator */}
           <div className="flex items-center mb-6 bg-white rounded-xl px-5 py-3.5 border border-gray-200">
             {[
-              { n: 1, label: 'Chon xe & booking' },
-              { n: 2, label: 'Tai anh (6 vi tri)' },
-              { n: 3, label: 'Ket qua AI' },
+              { n: 1, label: 'Chọn xe & đơn đặt xe' },
+              { n: 2, label: 'Tải ảnh (6 vị trí)' },
+              { n: 3, label: 'Kết quả AI' },
             ].map(({ n, label }, i) => {
               const done = step > n;
               const active = step >= n;
@@ -267,7 +527,11 @@ const AIInspection = () => {
                   <div className="flex items-center gap-2">
                     <div
                       className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${
-                        done ? 'bg-green-500 text-white' : active ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-400'
+                        done
+                          ? 'bg-green-500 text-white'
+                          : active
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-200 text-gray-400'
                       }`}
                     >
                       {done ? <FaCheckCircle className="text-[0.9rem]" /> : n}
@@ -278,9 +542,7 @@ const AIInspection = () => {
                       {label}
                     </span>
                   </div>
-                  {i < 2 && (
-                    <div className={`flex-1 h-0.5 mx-2.5 ${step > n + 1 ? 'bg-green-500' : 'bg-gray-200'}`} />
-                  )}
+                  {i < 2 && <div className={`flex-1 h-0.5 mx-2.5 ${step > n + 1 ? 'bg-green-500' : 'bg-gray-200'}`} />}
                 </React.Fragment>
               );
             })}
@@ -303,6 +565,8 @@ const AIInspection = () => {
           {step === 2 && (
             <ImageUploadStep
               selectedVehicle={selectedVehicle}
+              selectedBookingId={selectedBookingId}
+              bookings={bookings}
               pickupImagesUrls={pickupImagesUrls}
               posFiles={posFiles}
               onSetPosFile={setPosFile}
@@ -310,17 +574,17 @@ const AIInspection = () => {
               readyToAnalyze={readyToAnalyze}
               analyzing={analyzing}
               analysisError={analysisError}
-              onBack={() => { setStep(1); setAnalysisError(''); }}
+              isShowroom={isShowroom}
+              onBack={() => {
+                setStep(1);
+                setAnalysisError('');
+              }}
               onAnalyze={handleAnalyze}
             />
           )}
 
           {step === 3 && analyzed && analysisResult && (
-            <AnalysisResult
-              analysisResult={analysisResult}
-              saveNote={saveNote}
-              onReset={resetFlow}
-            />
+            <AnalysisResult analysisResult={analysisResult} saveNote={saveNote} onReset={resetFlow} />
           )}
         </div>
       )}

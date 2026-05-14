@@ -110,7 +110,7 @@ const Checkout = () => {
 
   const fetchVehicle = useCallback(async () => {
     if (!carId) {
-      setVehError('Khong tim thay thong tin xe.');
+      setVehError('Không tìm thấy thông tin xe.');
       setLoadVeh(false);
       return;
     }
@@ -120,7 +120,7 @@ const Checkout = () => {
       if (!v) throw new Error('Xe khong ton tai');
       setVehicle(v);
     } catch {
-      setVehError('Khong the tai thong tin xe. Vui long thu lai.');
+      setVehError('Không thể tải thông tin xe. Vui lòng thử lại.');
     } finally {
       setLoadVeh(false);
     }
@@ -138,7 +138,9 @@ const Checkout = () => {
       setBookedIntervals([]);
       setBookedDateError('');
       setLoadingBookedDates(false);
-      return () => { cancelled = true; };
+      return () => {
+        cancelled = true;
+      };
     }
 
     setLoadingBookedDates(true);
@@ -159,7 +161,9 @@ const Checkout = () => {
         if (!cancelled) setLoadingBookedDates(false);
       });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [carId, vehicle?._id, vehicle?.id]);
 
   useEffect(() => {
@@ -185,10 +189,7 @@ const Checkout = () => {
     }
   }, [pickupDate, returnDate]);
 
-  const isBookedDay = useCallback(
-    (date) => bookingService.isDateBooked(date, bookedIntervals),
-    [bookedIntervals],
-  );
+  const isBookedDay = useCallback((date) => bookingService.isDateBooked(date, bookedIntervals), [bookedIntervals]);
 
   const selectedBookedConflicts = useMemo(
     () => bookingService.getBookingConflicts({ pickupDate, returnDate, intervals: bookedIntervals }),
@@ -220,9 +221,15 @@ const Checkout = () => {
     const timeoutId = window.setTimeout(() => {
       mapService
         .directAutocomplete(normalizedAddress, { limit: 5 })
-        .then((items) => { if (!cancelled) setDeliverySuggestions(items || []); })
-        .catch(() => { if (!cancelled) setDeliverySuggestions([]); })
-        .finally(() => { if (!cancelled) setLoadingDeliverySuggestions(false); });
+        .then((items) => {
+          if (!cancelled) setDeliverySuggestions(items || []);
+        })
+        .catch(() => {
+          if (!cancelled) setDeliverySuggestions([]);
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingDeliverySuggestions(false);
+        });
     }, 350);
 
     return () => {
@@ -311,7 +318,7 @@ const Checkout = () => {
       },
       () => {
         setLoadingDeliveryLocation(false);
-        setPrepError('Khong the lay vi tri hien tai. Hay kiem tra quyen truy cap vi tri.');
+        setPrepError('Không thể lấy vị trí hiện tại. Hãy kiểm tra quyền truy cập vị trí.');
       },
       { enableHighAccuracy: true, timeout: 10000 },
     );
@@ -343,7 +350,7 @@ const Checkout = () => {
         throw new Error('Ngay tra xe khong duoc trung voi ngay nhan xe.');
       }
       if (hasBookedDateSelection) {
-        throw new Error('Xe da co booking trong ngay ban chon. Vui long chon ngay khac.');
+        throw new Error('Xe đã có đơn đặt trong ngày bạn chọn. Vui lòng chọn ngày khác.');
       }
 
       const trimmedDeliveryAddress = String(deliveryAddress || '').trim();
@@ -357,7 +364,7 @@ const Checkout = () => {
         returnDate: ret.toISOString(),
       });
       if (!availability?.isAvailable) {
-        throw new Error(availability?.message || 'Xe da co lich thue trung trong khung thoi gian nay.');
+        throw new Error(availability?.message || 'Xe đã có lịch thuê trùng trong khung thời gian này.');
       }
 
       const {
@@ -377,7 +384,7 @@ const Checkout = () => {
       const bId = nextBookingId || booking?._id || booking?.id || booking;
       setBookingId(bId);
 
-      if (!secret) throw new Error('Khong nhan duoc thong tin thanh toan tu server.');
+      if (!secret) throw new Error('Không nhận được thông tin thanh toán từ server.');
       setPayError('');
       setStripeSessionError('');
       setBrokenClientSecret('');
@@ -394,7 +401,7 @@ const Checkout = () => {
 
   const handleRecreatePaymentSession = async () => {
     if (!bookingId) {
-      setStripeSessionError('Khong tim thay booking de tao lai phien thanh toan.');
+      setStripeSessionError('Không tìm thấy đơn đặt xe để tạo lại phiên thanh toán.');
       return;
     }
     setRepairingSession(true);
@@ -410,7 +417,7 @@ const Checkout = () => {
         return;
       }
       const nextSecret = paymentData?.client_secret || paymentData?.clientSecret || '';
-      if (!nextSecret) throw new Error('Khong nhan duoc client secret moi tu server.');
+      if (!nextSecret) throw new Error('Không nhận được client secret mới từ server.');
       if (await handleTerminalClientSecret(nextSecret, bookingId)) return;
       setClientSecret(nextSecret);
       setBrokenClientSecret('');
@@ -418,7 +425,7 @@ const Checkout = () => {
       setStripeSessionError(
         error?.response?.data?.message ||
           error?.message ||
-          'Khong the tao lai phien thanh toan Stripe. Vui long thu lai.',
+          'Không thể tạo lại phiên thanh toán Stripe. Vui lòng thử lại.',
       );
     } finally {
       setRepairingSession(false);
@@ -447,7 +454,7 @@ const Checkout = () => {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-4 text-gray-500 px-5">
         <FaExclamationCircle aria-hidden="true" className="text-red-500 text-4xl" />
-        <p className="text-center text-red-600">{vehicleError || 'Khong tim thay xe.'}</p>
+        <p className="text-center text-red-600">{vehicleError || 'Không tìm thấy xe.'}</p>
         <button type="button" className="btn-primary" onClick={() => navigate('/')}>
           Ve trang chu
         </button>
@@ -519,7 +526,9 @@ const Checkout = () => {
                         width={160}
                         height={112}
                         className="w-full max-w-[200px] sm:w-40 h-28 object-cover rounded-xl bg-gray-200 border border-white shadow-sm"
-                        onError={(e) => { e.target.style.display = 'none'; }}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
                       />
                     </div>
                     <div className="min-w-0 flex-1 flex flex-col gap-2">
@@ -589,9 +598,7 @@ const Checkout = () => {
                   Ngay <span className="font-bold text-orange-600">cam</span> trong lich tra xe la ngay trung voi ngay
                   nhan xe va khong duoc chon.
                 </div>
-                {loadingBookedDates && (
-                  <div className="mb-3 text-[0.75rem] text-gray-400">Dang tai lich da dat...</div>
-                )}
+                {loadingBookedDates && <div className="mb-3 text-[0.75rem] text-gray-400">Dang tai lich da dat...</div>}
                 {bookedDateError && (
                   <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[0.75rem] text-amber-700">
                     {bookedDateError}
@@ -683,11 +690,7 @@ const Checkout = () => {
                           disabled={loadingDeliveryLocation}
                           className="rounded-md p-1.5 text-primary hover:bg-primary-light disabled:opacity-50"
                         >
-                          {loadingDeliveryLocation ? (
-                            <FaSpinner className="animate-spin" />
-                          ) : (
-                            <FaLocationArrow />
-                          )}
+                          {loadingDeliveryLocation ? <FaSpinner className="animate-spin" /> : <FaLocationArrow />}
                         </button>
                       </div>
                       {(loadingDeliverySuggestions || deliverySuggestions.length > 0) && (
@@ -762,7 +765,9 @@ const Checkout = () => {
                   type="button"
                   className="btn-primary inline-flex items-center justify-center gap-2 px-8 py-3 text-[0.95rem] rounded-xl"
                   onClick={handleContinue}
-                  disabled={!pickupDate || !returnDate || preparingPay || !hasAcceptedContract || hasBookedDateSelection}
+                  disabled={
+                    !pickupDate || !returnDate || preparingPay || !hasAcceptedContract || hasBookedDateSelection
+                  }
                 >
                   {preparingPay ? (
                     <>

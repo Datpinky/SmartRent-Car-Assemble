@@ -5,6 +5,8 @@ import UrlSlot from './UrlSlot';
 
 function ImageUploadStep({
   selectedVehicle,
+  selectedBookingId,
+  bookings,
   pickupImagesUrls,
   posFiles,
   onSetPosFile,
@@ -12,6 +14,7 @@ function ImageUploadStep({
   readyToAnalyze,
   analyzing,
   analysisError,
+  isShowroom,
   onBack,
   onAnalyze,
 }) {
@@ -30,32 +33,54 @@ function ImageUploadStep({
             <FaCarSide className="text-gray-300" />
           </div>
         )}
-        <div>
+        <div className="flex-1">
           <div className="font-bold text-[0.9rem] text-gray-900">{getVehicleName(selectedVehicle)}</div>
-          {selectedVehicle?.vehicle_plate_number && (
-            <span className="code-badge text-[0.72rem]">{selectedVehicle.vehicle_plate_number}</span>
-          )}
+          <div className="flex gap-2 flex-wrap mt-1">
+            {selectedVehicle?.vehicle_plate_number && (
+              <span className="code-badge text-[0.72rem]">{selectedVehicle.vehicle_plate_number}</span>
+            )}
+            {selectedBookingId && (
+              <span className="text-[0.7rem] bg-cyan-100 text-cyan-700 px-2 py-0.5 rounded font-mono">
+                ID: {selectedBookingId}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Notice banner */}
-      {pickupImagesUrls.length > 0 ? (
-        <div className="bg-emerald-50 border border-emerald-300 rounded-xl px-3.5 py-2.5 mb-4 text-sm text-emerald-800 flex gap-2">
-          <FaCheckCircle className="shrink-0 mt-0.5" />
-          <span>
-            <strong>Co {pickupImagesUrls.length} anh ban giao tu luc cho muon xe.</strong> Anh TRUOC da duoc tu dong
-            dien — chi can tai anh SAU cho tung vi tri.
-          </span>
-        </div>
-      ) : (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-3.5 py-2.5 mb-4 text-sm text-yellow-800 flex gap-2">
-          <FaInfoCircle className="shrink-0 mt-0.5" />
-          <span>
-            Chup anh cung goc cho moi vi tri. Can <strong>it nhat 1 vi tri</strong> co du hai anh (TRUOC + SAU) de phan
-            tich.
-          </span>
-        </div>
-      )}
+      {(() => {
+        const filledCount = pickupImagesUrls.filter((url) => url && typeof url === 'string' && url.trim()).length;
+        console.log('🖼️ ImageUploadStep - pickupImagesUrls:', {
+          length: pickupImagesUrls.length,
+          filled: filledCount,
+          urls: pickupImagesUrls,
+          selectedBookingId,
+          isShowroom,
+          allPositions: pickupImagesUrls.map((url, i) => ({
+            pos: i,
+            hasUrl: !!url,
+            urlPreview: url?.substring(0, 50) || 'empty',
+          })),
+        });
+        return filledCount > 0 ? (
+          <div className="bg-emerald-50 border border-emerald-300 rounded-xl px-3.5 py-2.5 mb-4 text-sm text-emerald-800 flex gap-2">
+            <FaCheckCircle className="shrink-0 mt-0.5" />
+            <span>
+              <strong>Có {filledCount} ảnh bàn giao từ lúc cho mượn xe.</strong> Ảnh TRƯỚC đã được tự động điền —{' '}
+              {isShowroom ? 'sẵn sàng để phân tích.' : 'chỉ cần tải ảnh SAU cho từng vị trí.'}
+            </span>
+          </div>
+        ) : (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-3.5 py-2.5 mb-4 text-sm text-yellow-800 flex gap-2">
+            <FaInfoCircle className="shrink-0 mt-0.5" />
+            <span>
+              Chụp ảnh cùng góc cho mỗi vị trí. Cần <strong>ít nhất 1 vị trí</strong> có
+              {isShowroom ? ' ảnh TRƯỚC để phân tích.' : ' đủ hai ảnh (TRƯỚC + SAU) để phân tích.'}
+            </span>
+          </div>
+        );
+      })()}
 
       {/* Position grid */}
       <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3 mb-5">
@@ -64,6 +89,7 @@ function ImageUploadStep({
           const pickupUrl = pickupImagesUrls[posIdx];
           const hasBefore = !!(pickupUrl || files.before);
           const complete = hasBefore && !!files.after;
+          console.log(`🖼️ Position ${posIdx} (${pos.key}):`, { pickupUrl, hasBefore, hasFilesBefore: !!files.before });
           return (
             <div
               key={pos.key}
@@ -96,13 +122,16 @@ function ImageUploadStep({
                     type="before"
                   />
                 )}
-                <FileSlot
-                  label="khi nhan lai"
-                  hint={pos.hint}
-                  file={files.after}
-                  onFile={(f) => onSetPosFile(pos.key, 'after', f)}
-                  type="after"
-                />
+                {/* AFTER images only for renter (return inspection), not for showroom (pickup) */}
+                {!isShowroom && (
+                  <FileSlot
+                    label="khi nhan lai"
+                    hint={pos.hint}
+                    file={files.after}
+                    onFile={(f) => onSetPosFile(pos.key, 'after', f)}
+                    type="after"
+                  />
+                )}
               </div>
             </div>
           );

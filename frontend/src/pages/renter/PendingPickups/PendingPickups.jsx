@@ -1,22 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { FaCalendarAlt, FaClock, FaEnvelope, FaMapMarkerAlt, FaSpinner } from 'react-icons/fa';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FaEnvelope, FaSpinner } from 'react-icons/fa';
 import { MdDirectionsCar } from 'react-icons/md';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import ContractModal from '../../../components/common/ContractModal';
 import Modal from '../../../components/common/Modal';
-import StatusBadge from '../../../components/common/StatusBadge';
 import { RENTAL_CONTRACT_UI } from '../../../constants/rentalContractTemplate';
 import bookingService from '../../../services/bookingService';
 import { canRenterViewOfficialRentalContract } from '../../../utils/rentalContractEligibility';
 import { PAYMENT_LABELS, formatDateTime, formatMoney, mapRenterBooking } from '../../../utils/renterBookingView';
-
-const cardInfoStyle = {
-  background: '#fff',
-  borderRadius: 18,
-  border: '1px solid #f1f5f9',
-  padding: 18,
-  boxShadow: '0 8px 24px rgba(15, 23, 42, 0.04)',
-};
+import PickupBookingCard from './components/PickupBookingCard';
+import { cardInfoStyle, waitingLabel } from './pendingPickups.helpers';
 
 const PendingPickups = () => {
   const navigate = useNavigate();
@@ -30,15 +23,15 @@ const PendingPickups = () => {
   const [error, setError] = useState('');
   const [detailModal, setDetailModal] = useState(null);
   const [contractBookingId, setContractBookingId] = useState(null);
-  const [otpInputs, setOtpInputs] = useState({}); // { [bookingId]: string }
-  const [otpLoading, setOtpLoading] = useState(''); // bookingId đang verify
-  const [otpErrors, setOtpErrors] = useState({}); // { [bookingId]: string }
+  const [otpInputs, setOtpInputs] = useState({});
+  const [otpLoading, setOtpLoading] = useState('');
+  const [otpErrors, setOtpErrors] = useState({});
 
   const loadBookings = async () => {
     setLoading(true);
     try {
       const data = await bookingService.getCurrentRoleBookingsDetailed();
-      const mapped = (data || []).map(mapRenterBooking).filter((booking) => booking.isAwaitingPickup);
+      const mapped = (data || []).map(mapRenterBooking).filter((b) => b.isAwaitingPickup);
       setBookings(mapped);
       setError('');
     } catch (err) {
@@ -53,79 +46,81 @@ const PendingPickups = () => {
     loadBookings();
   }, []);
 
-  const handleVerifyOtp = async (bookingId) => {
-    const otp = (otpInputs[bookingId] || '').trim();
-    if (!otp) {
-      setOtpErrors((prev) => ({ ...prev, [bookingId]: 'Vui lòng nhập mã OTP' }));
-      return;
-    }
-    setOtpLoading(bookingId);
-    setOtpErrors((prev) => ({ ...prev, [bookingId]: '' }));
-    try {
-      await bookingService.verifyHandoverOtp(bookingId, otp);
-      // Booking chuyển sang in_use → reload để nó biến khỏi trang này
-      await loadBookings();
-      setDetailModal(null);
-    } catch (err) {
-      setOtpErrors((prev) => ({
-        ...prev,
-        [bookingId]: err?.response?.data?.message || err?.message || 'Mã OTP không đúng',
-      }));
-    } finally {
-      setOtpLoading('');
-    }
-  };
+  const handleOpenModal = useCallback((booking) => {
+    setDetailModal(booking);
+    // Clear OTP input for this booking when opening
+    setOtpInputs((prev) => ({ ...prev, [booking.id]: '' }));
+    setOtpErrors((prev) => ({ ...prev, [booking.id]: '' }));
+  }, []);
+
+  const handleCloseModal = useCallback(() => {
+    setDetailModal((current) => {
+      if (current) {
+        // Clear OTP input when closing modal
+        setOtpInputs((prev) => ({ ...prev, [current.id]: '' }));
+        setOtpErrors((prev) => ({ ...prev, [current.id]: '' }));
+      }
+      return null;
+    });
+  }, []);
+
+  const handleVerifyOtp = useCallback(
+    async (bookingId) => {
+      const otp = (otpInputs[bookingId] || '').trim();
+      if (!otp) {
+        setOtpErrors((prev) => ({ ...prev, [bookingId]: 'Vui lòng nhập mã OTP' }));
+        return;
+      }
+      setOtpLoading(bookingId);
+      setOtpErrors((prev) => ({ ...prev, [bookingId]: '' }));
+      try {
+        await bookingService.verifyHandoverOtp(bookingId, otp);
+        await loadBookings();
+        handleCloseModal();
+      } catch (err) {
+        setOtpErrors((prev) => ({
+          ...prev,
+          [bookingId]: err?.response?.data?.message || err?.message || 'Mã OTP không đúng',
+        }));
+      } finally {
+        setOtpLoading('');
+      }
+    },
+    [otpInputs, handleCloseModal],
+  );
 
   useEffect(() => {
-    if (!highlightedBookingId || loading || bookings.length === 0) {
-      return;
-    }
-
-    const handledKey = `${window.location.pathname}:${highlightedBookingId}`;
-    if (handledHighlightRef.current === handledKey) {
-      return;
-    }
-
-    const targetBooking = bookings.find((booking) => String(booking.id) === String(highlightedBookingId));
-    if (!targetBooking) {
-      return;
-    }
-
-    handledHighlightRef.current = handledKey;
-    setDetailModal(targetBooking);
-  }, [bookings, highlightedBookingId, loading]);
+    if (!highlightedBookingId || loading || bookings.length === 0) return;
+    const key = `${window.location.pathname}:${highlightedBookingId}`;
+    if (handledHighlightRef.current === key) return;
+    const target = bookings.find((b) => String(b.id) === String(highlightedBookingId));
+    if (!target) return;
+    handledHighlightRef.current = key;
+    handleOpenModal(target);
+  }, [bookings, highlightedBookingId, loading, handleOpenModal]);
 
   useEffect(() => {
-    if (!fromNotification || !highlightedBookingId || loading || bookings.length === 0) {
-      return;
-    }
-    if (!bookings.some((b) => String(b.id) === String(highlightedBookingId))) {
-      return;
-    }
+    if (!fromNotification || !highlightedBookingId || loading || bookings.length === 0) return;
+    if (!bookings.some((b) => String(b.id) === String(highlightedBookingId))) return;
     const key = `${highlightedBookingId}:scroll`;
-    if (handledScrollRef.current === key) {
-      return;
-    }
+    if (handledScrollRef.current === key) return;
     handledScrollRef.current = key;
     requestAnimationFrame(() => {
-      document.getElementById(`renter-booking-card-${highlightedBookingId}`)?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      });
+      document
+        .getElementById(`renter-booking-card-${highlightedBookingId}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
   }, [bookings, fromNotification, highlightedBookingId, loading]);
 
   const summary = useMemo(
     () => ({
       total: bookings.length,
-      needsRenterConfirm: bookings.filter((booking) => booking.status === 'handed_over').length,
-      waitingShowroom: bookings.filter((booking) => booking.status === 'waiting_handover').length,
-      contactable: bookings.filter((booking) => Boolean(booking.showroomEmail)).length,
+      needsRenterConfirm: bookings.filter((b) => b.status === 'handed_over').length,
+      waitingShowroom: bookings.filter((b) => b.status === 'waiting_handover').length,
+      contactable: bookings.filter((b) => Boolean(b.showroomEmail)).length,
     }),
     [bookings],
   );
-
-  const waitingLabel = 'Đang chờ Showroom hoàn tất bàn giao';
 
   return (
     <div className="pending-pickups">
@@ -165,20 +160,12 @@ const PendingPickups = () => {
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         {[
-          { label: 'Tổng booking', val: summary.total, color: '#374151' },
+          { label: 'Tổng đơn', val: summary.total, color: '#374151' },
           { label: 'Chờ showroom bàn giao', val: summary.waitingShowroom, color: '#d97706' },
           { label: 'Cần bạn xác nhận nhận xe', val: summary.needsRenterConfirm, color: '#2563eb' },
           { label: 'Có email showroom', val: summary.contactable, color: '#059669' },
         ].map((item) => (
-          <div
-            key={item.label}
-            style={{
-              ...cardInfoStyle,
-              minWidth: 150,
-              textAlign: 'center',
-              padding: '14px 18px',
-            }}
-          >
+          <div key={item.label} style={{ ...cardInfoStyle, minWidth: 150, textAlign: 'center', padding: '14px 18px' }}>
             <div style={{ fontWeight: 800, fontSize: '1.3rem', color: item.color }}>{item.val}</div>
             <div style={{ fontSize: '0.72rem', color: '#9ca3af' }}>{item.label}</div>
           </div>
@@ -210,190 +197,30 @@ const PendingPickups = () => {
       ) : (
         <div className="booking-list">
           {bookings.map((booking) => (
-            <div
+            <PickupBookingCard
               key={booking.id}
-              id={`renter-booking-card-${booking.id}`}
-              className="booking-card-item"
-              onClick={() => setDetailModal(booking)}
-              style={
-                String(booking.id) === String(highlightedBookingId)
-                  ? {
-                      border: '1px solid #bfdbfe',
-                      boxShadow: '0 12px 30px rgba(37, 99, 235, 0.12)',
-                      background: '#f8fbff',
-                      cursor: 'pointer',
-                    }
-                  : { cursor: 'pointer' }
-              }
-            >
-              <div className="booking-card-left">
-                <div className="booking-card-img" style={{ overflow: 'hidden', background: '#f3f4f6' }}>
-                  {booking.image ? (
-                    <img
-                      src={booking.image}
-                      alt={booking.vehicleName}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                  ) : (
-                    <MdDirectionsCar style={{ fontSize: '2.5rem', color: '#00b14f' }} />
-                  )}
-                </div>
-
-                <div className="booking-card-info">
-                  <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#111827' }}>{booking.vehicleName}</div>
-                  <div style={{ fontSize: '0.78rem', color: '#6b7280', marginTop: 3 }}>{booking.showroomName}</div>
-                  <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
-                    <span
-                      style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.78rem', color: '#6b7280' }}
-                    >
-                      <FaCalendarAlt size={11} /> {formatDateTime(booking.startDate)} -{' '}
-                      {formatDateTime(booking.endDate)}
-                    </span>
-                    <span
-                      style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.78rem', color: '#6b7280' }}
-                    >
-                      <FaClock size={11} /> {booking.durationDays} ngày
-                    </span>
-                    <span
-                      style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.78rem', color: '#6b7280' }}
-                    >
-                      <FaMapMarkerAlt size={11} /> {booking.locationLabel}
-                    </span>
-                  </div>
-                  <div style={{ marginTop: 8, fontSize: '0.78rem', fontWeight: 800, color: '#334155' }}>
-                    {booking.statusHeadline}
-                  </div>
-                  <div style={{ marginTop: 4, fontSize: '0.76rem', color: '#6b7280', lineHeight: 1.6 }}>
-                    {booking.waitingForLabel}
-                  </div>
-                  {booking.pickupConfirmationHint && (
-                    <div style={{ marginTop: 8, fontSize: '0.76rem', color: '#9a3412', lineHeight: 1.6 }}>
-                      {booking.pickupConfirmationHint}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="booking-card-right">
-                <div style={{ textAlign: 'right' }}>
-                  <StatusBadge status={booking.status} />
-                  <div style={{ marginTop: 6 }}>
-                    <StatusBadge
-                      status={booking.paymentStatus}
-                      customLabel={PAYMENT_LABELS[booking.paymentStatus] || booking.paymentStatus}
-                    />
-                  </div>
-                  <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#00b14f', marginTop: 8 }}>
-                    {formatMoney(booking.totalPrice)}
-                  </div>
-                  <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: 2 }}>Ma: {booking.id}</div>
-                </div>
-
-                <div style={{ display: 'flex', gap: 6, marginTop: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                  {canRenterViewOfficialRentalContract(booking) && (
-                    <button
-                      type="button"
-                      className="renter-btn-soft"
-                      style={{ fontSize: '0.75rem', padding: '6px 12px' }}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setContractBookingId(booking.id);
-                      }}
-                    >
-                      {RENTAL_CONTRACT_UI.officialButton}
-                    </button>
-                  )}
-
-                  {booking.status === 'handed_over' ? (
-                    // Showroom đã bàn giao → renter nhập OTP
-                    <div
-                      style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          maxLength={6}
-                          placeholder="Nhập mã OTP"
-                          value={otpInputs[booking.id] || ''}
-                          onChange={(e) =>
-                            setOtpInputs((prev) => ({ ...prev, [booking.id]: e.target.value.replace(/\D/g, '') }))
-                          }
-                          style={{
-                            width: 110,
-                            padding: '6px 10px',
-                            borderRadius: 8,
-                            border: '1.5px solid #00b14f',
-                            fontSize: '0.85rem',
-                            fontFamily: 'monospace',
-                            letterSpacing: '0.15em',
-                            outline: 'none',
-                          }}
-                        />
-                        <button
-                          type="button"
-                          className="btn-primary"
-                          style={{ fontSize: '0.75rem', padding: '6px 12px', whiteSpace: 'nowrap' }}
-                          disabled={otpLoading === booking.id}
-                          onClick={() => handleVerifyOtp(booking.id)}
-                        >
-                          {otpLoading === booking.id ? <FaSpinner className="animate-spin" /> : 'Xác nhận'}
-                        </button>
-                      </div>
-                      {otpErrors[booking.id] && (
-                        <div style={{ fontSize: '0.72rem', color: '#dc2626' }}>{otpErrors[booking.id]}</div>
-                      )}
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        borderRadius: 8,
-                        padding: '6px 12px',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        background: '#e2e8f0',
-                        color: '#475569',
-                      }}
-                    >
-                      {waitingLabel}
-                    </div>
-                  )}
-
-                  {booking.status !== 'handed_over' && booking.showroomEmail && (
-                    <a
-                      className="renter-btn-soft"
-                      href={`mailto:${booking.showroomEmail}`}
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <FaEnvelope /> Liên hệ Showroom
-                    </a>
-                  )}
-                </div>
-              </div>
-            </div>
+              booking={booking}
+              highlightedBookingId={highlightedBookingId}
+              otpInputs={otpInputs}
+              setOtpInputs={setOtpInputs}
+              otpLoading={otpLoading}
+              otpErrors={otpErrors}
+              handleVerifyOtp={handleVerifyOtp}
+              setDetailModal={handleOpenModal}
+              setContractBookingId={setContractBookingId}
+            />
           ))}
         </div>
       )}
 
-      <Modal isOpen={!!detailModal} onClose={() => setDetailModal(null)} title="Chi tiet cho nhan xe" width={560}>
+      <Modal isOpen={!!detailModal} onClose={handleCloseModal} title="Chi tiết chờ nhận xe" width={560}>
         {detailModal && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ background: '#f9fafb', borderRadius: 12, padding: 16 }}>
               <div style={{ fontWeight: 800, fontSize: '1rem', color: '#111827' }}>{detailModal.vehicleName}</div>
               <div style={{ fontSize: '0.82rem', color: '#6b7280', marginTop: 4 }}>{detailModal.showroomName}</div>
             </div>
-
-            <div
-              style={{
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                borderRadius: 12,
-                padding: '14px 16px',
-              }}
-            >
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px' }}>
               <div style={{ fontWeight: 800, color: '#111827', marginBottom: 8 }}>{detailModal.statusHeadline}</div>
               <div style={{ fontSize: '0.8rem', color: '#475569', lineHeight: 1.65, marginBottom: 8 }}>
                 {detailModal.waitingForLabel}
@@ -408,13 +235,12 @@ const PendingPickups = () => {
                 Việc bạn nên làm: {detailModal.renterActionHint}
               </div>
             </div>
-
             {[
-              ['Mã booking', detailModal.id],
+              ['Mã đơn', detailModal.id],
               ['Ngày nhận xe', formatDateTime(detailModal.startDate)],
               ['Ngày trả xe', formatDateTime(detailModal.endDate)],
               ['Tổng tiền', formatMoney(detailModal.totalPrice)],
-              ['Trạng thái booking', detailModal.status],
+              ['Trạng thái đơn', detailModal.status],
               ['Trạng thái thanh toán', PAYMENT_LABELS[detailModal.paymentStatus] || detailModal.paymentStatus],
               ['Phương thức thanh toán', detailModal.paymentMethod],
               ['Địa điểm giao nhận', detailModal.locationLabel],
@@ -435,7 +261,6 @@ const PendingPickups = () => {
                 </span>
               </div>
             ))}
-
             {detailModal.pickupConfirmationHint && (
               <div
                 style={{
@@ -451,9 +276,7 @@ const PendingPickups = () => {
                 {detailModal.pickupConfirmationHint}
               </div>
             )}
-
             {detailModal.status === 'handed_over' ? (
-              // Showroom đã bàn giao → renter nhập OTP xác nhận
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div
                   style={{
@@ -533,7 +356,6 @@ const PendingPickups = () => {
                 {waitingLabel}
               </div>
             )}
-
             {canRenterViewOfficialRentalContract(detailModal) && (
               <button
                 type="button"
@@ -544,7 +366,6 @@ const PendingPickups = () => {
                 {RENTAL_CONTRACT_UI.officialButton}
               </button>
             )}
-
             {detailModal.showroomEmail && (
               <a
                 className="renter-btn-soft"

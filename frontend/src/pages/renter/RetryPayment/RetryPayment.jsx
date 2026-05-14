@@ -42,7 +42,7 @@ const RetryPayment = () => {
 
   const loadBooking = useCallback(async () => {
     if (!bookingId) {
-      setError('Không tìm thấy booking để thanh toán lại.');
+      setError('Không tìm thấy đơn đặt xe để thanh toán lại.');
       setLoading(false);
       return;
     }
@@ -54,7 +54,7 @@ const RetryPayment = () => {
       setError('');
     } catch (err) {
       setBooking(null);
-      setError(err.message || 'Không thể tải thông tin booking.');
+      setError(err.message || 'Không thể tải thông tin đơn đặt xe.');
     } finally {
       setLoading(false);
     }
@@ -116,7 +116,7 @@ const RetryPayment = () => {
   const prepareRetryPayment = useCallback(
     async (targetBooking = renterBooking) => {
       if (!targetBooking?.id) {
-        setError('Không tìm thấy booking để tạo lại phiên thanh toán.');
+        setError('Không tìm thấy đơn đặt xe để tạo lại phiên thanh toán.');
         return;
       }
 
@@ -150,7 +150,7 @@ const RetryPayment = () => {
       } catch (err) {
         setClientSecret('');
         setNeedsNewSession(true);
-        setError(err.message || 'Không thể tạo lại phiên thanh toán cho booking này.');
+        setError(err.message || 'Không thể tạo lại phiên thanh toán cho đơn đặt xe này.');
       } finally {
         setPreparing(false);
       }
@@ -188,14 +188,14 @@ const RetryPayment = () => {
   const retryBlockedMessage = !renterBooking
     ? ''
     : renterBooking.paymentStatus === 'successful'
-      ? 'Booking này đã thanh toán thành công, không cần tạo lại phiên thanh toán.'
+      ? 'Đơn đặt xe này đã thanh toán thành công, không cần tạo lại phiên thanh toán.'
       : renterBooking.status === 'cancelled'
-        ? 'Booking đã bị hủy, không thể thanh toán lại.'
-        : 'Booking này không ở trạng thái cho phép thanh toán lại.';
+        ? 'Đơn đặt xe đã bị hủy, không thể thanh toán lại.'
+        : 'Đơn đặt xe này không ở trạng thái cho phép thanh toán lại.';
 
   const sessionRecoveryHint = needsNewSession
-    ? 'Stripe không thể dùng phiên hiện tại. Bạn cần tạo lại phiên thanh toán mới cho booking này.'
-    : 'Chưa khởi tạo được phiên thanh toán mới. Bạn có thể thử tạo lại phiên Stripe cho booking này.';
+    ? 'Phiên thanh toán hiện tại không dùng được. Bạn cần tạo lại phiên thanh toán mới cho đơn đặt xe này.'
+    : 'Chưa khởi tạo được phiên thanh toán mới. Bạn có thể thử tạo lại phiên thanh toán cho đơn đặt xe này.';
 
   if (loading) {
     return (
@@ -286,15 +286,13 @@ const RetryPayment = () => {
                   <div style={{ fontWeight: 800, fontSize: '1.2rem', color: '#00b14f' }}>
                     {formatMoney(renterBooking.totalPrice)}
                   </div>
-                  <div style={{ marginTop: 6, fontSize: '0.78rem', color: '#6b7280' }}>
-                    Mã booking: {renterBooking.id}
-                  </div>
+                  <div style={{ marginTop: 6, fontSize: '0.78rem', color: '#6b7280' }}>Mã đơn: {renterBooking.id}</div>
                 </div>
               </div>
 
               <div style={{ marginTop: 18, display: 'grid', gap: 10 }}>
                 {[
-                  ['Trạng thái booking', renterBooking.status],
+                  ['Trạng thái đơn', renterBooking.status],
                   ['Trạng thái thanh toán', PAYMENT_LABELS[renterBooking.paymentStatus] || renterBooking.paymentStatus],
                   ['Thời gian nhận xe', formatDateTime(renterBooking.startDate)],
                   ['Thời gian trả xe', formatDateTime(renterBooking.endDate)],

@@ -163,7 +163,7 @@ class BookingService {
   }
 
   static async getBookingById(id) {
-    return Booking.findById(id);
+    return Booking.findById(id).populate('vehicle_id', 'vehicle_name vehicle_brand vehicle_model vehicle_plate_number');
   }
 
   static async updateBookingStatus(id, status, role, userId) {
@@ -242,13 +242,17 @@ class BookingService {
   }
 
   static async savePickupImages(bookingId, showroomUserId, images) {
+    console.log('🔔 Service.savePickupImages called:', { bookingId, imagesCount: images?.length, showroomUserId });
     const booking = await Booking.findById(bookingId);
     if (!booking) throwError('Booking không tồn tại', 404);
+    console.log('📋 Booking found. showroom_id:', booking.showroom_id.toString(), 'userId:', showroomUserId.toString());
     if (booking.showroom_id.toString() !== showroomUserId.toString())
       throwError('Bạn không có quyền cập nhật booking này', 403);
-    const safeImages = images.filter((u) => typeof u === 'string' && u.startsWith('http')).slice(0, 30); // max 30 ảnh (6 vị trí × 5 ảnh đệm)
+    const safeImages = images.filter((u) => typeof u === 'string' && u.startsWith('http')).slice(0, 30);
+    console.log('📸 Safe images after filter:', safeImages.length);
     booking.pickup_images = safeImages;
     await booking.save();
+    console.log('✅ Saved to DB. pickup_images count:', booking.pickup_images.length);
     return booking;
   }
 

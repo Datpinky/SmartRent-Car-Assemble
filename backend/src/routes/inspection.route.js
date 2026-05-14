@@ -5,7 +5,7 @@ const authMiddleware = require('../middlewares/auth.middleware');
 const authorizeRoles = require('../middlewares/authorize.middleware');
 
 router.use(authMiddleware);
-router.use(authorizeRoles('showroom', 'admin'));
+router.use(authorizeRoles('showroom', 'user', 'renter', 'admin'));
 
 router.get('/', inspectionController.list);
 router.get('/:id', inspectionController.getById);

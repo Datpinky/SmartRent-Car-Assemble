@@ -9,7 +9,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 router.post(
   '/image/files',
-  upload.array('files', 5),
+  upload.array('files', 10),
   ...uploadValidation.validateImageUpload,
   validate,
   uploadController.uploadImageFiles,

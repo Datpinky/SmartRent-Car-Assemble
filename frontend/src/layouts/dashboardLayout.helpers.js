@@ -4,6 +4,7 @@ import {
   Bot,
   CalendarDays,
   Car,
+  Clock,
   CreditCard,
   FileText,
   LayoutDashboard,
@@ -11,7 +12,6 @@ import {
   TrendingUp,
   User,
   Users,
-  Clock,
 } from 'lucide-react';
 
 export const MENUS = {
@@ -52,7 +52,7 @@ export const MENUS = {
       ],
     },
     { label: 'Hồ sơ cá nhân', path: '/renter/profile', icon: User },
-    { label: 'Kiểm tra xe', path: '/renter/ai-reports', icon: Bot },
+    { label: 'Kiểm tra AI trả xe', path: '/renter/return-inspections', icon: Bot },
     { label: 'Hợp đồng của tôi', path: '/renter/contracts', icon: FileText },
     { label: 'Lịch sử giao dịch', path: '/renter/transactions', icon: ArrowLeftRight },
     { label: 'Hỗ trợ khẩn cấp', path: '/renter/sos', icon: AlertTriangle },
