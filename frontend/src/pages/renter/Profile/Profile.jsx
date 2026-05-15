@@ -148,7 +148,7 @@ const Profile = () => {
       .catch((error) => {
         if (!mounted) return;
         setProfile(fallbackProfileRef.current);
-        setNotice({ type: 'error', message: error.message || 'Khong the tai ho so' });
+        setNotice({ type: 'error', message: error.message || 'Không thể tải hồ sơ' });
       })
       .finally(() => {
         if (mounted) setLoadingProfile(false);
@@ -236,7 +236,7 @@ const Profile = () => {
 
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) {
-      setNotice({ type: 'error', message: 'Trinh duyet khong ho tro lay vi tri.' });
+      setNotice({ type: 'error', message: 'Trình duyệt không hỗ trợ lấy vị trí.' });
       return;
     }
     setLoadingLocation(true);
@@ -252,7 +252,7 @@ const Profile = () => {
       },
       () => {
         setLoadingLocation(false);
-        setNotice({ type: 'error', message: 'Khong the lay vi tri. Hay kiem tra quyen truy cap.' });
+        setNotice({ type: 'error', message: 'Không thể lấy vị trí. Vui lòng kiểm tra quyền truy cập.' });
       },
       { enableHighAccuracy: true, timeout: 10000 },
     );
@@ -272,9 +272,9 @@ const Profile = () => {
   };
 
   const validateForm = () => {
-    if (!String(form.name || '').trim()) return 'Vui long nhap ho va ten.';
+    if (!String(form.name || '').trim()) return 'Vui lòng nhập họ và tên.';
     const phoneDigits = String(form.phone || '').replace(/\D/g, '');
-    if (phoneDigits && phoneDigits.length !== 10) return 'So dien thoai phai co dung 10 so';
+    if (phoneDigits && phoneDigits.length !== 10) return 'Số điện thoại phải có đúng 10 số';
     return '';
   };
 
@@ -285,7 +285,7 @@ const Profile = () => {
       return;
     }
     if (!userId) {
-      setNotice({ type: 'error', message: 'Khong tim thay thong tin de cap nhat' });
+      setNotice({ type: 'error', message: 'Không tìm thấy thông tin để cập nhật' });
       return;
     }
     setSaving(true);
@@ -334,7 +334,7 @@ const Profile = () => {
         trimmedAddress !== currentAddress ||
         coordinatesChanged;
       if (!hasSupportedChanges) {
-        setNotice({ type: 'warning', message: 'Khong co thay doi nao de luu' });
+        setNotice({ type: 'warning', message: 'Không có thay đổi nào để lưu' });
         return;
       }
       const updatedProfile = await profileService.updateProfile(userId, {
@@ -373,11 +373,11 @@ const Profile = () => {
         type: trimmedAddress && !hasResolvedCoordinates ? 'warning' : 'success',
         message:
           trimmedAddress && !hasResolvedCoordinates
-            ? 'Da cap nhat ho so. Dia chi da duoc luu, nhung he thong chua xac dinh duoc toa do chinh xac.'
-            : 'Da cap nhat ho so thanh cong.',
+            ? 'Đã cập nhật hồ sơ. Địa chỉ đã được lưu, nhưng hệ thống chưa xác định được tọa độ chính xác.'
+            : 'Đã cập nhật hồ sơ thành công.',
       });
     } catch (error) {
-      setNotice({ type: 'error', message: error.message || 'Khong the cap nhat ho so' });
+      setNotice({ type: 'error', message: error.message || 'Không thể cập nhật hồ sơ' });
     } finally {
       setSaving(false);
     }
@@ -386,7 +386,7 @@ const Profile = () => {
   const renderReadonlyField = (icon, value) => (
     <div className="form-input" style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#f9fafb' }}>
       <span style={{ color: '#6b7280' }}>{icon}</span>
-      <span>{value || 'Chua cap nhat'}</span>
+      <span>{value || 'Chưa cập nhật'}</span>
     </div>
   );
 
@@ -395,7 +395,7 @@ const Profile = () => {
       <div className="profile-page">
         <div className="page-header" style={{ marginBottom: 20 }}>
           <div>
-            <h1 className="page-title">Ho so ca nhan</h1>
+            <h1 className="page-title">Hồ sơ cá nhân</h1>
           </div>
         </div>
 
@@ -436,10 +436,10 @@ const Profile = () => {
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#111827' }}>
-                {activeUser?.name || 'Chua cap nhat'}
+                {activeUser?.name || 'Chưa cập nhật'}
               </div>
               <div style={{ fontSize: '0.84rem', color: '#6b7280', marginTop: 4 }}>
-                {activeUser?.email || 'Chua cap nhat'}
+                {activeUser?.email || 'Chưa cập nhật'}
               </div>
               <div
                 style={{
@@ -458,12 +458,12 @@ const Profile = () => {
               >
                 {loadingProfile || loadingLocation ? <FaSpinner className="animate-spin" /> : <FaMapMarkerAlt />}
                 {loadingProfile
-                  ? 'Dang cap nhat ho so'
+                  ? 'Đang cập nhật hồ sơ'
                   : loadingLocation
-                    ? 'Dang xac dinh vi tri'
+                    ? 'Đang xác định vị trí'
                     : mapLocation
-                      ? 'Da xac dinh vi tri'
-                      : 'Chua xac dinh duoc vi tri'}
+                      ? 'Đã xác định vị trí'
+                      : 'Chưa xác định được vị trí'}
               </div>
             </div>
           </div>
@@ -471,7 +471,7 @@ const Profile = () => {
           {/* Form fields */}
           <div className="profile-form-grid">
             <div>
-              <label className="form-label">Ho va ten</label>
+              <label className="form-label">Họ và tên</label>
               <div className="form-input" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ color: '#6b7280' }}>
                   <FaUser />
@@ -487,10 +487,10 @@ const Profile = () => {
             </div>
             <div>
               <label className="form-label">Email</label>
-              {renderReadonlyField(<MdAlternateEmail />, activeUser?.email || 'Chua cap nhat')}
+              {renderReadonlyField(<MdAlternateEmail />, activeUser?.email || 'Chưa cập nhật')}
             </div>
             <div>
-              <label className="form-label">So dien thoai</label>
+              <label className="form-label">Số điện thoại</label>
               <div className="form-input" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ color: '#6b7280' }}>
                   <MdPhoneIphone />
@@ -505,17 +505,17 @@ const Profile = () => {
               </div>
             </div>
             <div>
-              <label className="form-label">Vai tro</label>
+              <label className="form-label">Vai trò</label>
               {renderReadonlyField(
                 <MdInfoOutline />,
-                ROLE_LABELS[activeUser?.role] || activeUser?.role || 'Chua cap nhat',
+                ROLE_LABELS[activeUser?.role] || activeUser?.role || 'Chưa cập nhật',
               )}
             </div>
           </div>
 
           {/* Address field */}
           <div style={{ marginTop: 16 }}>
-            <label className="form-label">Dia chi</label>
+            <label className="form-label">Địa chỉ</label>
             <div style={{ position: 'relative' }}>
               <div className="form-input" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ color: '#6b7280' }}>
@@ -526,14 +526,14 @@ const Profile = () => {
                   value={form.address}
                   onChange={(event) => handleChange('address', event.target.value)}
                   disabled={!isEditing || loadingProfile}
-                  placeholder="Nhap dia chi de dong bo"
+                  placeholder="Nhập địa chỉ"
                   style={FIELD_INPUT_STYLE}
                 />
                 {isEditing && (
                   <button
                     type="button"
-                    title="Lay vi tri hien tai"
-                    aria-label="Lay vi tri hien tai"
+                    title="Lấy vị trí hiện tại"
+                    aria-label="Lấy vị trí hiện tại"
                     onClick={handleUseCurrentLocation}
                     disabled={loadingLocation || loadingProfile}
                     className="rounded-md p-1.5 text-primary hover:bg-primary-light disabled:opacity-50"
@@ -549,7 +549,7 @@ const Profile = () => {
                 >
                   {loadingSuggestions && (
                     <div className="flex items-center gap-2 px-3 py-2 text-[0.78rem] text-gray-500">
-                      <FaSpinner className="animate-spin" /> Dang tim goi y...
+                      <FaSpinner className="animate-spin" /> Đang tìm gợi ý...
                     </div>
                   )}
                   {!loadingSuggestions &&

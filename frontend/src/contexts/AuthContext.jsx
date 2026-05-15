@@ -80,8 +80,8 @@ export const AuthProvider = ({ children }) => {
       return { success: true, user: apiUser };
     } catch (err) {
       const message = err.status === 401
-        ? 'Email hoac mat khau khong dung.'
-        : (err.message || 'Dang nhap that bai.');
+        ? 'Email hoặc mật khẩu không đúng.'
+        : (err.message || 'Đăng nhập thất bại.');
       return { success: false, error: message };
     }
   };
@@ -98,7 +98,7 @@ export const AuthProvider = ({ children }) => {
       return { success: true };
     } catch (err) {
       const message = err.status === 409
-        ? 'Email nay da ton tai. Hay dang nhap bang tai khoan hien co.'
+        ? 'Email này đã tồn tại'
         : err.message;
       return { success: false, error: message };
     }

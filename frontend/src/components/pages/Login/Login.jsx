@@ -52,7 +52,7 @@ const LoginFormField = ({
         role="alert"
         className="mt-2 flex items-center gap-1 text-[0.78rem] font-medium text-red-600"
       >
-        Canh bao: {error}
+        Cảnh báo: {error}
       </div>
     )}
   </div>
@@ -139,7 +139,7 @@ const Login = () => {
       setSubmitting(false);
 
       if (result.success) {
-        setRegisterSuccess('Tao tai khoan thanh cong. Vui long dang nhap.');
+        setRegisterSuccess('Tạo tài khoản thành công');
         setTab('login');
         setForm((current) => ({
           ...current,
@@ -147,7 +147,7 @@ const Login = () => {
           confirmPassword: '',
         }));
       } else {
-        setRegisterError(result.error || 'Dang ky that bai. Vui long thu lai.');
+        setRegisterError(result.error || 'Đăng ký thất bại. Vui lòng thử lại.');
       }
       return;
     }
@@ -170,7 +170,7 @@ const Login = () => {
 
       setTimeout(() => navigate(redirect, { replace: true }), 0);
     } else {
-      setLoginError(result.error || 'Dang nhap that bai');
+      setLoginError(result.error || 'Đăng nhập thất bại');
     }
   };
 
@@ -218,17 +218,17 @@ const Login = () => {
     setForgotSuccess('');
 
     if (!forgotForm.email.trim()) {
-      setForgotError('Vui long nhap email da dang ky.');
+      setForgotError('Vui lòng nhập email đã đăng ký.');
       return;
     }
 
     if (!passwordMeetsPolicy(forgotForm.newPassword)) {
-      setForgotError('Mat khau moi chua du manh. Vui long dap ung day du yeu cau.');
+      setForgotError('Mật khẩu mới chưa đủ mạnh. Vui lòng đáp ứng đầy đủ các yêu cầu bên dưới.');
       return;
     }
 
     if (forgotForm.newPassword !== forgotForm.confirmPassword) {
-      setForgotError('Mat khau xac nhan khong khop.');
+      setForgotError('Mật khẩu xác nhận không khớp.');
       return;
     }
 
@@ -238,7 +238,7 @@ const Login = () => {
         email: forgotForm.email,
         newPassword: forgotForm.newPassword,
       });
-      setForgotSuccess('Dat lai mat khau thanh cong. Vui long dang nhap lai.');
+      setForgotSuccess('Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.');
       setForm((current) => ({
         ...current,
         email: forgotForm.email.trim(),
@@ -248,7 +248,7 @@ const Login = () => {
         setForgotInlineOpen(false);
       }, 900);
     } catch (error) {
-      setForgotError(error.message || 'Khong the dat lai mat khau. Vui long thu lai.');
+      setForgotError(error.message || 'Không thể đặt lại mật khẩu. Vui lòng thử lại.');
     } finally {
       setForgotSubmitting(false);
     }
@@ -337,7 +337,7 @@ const Login = () => {
             )}
 
             <LoginFormField
-              label="Email da dang ky"
+              label="Email đã đăng ký"
               name="email"
               type="email"
               icon={MdEmail}
@@ -349,25 +349,25 @@ const Login = () => {
             />
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-[0.8rem] font-semibold text-gray-700">Mat khau moi</label>
+              <label className="text-[0.8rem] font-semibold text-gray-700">Mật khẩu mới</label>
               <PasswordStrengthInput
                 name="newPassword"
                 id="forgot-new-password"
                 value={forgotForm.newPassword}
                 onChange={handleForgotChange}
                 error={!!forgotError && !passwordMeetsPolicy(forgotForm.newPassword)}
-                placeholder="Nhap mat khau moi"
+                placeholder="Nhập mật khẩu mới"
               />
             </div>
 
             <PasswordToggleInput
-              label="Xac nhan mat khau moi"
+              label="Xác nhận mật khẩu mới"
               name="confirmPassword"
               id="forgot-confirm-password"
               value={forgotForm.confirmPassword}
               onChange={handleForgotChange}
               error={!!forgotForm.confirmPassword && forgotForm.newPassword !== forgotForm.confirmPassword}
-              placeholder="Nhap lai mat khau moi"
+              placeholder="Nhập lại mật khẩu mới"
               autoComplete="new-password"
               required
             />
@@ -377,7 +377,7 @@ const Login = () => {
               disabled={forgotSubmitting}
               className="mt-1 w-full rounded-xl bg-gradient-to-br from-primary to-primary-dark py-3 text-[0.92rem] font-bold text-white transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,177,79,0.35)] disabled:cursor-not-allowed disabled:opacity-60 disabled:translate-y-0"
             >
-              {forgotSubmitting ? 'Dang cap nhat...' : 'Dat lai mat khau'}
+              {forgotSubmitting ? 'Đang cập nhật...' : 'Đặt lại mật khẩu'}
             </button>
 
             <button
@@ -396,7 +396,7 @@ const Login = () => {
                 label="Họ và tên"
                 name="name"
                 icon={MdDirectionsCar}
-                placeholder="Nguyen Van A"
+                placeholder="Nguyễn Văn Mười"
                 value={form.name}
                 onChange={handleChange}
               />
@@ -404,7 +404,7 @@ const Login = () => {
 
             {tab === 'register' && (
               <LoginFormField
-                label="Số điện thoại (10 số)"
+                label="Số điện thoại"
                 name="phone"
                 type="tel"
                 icon={MdPhone}
