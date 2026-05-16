@@ -16,7 +16,7 @@ const GplxRequirementBanner = ({ status, rejectReason, onGoProfile }) => {
       border: 'border-yellow-200',
       text: 'text-yellow-800',
       icon: '⏳',
-      message: 'GPLX của bạn đang chờ admin duyệt. Bạn có thể đặt xe sau khi được xác minh.',
+      message: 'Giấy phép lái xe của bạn đang chờ duyệt. Bạn có thể đặt xe sau khi được xác minh.',
       showAction: false,
     },
     rejected: {

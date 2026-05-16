@@ -285,7 +285,7 @@ const DriverLicenseSection = ({ userId, profile, onSaved }) => {
             </div>
           </div>
           <div>
-            <label className="form-label">Hạng GPLX</label>
+            <label className="form-label">Hạng bằng lái</label>
             <div className="form-input">
               <select
                 value={form.driver_license_class}
@@ -316,7 +316,7 @@ const DriverLicenseSection = ({ userId, profile, onSaved }) => {
           {['front', 'back'].map((side) => {
             const field = `driver_license_${side}_image`;
             const uploading = side === 'front' ? uploadingFront : uploadingBack;
-            const label = side === 'front' ? 'Mat truoc GPLX *' : 'Mat sau GPLX *';
+            const label = side === 'front' ? 'Ảnh đối chiếu mặt trước Giấy phép lái xe *' : 'Ảnh đối chiếu mặt sau Giấy phép lái xe *';
             return (
               <div key={side}>
                 <label className="form-label">{label}</label>
@@ -342,7 +342,7 @@ const DriverLicenseSection = ({ userId, profile, onSaved }) => {
                   ) : (
                     <>
                       <FaUpload style={{ color: '#00b14f', fontSize: '1.2rem' }} />
-                      <span style={{ fontSize: '0.78rem', color: '#6b7280' }}>Chon anh</span>
+                      <span style={{ fontSize: '0.78rem', color: '#6b7280' }}>Chọn ảnh</span>
                     </>
                   )}
                   <input

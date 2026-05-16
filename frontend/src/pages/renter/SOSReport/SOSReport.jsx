@@ -14,18 +14,18 @@ import { useAuth } from '../../../contexts/AuthContext';
 import contactService from '../../../services/contactService';
 
 const INCIDENT_TYPES = [
-  { id: 'accident', label: 'Tai nan giao thong', icon: <FaCar aria-hidden="true" />, color: '#dc2626' },
-  { id: 'breakdown', label: 'Xe hong/chet may', icon: <FaCar aria-hidden="true" />, color: '#d97706' },
-  { id: 'flat', label: 'Xit lop/thung xe', icon: <FaCar aria-hidden="true" />, color: '#d97706' },
-  { id: 'lock', label: 'Khoa cua xe/mat chia', icon: <FaCar aria-hidden="true" />, color: '#7c3aed' },
-  { id: 'other', label: 'Su co khac', icon: <FaExclamationTriangle aria-hidden="true" />, color: '#6b7280' },
+  { id: 'accident', label: 'Tai nạn giao thông', icon: <FaCar aria-hidden="true" />, color: '#dc2626' },
+  { id: 'breakdown', label: 'Xe hỏng/chết máy', icon: <FaCar aria-hidden="true" />, color: '#d97706' },
+  { id: 'flat', label: 'Lốp/thùng xe', icon: <FaCar aria-hidden="true" />, color: '#d97706' },
+  { id: 'lock', label: 'Khoá cửa xe/mặt chia', icon: <FaCar aria-hidden="true" />, color: '#7c3aed' },
+  { id: 'other', label: 'Sự cố khác', icon: <FaExclamationTriangle aria-hidden="true" />, color: '#6b7280' },
 ];
 
 const HOTLINES = [
-  { label: 'SmartRent Ho tro', number: '1900 1234', icon: <FaPhone aria-hidden="true" />, color: '#87ceeb', desc: '24/7 - Mien phi' },
-  { label: 'Cap cuu', number: '115', icon: <FaAmbulance aria-hidden="true" />, color: '#dc2626', desc: 'Khan cap y te' },
-  { label: 'Canh sat', number: '113', icon: <MdLocalPolice aria-hidden="true" />, color: '#2563eb', desc: 'Tai nan, su co' },
-  { label: 'Cuu hoa', number: '114', icon: <MdFireTruck aria-hidden="true" />, color: '#d97706', desc: 'Chay no' },
+  { label: 'SmartRent Hỗ trợ', number: '1900 1234', icon: <FaPhone aria-hidden="true" />, color: '#87ceeb', desc: '24/7 - Miễn phí' },
+  { label: 'Cứu cáo', number: '115', icon: <FaAmbulance aria-hidden="true" />, color: '#dc2626', desc: 'Khẩn cấp y tế' },
+  { label: 'Canh sát', number: '113', icon: <MdLocalPolice aria-hidden="true" />, color: '#2563eb', desc: 'Tai nan, su co' },
+  { label: 'Cứu hỏa', number: '114', icon: <MdFireTruck aria-hidden="true" />, color: '#d97706', desc: 'Chay no' },
 ];
 
 const textStyle = {
@@ -83,7 +83,7 @@ const SOSReport = () => {
     const email = user?.email || '';
 
     if (!email) {
-      setSubmitError('Tai khoan chua co email hop le de gui yeu cau ho tro.');
+      setSubmitError('Tài khoản chưa có email hợp lệ để gửi yêu cầu hỗ trợ.');
       return;
     }
 
@@ -91,7 +91,7 @@ const SOSReport = () => {
     setSubmitError('');
 
     try {
-      const locationText = locationInfo?.address || (locationShared ? 'Da chia se vi tri' : 'Chua chia se vi tri');
+      const locationText = locationInfo?.address || (locationShared ? 'Đã chia sẻ vị trí' : 'Chưa chia sẻ vị trí');
       const photoText = sceneImageUrls.length > 0 ? `${sceneImageUrls.length} anh` : 'chua co anh';
       const body = trimBody(`${selectedIncident?.label || incidentType}. ${locationText}. ${photoText}. ${description || 'Can ho tro gap.'}`);
 
@@ -104,7 +104,7 @@ const SOSReport = () => {
 
       setSubmitted(true);
     } catch (error) {
-      setSubmitError(error.message || 'Khong the gui bao cao su co. Vui long thu lai.');
+      setSubmitError(error.message || 'Không thể gửi báo cáo sự cố. Vui lòng thử lại.');
     } finally {
       setSubmitting(false);
     }
@@ -115,8 +115,8 @@ const SOSReport = () => {
       <div className="sos-page" aria-live="polite">
         <div className="sos-success">
           <div className="sos-success-icon"><FaCheckCircle aria-hidden="true" /></div>
-          <h2>Bao cao da duoc gui</h2>
-          <p>Doi ho tro SmartRent da nhan duoc bao cao cua ban va se lien he trong vong <b>5 phut</b>.</p>
+          <h2>Báo cáo đã được gửi</h2>
+          <p>Đội hỗ trợ SmartRent đã nhận được báo cáo của bạn và sẽ liên hệ trong vòng <b>5 phút</b>.</p>
           <div style={{ background: '#f9fafb', borderRadius: 12, padding: 16, width: '100%', marginBottom: 20 }}>
             {[
               ['Ma bao cao', `SOS${Date.now().toString().slice(-6)}`],
@@ -149,8 +149,8 @@ const SOSReport = () => {
       <div className="sos-header">
         <div className="sos-header-icon"><FaExclamationTriangle aria-hidden="true" /></div>
         <div>
-          <h1 className="sos-title">Bao cao su co khan cap</h1>
-          <p className="sos-sub">Hotline ho tro 24/7: <a href="tel:19001234" className="sos-phone">1900 1234</a></p>
+          <h1 className="sos-title">Báo cáo sự cố khẩn cấp</h1>
+          <p className="sos-sub">Hotline hỗ trợ 24/7: <a href="tel:19001234" className="sos-phone">1900 1234</a></p>
         </div>
       </div>
 
@@ -166,10 +166,10 @@ const SOSReport = () => {
       </div>
 
       <div className="sos-form-card">
-        <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#111827', marginBottom: 16 }}>Gui bao cao su co</h3>
+        <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#111827', marginBottom: 16 }}>Gửi báo cáo sự cố</h3>
 
         <div style={{ marginBottom: 16 }}>
-          <label className="form-label" id="incident-type-label">Loai su co *</label>
+          <label className="form-label" id="incident-type-label">Loại sự cố *</label>
           <div
             role="radiogroup"
             aria-labelledby="incident-type-label"
@@ -205,32 +205,32 @@ const SOSReport = () => {
         </div>
 
         <div style={{ marginBottom: 16 }}>
-          <label className="form-label" htmlFor="sos-description">Mo ta su co</label>
+          <label className="form-label" htmlFor="sos-description">Mô tả sự cố</label>
           <textarea
             id="sos-description"
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             rows={4}
-            placeholder="Mo ta ngan gon tinh huong, vi tri, tinh trang xe..."
+            placeholder="Mô tả ngắn gọn tình hướng, vị trí, tình trạng xe..."
             className="focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             style={{ width: '100%', border: '1.5px solid #e5e7eb', borderRadius: 9, padding: '10px 12px', fontSize: '0.85rem', resize: 'vertical', boxSizing: 'border-box' }}
           />
         </div>
 
         <div style={{ marginBottom: 16 }}>
-          <label className="form-label">Chia se vi tri</label>
+          <label className="form-label">Chia sẻ vị trí</label>
           {!locationShared ? (
             <button
               type="button"
               onClick={shareLocation}
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: 10, color: '#2563eb', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}
             >
-              <FaMapMarkerAlt aria-hidden="true" /> Chia se vi tri hien tai
+              <FaMapMarkerAlt aria-hidden="true" /> Chia sẻ vị trí hiện tại
             </button>
           ) : (
             <div style={{ display: 'grid', gap: 6, padding: '10px 16px', background: '#f0f9ff', border: '1.5px solid #bae6fd', borderRadius: 10, color: '#0284c7', fontSize: '0.85rem', fontWeight: 600 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <FaCheckCircle aria-hidden="true" /> Da chia se vi tri
+                <FaCheckCircle aria-hidden="true" /> Đã chia sẻ vị trí
               </div>
               {locationInfo?.address && (
                 <div style={{ color: '#475569', fontWeight: 500, lineHeight: 1.45 }}>
@@ -243,10 +243,10 @@ const SOSReport = () => {
 
         <div style={{ marginBottom: 20 }}>
           <FileUpload
-            label="Anh hien truong"
+            label="Ảnh hiện trường"
             multiple
             maxFiles={5}
-            hint="Chup anh xe, vet va cham, bien bao khu vuc"
+            hint="Chụp ảnh xe, vụ va chạm, biển báo khu vực"
             onUpload={setSceneImageUrls}
           />
         </div>
@@ -260,7 +260,7 @@ const SOSReport = () => {
           style={{ width: '100%', padding: '13px 0', background: incidentType && !submitting ? '#dc2626' : '#e5e7eb', color: incidentType && !submitting ? '#fff' : '#9ca3af', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: '0.95rem', cursor: incidentType && !submitting ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
         >
           {submitting ? <FaSpinner aria-hidden="true" className="animate-spin" /> : <FaExclamationTriangle aria-hidden="true" />}
-          {submitting ? 'Dang gui bao cao...' : 'Gui bao cao su co'}
+          {submitting ? 'Đang gửi báo cáo...' : 'Gửi báo cáo sự cố'}
         </button>
       </div>
     </div>

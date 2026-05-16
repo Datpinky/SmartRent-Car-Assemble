@@ -104,7 +104,7 @@ const RetryPayment = () => {
         setBrokenClientSecret(secret);
         setClientSecret('');
         setNeedsNewSession(true);
-        setError('Phien thanh toan cu da bi huy tren Stripe. Vui long tao lai phien thanh toan moi.');
+        setError('  Phiên thanh toán cũ đã bị hủy trên Stripe. Vui lòng tạo lại phiên thanh toán mới.');
         return true;
       }
 

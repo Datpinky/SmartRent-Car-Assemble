@@ -25,7 +25,7 @@ const DriverLicenseRequiredModal = ({ status, rejectReason, onClose, onGoProfile
         </div>
       </div>
       <p style={{ textAlign: 'center', fontWeight: 700, fontSize: '1.05rem', color: '#111827', marginBottom: 8 }}>
-        {isPending ? 'GPLX đang chờ xác minh' : isRejected ? 'GPLX bị từ chối' : 'Chưa có Giấy phép lái xe'}
+        {isPending ? 'Giấy phép lái xe đang chờ xác minh' : isRejected ? 'Giấy phép lái xe bị từ chối' : 'Chưa có Giấy phép lái xe'}
       </p>
       <p
         style={{
