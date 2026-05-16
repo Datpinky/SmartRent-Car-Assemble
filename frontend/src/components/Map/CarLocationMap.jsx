@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo } from 'react';
-import { MapContainer, Marker, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { useEffect, useMemo } from 'react';
+import { MapContainer, Marker, TileLayer, useMap } from 'react-leaflet';
 import './CarLocationMap.css';
 
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
@@ -36,21 +36,25 @@ const FlyTo = ({ latlng }) => {
 };
 
 const CarLocationMap = ({
+  // support multiple prop names used across the app: lat/lng/locationText OR latitude/longitude/address
   locationText,
   lat,
   lng,
+  latitude,
+  longitude,
+  address,
   plusCode = '',
   city = '',
   showOpenMapLink = true,
   openMapLabel = 'Mở trong Maps',
   mapHeight = 280,
 }) => {
-  const numericLat = Number(lat);
-  const numericLng = Number(lng);
+  const numericLat = Number(lat ?? latitude);
+  const numericLng = Number(lng ?? longitude);
   const hasCoordinates = Number.isFinite(numericLat) && Number.isFinite(numericLng);
-  const address = useMemo(() => {
-    if (locationText?.trim()) {
-      return locationText.trim();
+  const displayAddress = useMemo(() => {
+    if ((locationText ?? address)?.trim()) {
+      return (locationText ?? address).trim();
     }
 
     if (plusCode?.trim()) {
@@ -58,9 +62,9 @@ const CarLocationMap = ({
     }
 
     return city?.trim() || '';
-  }, [city, locationText, plusCode]);
+  }, [city, locationText, plusCode, address]);
 
-  if (!hasCoordinates || !address) {
+  if (!hasCoordinates || !displayAddress) {
     return null;
   }
 
@@ -71,7 +75,7 @@ const CarLocationMap = ({
     <div className="clm-root">
       <div className="clm-address-bar">
         <span className="clm-address-icon">Pin</span>
-        <span className="clm-address-text">{address}</span>
+        <span className="clm-address-text">{displayAddress}</span>
         {showOpenMapLink && (
           <a href={googleMapsUrl} target="_blank" rel="noreferrer" className="clm-open-maps-btn">
             {openMapLabel}

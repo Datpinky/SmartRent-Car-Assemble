@@ -14,35 +14,6 @@ function resolveId(value) {
   return value._id || value.id || '';
 }
 
-function flattenPositionDifferences(positions = []) {
-  return positions.flatMap((position, index) => {
-    const label = position?.position || `Vi tri ${index + 1}`;
-    const differences = Array.isArray(position?.differences) ? position.differences : [];
-
-    if (differences.length > 0) {
-      return differences.map((difference) => ({
-        ...difference,
-        area: difference?.area ? `${label} - ${difference.area}` : label,
-        description:
-          difference?.description || position?.notes || `AI ghi nhan thay doi o ${label.toLowerCase()}.`,
-        likely_new_damage: difference?.likely_new_damage ?? position?.damage_detected ?? false,
-      }));
-    }
-
-    if (!position?.damage_detected && !position?.notes) {
-      return [];
-    }
-
-    return [
-      {
-        area: label,
-        description: position?.notes || 'AI ghi nhan thay doi o vi tri nay.',
-        likely_new_damage: position?.damage_detected ?? false,
-      },
-    ];
-  });
-}
-
 function normalizeInspectionAiResult(inspection) {
   const payload = inspection?.ai_payload;
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
@@ -50,15 +21,23 @@ function normalizeInspectionAiResult(inspection) {
   }
 
   const directDifferences = Array.isArray(payload.differences) ? payload.differences : [];
-  const positionSource = Array.isArray(payload.positions)
-    ? payload.positions
-    : Array.isArray(inspection?.position_results)
-      ? inspection.position_results
+  const observations = Array.isArray(payload.observations)
+    ? payload.observations
+    : Array.isArray(inspection?.observations)
+      ? inspection.observations
       : [];
 
   return {
     ...payload,
-    differences: directDifferences.length > 0 ? directDifferences : flattenPositionDifferences(positionSource),
+    observations,
+    differences:
+      directDifferences.length > 0
+        ? directDifferences
+        : observations.map((obs) => ({
+            area: obs.area || 'Khu vuc chua xac dinh',
+            description: obs.description || obs.evidence || '',
+            likely_new_damage: !!obs.likely_new_damage,
+          })),
   };
 }
 
@@ -67,15 +46,19 @@ export function mapInspectionToAiInspection(inspection) {
     return null;
   }
 
-  const positions = Array.isArray(inspection.positions) ? inspection.positions : [];
   const result = normalizeInspectionAiResult(inspection);
-  const returnImageUrls = positions.map((position) => position?.after_url).filter(Boolean);
-  const hasBeforeImage = positions.some((position) => Boolean(position?.before_url));
+  const pickupImages = Array.isArray(inspection.pickup_images) ? inspection.pickup_images.filter(Boolean) : [];
+  const returnImageUrls = [
+    ...(Array.isArray(inspection.return_images) ? inspection.return_images : []),
+    ...(Array.isArray(inspection.gallery_images) ? inspection.gallery_images : []),
+  ].filter(Boolean);
+  const hasBeforeImage = pickupImages.length > 0;
 
   return {
     status: result ? 'ready' : hasBeforeImage && returnImageUrls.length > 0 ? 'pending' : 'none',
     analyzed_at: result ? inspection.updatedAt || inspection.createdAt || null : null,
-    pickup_image_url: positions.find((position) => position?.before_url)?.before_url || '',
+    pickup_image_url: pickupImages[0] || '',
+    pickup_image_urls: pickupImages,
     return_image_urls: returnImageUrls,
     result,
     inspection_id: resolveId(inspection),
@@ -146,7 +129,8 @@ const inspectionService = {
       inspection_type: payload?.inspection_type,
       booking_id: payload?.booking_id,
       inspected_by_role: payload?.inspected_by_role,
-      positionsCount: payload?.positions?.length,
+      pickupImagesCount: payload?.pickup_images?.length,
+      returnImagesCount: payload?.return_images?.length,
       payload,
     });
     try {

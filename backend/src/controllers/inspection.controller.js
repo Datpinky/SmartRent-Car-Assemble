@@ -12,12 +12,18 @@ class InspectionController {
         vehicle_name,
         vehicle_plate,
         booking_code,
-        positions,
+        pickup_images,
+        return_images,
+        gallery_images,
+        gallery_analyzed,
         ai_payload,
         damage_detected,
         severity,
-        positions_analyzed,
-        position_results,
+        observations,
+        summary,
+        conclusion,
+        disclaimer,
+        comparison_mode,
       } = req.body;
 
       const user_id = req.user.userId;
@@ -44,12 +50,18 @@ class InspectionController {
         vehicle_name: vehicle_name || '',
         vehicle_plate: vehicle_plate || '',
         booking_code: booking_code || '',
-        positions: Array.isArray(positions) ? positions : [],
-        positions_analyzed: Number(positions_analyzed) || 0,
+        pickup_images: Array.isArray(pickup_images) ? pickup_images.slice(0, 6) : [],
+        return_images: Array.isArray(return_images) ? return_images.slice(0, 6) : [],
+        gallery_images: Array.isArray(gallery_images) ? gallery_images.slice(0, 6) : [],
+        gallery_analyzed: Number(gallery_analyzed) || 0,
         ai_payload: ai_payload || {},
         damage_detected: !!damage_detected,
         severity: severity || 'none',
-        position_results: Array.isArray(position_results) ? position_results : [],
+        observations: Array.isArray(observations) ? observations : [],
+        summary: summary || ai_payload?.summary || '',
+        conclusion: conclusion || ai_payload?.conclusion || '',
+        disclaimer: disclaimer || ai_payload?.disclaimer || '',
+        comparison_mode: comparison_mode || 'gallery',
       });
 
       return res.status(201).json({ message: 'Lưu báo cáo kiểm tra thành công', data: doc });

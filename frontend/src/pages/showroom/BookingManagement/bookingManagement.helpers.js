@@ -49,7 +49,6 @@ export const FILTER_TABS = [
   { key: 'cancelled', label: 'Đã hủy', statuses: ['cancelled'] },
 ];
 
-export const HANDOVER_POSITIONS = ['Trước', 'Sau', 'Trái', 'Phải', 'Mui', 'Gầm'];
 
 export const fmtDate = (value) =>
   value

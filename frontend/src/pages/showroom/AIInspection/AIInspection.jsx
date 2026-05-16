@@ -6,11 +6,17 @@ import inspectionService from '../../../services/inspectionService';
 import uploadService from '../../../services/uploadService';
 import vehicleService from '../../../services/vehicleService';
 import { getRentalWorkflow } from '../../../utils/rentalWorkflowStorage';
-import { POSITIONS, bookingCodeShort, makeInitialPosFiles } from './aiInspection.helpers';
+import { bookingCodeShort } from './aiInspection.helpers';
 import AnalysisResult from './components/AnalysisResult';
 import ImageUploadStep from './components/ImageUploadStep';
 import InspectionHistory from './components/InspectionHistory';
 import VehicleSelector from './components/VehicleSelector';
+
+const resolveId = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  return value._id || value.id || '';
+};
 
 const AIInspection = () => {
   const { user } = useAuth();
@@ -28,9 +34,7 @@ const AIInspection = () => {
   const [loadingBookings, setLoadingBookings] = useState(false);
   const [selectedBookingId, setSelectedBookingId] = useState('');
   const [pickupImagesUrls, setPickupImagesUrls] = useState([]);
-
-  // Image files per position
-  const [posFiles, setPosFiles] = useState(makeInitialPosFiles);
+  const [returnImagesUrls, setReturnImagesUrls] = useState([]);
 
   // Analysis state
   const [analyzing, setAnalyzing] = useState(false);
@@ -43,11 +47,6 @@ const AIInspection = () => {
   const [historyRows, setHistoryRows] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [expandedRow, setExpandedRow] = useState(null);
-
-  // ── Derived values ──
-  const hasBeforeForPos = (i, key) => !!(pickupImagesUrls[i] || posFiles[key].before);
-  const validPositions = POSITIONS.filter((p, i) => hasBeforeForPos(i, p.key) && posFiles[p.key].after);
-  const readyToAnalyze = validPositions.length >= 1;
 
   // ── Data fetching ──
   const fetchVehicles = useCallback(async () => {
@@ -65,7 +64,7 @@ const AIInspection = () => {
         fetchedVehicles = Array.isArray(data) ? data : [];
       } else if (isRenter) {
         // Get unique vehicles from renter's bookings in return phase
-        const bookings = await bookingService.getCurrentRoleBookings();
+        const bookings = await bookingService.getCurrentRoleBookingsDetailed();
         const returnPhaseBookings = (bookings || []).filter((b) =>
           ['in_use', 'waiting_return_confirmation', 'completed'].includes(b.status),
         );
@@ -73,7 +72,7 @@ const AIInspection = () => {
           .filter(
             (b, i, arr) =>
               arr.findIndex(
-                (x) => String(x.vehicle_id?._id || x.vehicle_id) === String(b.vehicle_id?._id || b.vehicle_id),
+                (x) => resolveId(x.vehicle_id) === resolveId(b.vehicle_id),
               ) === i,
           )
           .map((b) => b.vehicle_id)
@@ -96,13 +95,13 @@ const AIInspection = () => {
       setLoadingBookings(true);
       setBookings([]);
       try {
-        const all = await bookingService.getCurrentRoleBookings();
+        const all = await bookingService.getCurrentRoleBookingsDetailed();
         // Filter by vehicle AND by inspection phase
         const allowedStatuses = isRenter
           ? ['in_use', 'waiting_return_confirmation', 'completed'] // Return phase for renter
           : ['waiting_handover', 'handed_over', 'in_use', 'completed']; // Pickup + completed (for trace back) for showroom
         const filtered = (all || []).filter(
-          (b) => String(b.vehicle_id?._id || b.vehicle_id) === String(vehicleId) && allowedStatuses.includes(b.status),
+          (b) => resolveId(b.vehicle_id) === String(vehicleId) && allowedStatuses.includes(b.status),
         );
         setBookings(filtered);
       } catch {
@@ -130,217 +129,61 @@ const AIInspection = () => {
     if (tab === 'history') fetchHistory();
   }, [tab, fetchHistory]);
 
-  // ── Callbacks ──
-  const setPosFile = (key, type, file) => setPosFiles((prev) => ({ ...prev, [key]: { ...prev[key], [type]: file } }));
+  // ?? Callbacks ??
+  const normalizeUrlList = (value) =>
+    (Array.isArray(value) ? value : [])
+      .map((url) => (typeof url === 'string' ? url.trim() : ''))
+      .filter(Boolean)
+      .slice(0, 6);
 
   const handleSelectVehicle = (v) => {
     setSelectedVehicle(v);
     setSelectedBookingId('');
     setPickupImagesUrls([]);
-    setPosFiles(makeInitialPosFiles());
+    setReturnImagesUrls([]);
     fetchBookingsForVehicle(String(v._id || v.id));
   };
 
   const handleSelectBooking = async (bookingId) => {
     setSelectedBookingId(bookingId);
     setPickupImagesUrls([]);
-    setPosFiles(makeInitialPosFiles());
+    setReturnImagesUrls([]);
     if (!bookingId) return;
+
     try {
-      console.log('🚀 handleSelectBooking START:', {
-        bookingId,
-        userRole: user?.role,
-        isRenter,
-        isShowroom,
-      });
-
-      // Start with showroom's pickup_images from booking
       const booking = await bookingService.getBookingById(bookingId);
+      const pickupImages = normalizeUrlList(booking?.pickup_images);
+      let returnImages = [];
 
-      console.log('📋 BOOKING DATA FULL:', booking);
-      console.log('📋 Selected booking:', {
-        bookingId,
-        hasPickupImages: !!booking?.pickup_images,
-        pickupImagesLength: booking?.pickup_images?.length || 0,
-        count: booking?.pickup_images?.filter(Boolean).length || 0,
-      });
-
-      let mergedImages = [];
-
-      // ✅ PRIORITY 1: Load từ booking.pickup_images (từ handoff)
-      if (Array.isArray(booking?.pickup_images) && booking.pickup_images.length > 0) {
-        const validUrls = booking.pickup_images.filter((url) => url && typeof url === 'string' && url.trim());
-        console.log('✅ Loaded', validUrls.length, 'valid images from booking.pickup_images');
-        console.log('✅ URLs:', validUrls);
-        mergedImages = validUrls;
-      } else {
-        console.log('⚠️ No pickup_images in booking');
-      }
-
-      // ✅ PRIORITY 1.5: Load từ localStorage (renter's checklist images) nếu là renter
-      let checklistImages = [];
-      if (isRenter) {
-        try {
-          const workflow = getRentalWorkflow(bookingId);
-          checklistImages = workflow?.returnImages ? Object.values(workflow.returnImages).flat() : [];
-          console.log('📝 Renter checklist images from localStorage:', {
-            total: checklistImages.length,
-            data: checklistImages,
-            workflow,
-          });
-        } catch (err) {
-          console.warn('Failed to load renter checklist images:', err);
-        }
-      }
-
-      // Get vehicle ID for additional lookup
-      const vehicleId = booking?.vehicle_id?._id || booking?.vehicle_id;
-
-      // Load inspection records for this booking
-      let inspections = [];
       try {
-        const bookingResponse = await inspectionService.list({
+        const workflow = getRentalWorkflow(bookingId);
+        returnImages = normalizeUrlList(workflow?.returnImages);
+      } catch (err) {
+        console.warn('Failed to load return images from localStorage:', err);
+      }
+
+      try {
+        const { items } = await inspectionService.list({
           booking_id: bookingId,
-          limit: 100,
+          inspection_type: 'return',
+          limit: 20,
         });
-        console.log('🔍 Inspections by booking_id:', bookingResponse?.items?.length || 0);
-        if (bookingResponse?.items && Array.isArray(bookingResponse.items)) {
-          inspections = bookingResponse.items;
+        const latestWithReturnImages = (items || []).find(
+          (inspection) => Array.isArray(inspection.return_images) && inspection.return_images.length > 0,
+        );
+        if (latestWithReturnImages) {
+          returnImages = normalizeUrlList(latestWithReturnImages.return_images);
         }
       } catch (err) {
-        console.warn('Failed to load inspections by booking_id:', err);
+        console.warn('Failed to load return inspection gallery:', err);
       }
 
-      // If no inspections found by booking, try loading by vehicle + filter manually
-      if (inspections.length === 0 && vehicleId) {
-        try {
-          const vehicleResponse = await inspectionService.list({
-            vehicle_id: vehicleId,
-            limit: 100,
-          });
-          console.log('🔍 Inspections by vehicle_id:', vehicleResponse?.items?.length || 0);
-          if (vehicleResponse?.items && Array.isArray(vehicleResponse.items)) {
-            // Filter to only this booking
-            const filtered = vehicleResponse.items.filter((i) => {
-              const iBookingId = String(i.booking_id?._id || i.booking_id || '');
-              const match = iBookingId === String(bookingId);
-              return match;
-            });
-            console.log('🔍 Filtered by booking:', filtered.length);
-            inspections = filtered;
-          }
-        } catch (err) {
-          console.warn('Failed to load inspections by vehicle_id:', err);
-        }
-      }
-
-      // ✅ PRIORITY 2: Fill lỗ từ inspection records
-      if (Array.isArray(inspections) && inspections.length > 0) {
-        console.log('📸 Processing', inspections.length, 'inspections for filling gaps');
-        inspections.forEach((inspection, idx) => {
-          if (!Array.isArray(inspection.positions)) {
-            console.warn(`Inspection ${idx} has no positions array`);
-            return;
-          }
-
-          inspection.positions.forEach((pos) => {
-            // Find the position index
-            const posIdx = POSITIONS.findIndex((p) => p.key === pos.position_key || p.label === pos.position_label);
-            if (posIdx < 0) {
-              console.warn(`Position not found: key=${pos.position_key}, label=${pos.position_label}`);
-              return;
-            }
-
-            if (isShowroom) {
-              // 📌 SHOWROOM viewing:
-              // - Load showroom's BEFORE images (pickup inspection)
-              // - Load renter's AFTER images (return inspection) into posFiles for display
-              if (inspection.inspected_by_role === 'renter' && inspection.inspection_type === 'return') {
-                // Renter's return inspection - load AFTER images
-                if (pos.after_url) {
-                  console.log(`✅ Showroom sees renter's after_url for pos ${posIdx} (${pos.position_key})`);
-                  setPosFile(pos.position_key, 'after', pos.after_url); // ← Store for display
-                }
-              } else if (inspection.inspection_type === 'pickup') {
-                // Showroom's pickup inspection - load BEFORE images
-                if (pos.before_url && !mergedImages[posIdx]) {
-                  console.log(`✅ Filled pos ${posIdx} with showroom's before_url`);
-                  mergedImages[posIdx] = pos.before_url;
-                }
-              }
-            } else {
-              // 📌 RENTER viewing:
-              // - Load showroom's BEFORE images (pickup inspection) AND booking.pickup_images
-              // - Load renter's AFTER images (return inspection) AND checklist images
-              if (inspection.inspection_type === 'pickup') {
-                // Showroom's pickup images - load BEFORE
-                if (pos.before_url && !mergedImages[posIdx]) {
-                  console.log(`✅ Renter sees showroom's before_url for pos ${posIdx}`);
-                  mergedImages[posIdx] = pos.before_url;
-                }
-              } else if (inspection.inspected_by_role === 'renter' && inspection.inspection_type === 'return') {
-                // Renter's own return images - load AFTER (from inspection record)
-                if (pos.after_url && !mergedImages[posIdx]) {
-                  console.log(`✅ Renter sees their own after_url (from inspection) for pos ${posIdx}`);
-                  mergedImages[posIdx] = pos.after_url;
-                }
-              }
-            }
-          });
-        });
-      }
-
-      // ✅ PRIORITY 3: Fill gaps từ renter's checklist images (localStorage)
-      if (isRenter && checklistImages.length > 0) {
-        console.log('🔄 Filling gaps from renter checklist images...');
-        checklistImages.forEach((checklistImg, idx) => {
-          if (idx < mergedImages.length && !mergedImages[idx] && checklistImg) {
-            console.log(`✅ Filled pos ${idx} from checklist`);
-            mergedImages[idx] = checklistImg;
-          }
-        });
-        console.log('📝 After filling checklist:', {
-          total: mergedImages.length,
-          filled: mergedImages.filter(Boolean).length,
-        });
-      }
-
-      console.log('✨ Final merged images:', {
-        totalSlots: mergedImages.length,
-        filledCount: mergedImages.filter(Boolean).length,
-        urls: mergedImages,
-      });
-
-      // Đảm bảo array chứa đúng các URLs ở vị trí chính xác
-      const finalImages = [];
-      for (let i = 0; i < POSITIONS.length; i++) {
-        finalImages[i] = mergedImages[i] || undefined;
-      }
-
-      console.log('✨ Final images state:', {
-        length: finalImages.length,
-        filled: finalImages.filter(Boolean).length,
-        images: finalImages,
-      });
-
-      setPickupImagesUrls(finalImages);
-
-      console.log('✅ handleSelectBooking COMPLETE:', {
-        bookingId,
-        userRole: user?.role,
-        totalImages: finalImages.length,
-        filledSlots: finalImages.filter(Boolean).length,
-        sourceBreakdown: isRenter
-          ? {
-              fromBookingPickupImages: mergedImages.filter(Boolean).length,
-              fromChecklistImages: checklistImages.length,
-              fromInspectionRecords: inspections.length,
-            }
-          : 'showroom',
-      });
+      setPickupImagesUrls(pickupImages);
+      setReturnImagesUrls(returnImages);
     } catch (err) {
       console.error('Failed to load booking details:', err);
       setPickupImagesUrls([]);
+      setReturnImagesUrls([]);
     }
   };
 
@@ -351,148 +194,128 @@ const AIInspection = () => {
     setSelectedBookingId('');
     setBookings([]);
     setPickupImagesUrls([]);
-    setPosFiles(makeInitialPosFiles());
+    setReturnImagesUrls([]);
     setAnalysisResult(null);
     setAnalysisError('');
     setSaveNote('');
   };
 
-  const handleAnalyze = async () => {
-    if (!readyToAnalyze) {
-      const errorMsg = isShowroom
-        ? 'Cần ít nhất một vị trí có ảnh TRƯỚC để bàn giao.'
-        : 'Cần ít nhất một vị trí có đủ cả ảnh TRƯỚC và ảnh SAU.';
-      void errorMsg;
-      setAnalysisError(
-        isShowroom
-          ? 'Can it nhat mot vi tri co du anh TRUOC va anh SAU do renter upload de phan tich.'
-          : 'Can it nhat mot vi tri co du ca anh TRUOC va anh SAU.',
-      );
+  const handleAnalyze = async (galleryImages) => {
+    if (!Array.isArray(galleryImages) || galleryImages.length === 0) {
+      setAnalysisError('Can it nhat mot anh tra xe de phan tich.');
       return;
     }
     if (!selectedVehicle) {
-      setAnalysisError('Vui lòng chọn xe ở bước 1.');
+      setAnalysisError('Vui long chon xe o buoc 1.');
       return;
     }
+
     setAnalyzing(true);
     setAnalysisError('');
     setSaveNote('');
-    try {
-      const positionsInput = await Promise.all(
-        validPositions.map(async (p) => {
-          const posIdx = POSITIONS.findIndex((pp) => pp.key === p.key);
-          let beforeFile = posFiles[p.key].before;
-          let afterFile = posFiles[p.key].after;
-          const afterUrl = typeof afterFile === 'string' ? afterFile : '';
-          const pickupUrl = pickupImagesUrls[posIdx];
-          if (!beforeFile && pickupUrl) {
-            try {
-              const resp = await fetch(pickupUrl);
-              const blob = await resp.blob();
-              beforeFile = new File([blob], `pickup_${p.key}.jpg`, { type: blob.type || 'image/jpeg' });
-            } catch {
-              /* keep null */
-            }
-          }
-          if (afterUrl) {
-            try {
-              const resp = await fetch(afterUrl);
-              const blob = await resp.blob();
-              afterFile = new File([blob], `return_${p.key}.jpg`, { type: blob.type || 'image/jpeg' });
-            } catch {
-              afterFile = null;
-            }
-          }
-          return { key: p.key, label: p.label, beforeFile, afterFile, afterUrl };
-        }),
-      );
 
-      const analyzablePositions = positionsInput.filter((position) => position.beforeFile && position.afterFile);
-      if (analyzablePositions.length === 0) {
-        throw new Error('Can it nhat mot cap anh TRUOC + SAU hop le de phan tich.');
+    try {
+      const toAnalysisImage = async (img, idx, prefix) => {
+        if (img.type === 'file' && img.data instanceof File) return img;
+        if (img.type === 'url' && typeof img.data === 'string') {
+          try {
+            const resp = await fetch(img.data);
+            const blob = await resp.blob();
+            return { type: 'file', data: new File([blob], `${prefix}_${idx}.jpg`, { type: blob.type || 'image/jpeg' }) };
+          } catch {
+            return null;
+          }
+        }
+        return null;
+      };
+
+      const rawAfterImages = galleryImages.slice(0, 6);
+      const afterImages = (await Promise.all(rawAfterImages.map((img, idx) => toAnalysisImage(img, idx, 'after')))).filter(Boolean);
+      const beforeImages = (
+        await Promise.all(
+          pickupImagesUrls
+            .filter(Boolean)
+            .slice(0, 6)
+            .map((url, idx) => toAnalysisImage({ type: 'url', data: url }, idx, 'before')),
+        )
+      ).filter(Boolean);
+      if (afterImages.length === 0) {
+        throw new Error('Khong co anh hop le de phan tich.');
       }
 
-      const data = await uploadService.compareMultiPosition(analyzablePositions);
+      const data =
+        beforeImages.length > 0
+          ? await uploadService.compareBeforeAfterGallery(beforeImages, afterImages)
+          : await uploadService.compareGalleryImages(afterImages);
       setAnalysisResult(data);
 
-      // Upload files and record positions
-      const positionsRecord = [];
-      try {
-        const filesToUpload = [];
-        const uploadMap = [];
-        analyzablePositions.forEach((p) => {
-          const posIdx = POSITIONS.findIndex((pp) => pp.key === p.key);
-          const hasPU = !!pickupImagesUrls[posIdx];
-          if (!hasPU && p.beforeFile) {
-            filesToUpload.push(p.beforeFile);
-            uploadMap.push({ posKey: p.key, type: 'before' });
-          }
-          if (!p.afterUrl && p.afterFile) {
-            filesToUpload.push(p.afterFile);
-            uploadMap.push({ posKey: p.key, type: 'after' });
-          }
-        });
-        const uploadedUrls = filesToUpload.length > 0 ? await uploadService.uploadImages(filesToUpload) : [];
-        const urlByPosType = {};
-        uploadMap.forEach((entry, i) => {
-          urlByPosType[`${entry.posKey}_${entry.type}`] = uploadedUrls[i]?.url || '';
-        });
-        analyzablePositions.forEach((p) => {
-          const posIdx = POSITIONS.findIndex((pp) => pp.key === p.key);
-          const pickupUrl = pickupImagesUrls[posIdx] || '';
-          positionsRecord.push({
-            position_key: p.key,
-            position_label: p.label,
-            before_url: pickupUrl || urlByPosType[`${p.key}_before`] || '',
-            after_url: p.afterUrl || urlByPosType[`${p.key}_after`] || '',
-          });
-        });
-      } catch {
-        setSaveNote('Không tải được ảnh lên lưu trữ.');
-        analyzablePositions.forEach((p) => {
-          positionsRecord.push({ position_key: p.key, position_label: p.label, before_url: '', after_url: '' });
-        });
+      const existingAfterUrls = rawAfterImages
+        .filter((img) => img.type === 'url' && typeof img.data === 'string')
+        .map((img) => img.data);
+      const filesToUpload = rawAfterImages
+        .filter((img) => img.type === 'file' && img.data instanceof File)
+        .map((img) => img.data);
+
+      let uploadedUrls = [];
+      if (filesToUpload.length > 0) {
+        try {
+          uploadedUrls = await uploadService.uploadImages(filesToUpload);
+        } catch (err) {
+          setSaveNote('Khong tai duoc anh len luu tru.');
+        }
       }
+
+      const returnImageRecord = [
+        ...existingAfterUrls,
+        ...uploadedUrls.map((item) => item.url || item).filter(Boolean),
+      ].slice(0, 6);
 
       const vehicleName =
         selectedVehicle.vehicle_name ||
         [selectedVehicle.vehicle_brand, selectedVehicle.vehicle_model].filter(Boolean).join(' ');
-      const selectedBooking = bookings.find((b) => String(b._id || b.id) === selectedBookingId);
+      const selectedBooking = bookings.find((b) => resolveId(b) === selectedBookingId);
       const bCode = selectedBooking ? bookingCodeShort(selectedBooking._id || selectedBooking.id) : '';
 
       try {
         await inspectionService.create({
-          vehicle_id: selectedVehicle._id || selectedVehicle.id,
+          vehicle_id: resolveId(selectedVehicle),
           booking_id: selectedBookingId || undefined,
-          inspection_type: inspectionType, // 'pickup' or 'return'
+          inspection_type: inspectionType,
           inspected_by_role: isRenter ? 'renter' : 'showroom',
           inspected_by_id: user._id,
           vehicle_name: vehicleName,
-          vehicle_plate: selectedVehicle.vehicle_plate_number || '',
+          vehicle_plate: selectedVehicle.vehicle_plate_number || selectedBooking?.vehicle_plate || '',
           booking_code: bCode,
-          positions: positionsRecord,
-          positions_analyzed: analyzablePositions.length,
+          pickup_images: pickupImagesUrls.filter(Boolean).slice(0, 6),
+          return_images: returnImageRecord,
+          gallery_images: returnImageRecord,
+          gallery_analyzed: afterImages.length,
           ai_payload: data || {},
           damage_detected: !!data?.damage_detected,
           severity: data?.severity || 'none',
-          position_results: Array.isArray(data?.positions) ? data.positions : [],
+          observations: Array.isArray(data?.observations) ? data.observations : [],
+          summary: data?.summary || '',
+          conclusion: data?.conclusion || '',
+          disclaimer: data?.disclaimer || '',
+          comparison_mode: beforeImages.length > 0 ? 'gallery' : 'current_only',
         });
-        setSaveNote((s) => `${s ? s + ' ' : ''}Đã lưu báo cáo kiểm tra.`.trim());
+        setSaveNote((s) => (s ? s + ' ' : '') + 'Da luu bao cao kiem tra.');
         fetchHistory();
       } catch (saveErr) {
         setSaveNote((s) =>
-          `${s ? s + ' ' : ''}Phân tích xong nhưng không lưu được: ${saveErr.message || 'Lỗi server'}`.trim(),
+          ((s ? s + ' ' : '') + 'Phan tich xong nhung khong luu duoc: ' + (saveErr.message || 'Loi server')).trim(),
         );
       }
 
       setAnalyzed(true);
       setStep(3);
     } catch (err) {
-      setAnalysisError(err.message || 'Phân tích thất bại. Vui lòng thử lại.');
+      setAnalysisError(err.message || 'Phan tich that bai. Vui long thu lai.');
     } finally {
       setAnalyzing(false);
     }
   };
+
 
   return (
     <div className="max-w-[900px] mx-auto">
@@ -537,7 +360,7 @@ const AIInspection = () => {
           <div className="flex items-center mb-6 bg-white rounded-xl px-5 py-3.5 border border-gray-200">
             {[
               { n: 1, label: 'Chọn xe & đơn đặt xe' },
-              { n: 2, label: 'Tải ảnh (6 vị trí)' },
+              { n: 2, label: 'Tải ảnh trả xe' },
               { n: 3, label: 'Kết quả AI' },
             ].map(({ n, label }, i) => {
               const done = step > n;
@@ -588,10 +411,7 @@ const AIInspection = () => {
               selectedBookingId={selectedBookingId}
               bookings={bookings}
               pickupImagesUrls={pickupImagesUrls}
-              posFiles={posFiles}
-              onSetPosFile={setPosFile}
-              validPositions={validPositions}
-              readyToAnalyze={readyToAnalyze}
+              initialImages={returnImagesUrls}
               analyzing={analyzing}
               analysisError={analysisError}
               isShowroom={isShowroom}

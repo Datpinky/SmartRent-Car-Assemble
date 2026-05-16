@@ -1,24 +1,82 @@
-import { FaCarSide, FaCheckCircle, FaInfoCircle, FaRobot, FaSpinner } from 'react-icons/fa';
-import { POSITIONS, getVehicleName, getVehicleThumb } from '../aiInspection.helpers';
-import FileSlot from './FileSlot';
-import UrlSlot from './UrlSlot';
+import { useEffect, useRef, useState } from 'react';
+import { FaCarSide, FaCheckCircle, FaInfoCircle, FaPlus, FaRobot, FaSpinner, FaTimes } from 'react-icons/fa';
+import { getVehicleName, getVehicleThumb } from '../aiInspection.helpers';
+
+const MAX_IMAGES = 6;
 
 function ImageUploadStep({
   selectedVehicle,
   selectedBookingId,
   bookings,
-  pickupImagesUrls,
-  posFiles,
-  onSetPosFile,
-  validPositions,
-  readyToAnalyze,
-  analyzing,
-  analysisError,
-  isShowroom,
-  onBack,
-  onAnalyze,
+  pickupImagesUrls = [],
+  initialImages = [],
+  analyzing = false,
+  analysisError = '',
+  isShowroom = false,
+  onBack = () => {},
+  onAnalyze = () => {},
 }) {
   void bookings;
+  const fileInputRef = useRef(null);
+  const [images, setImages] = useState([]);
+  const [previews, setPreviews] = useState([]);
+  const prevInitialImagesRef = useRef(null);
+
+  // Load existing return images only. Pickup images stay as BEFORE evidence.
+  useEffect(() => {
+    const hasChanged =
+      !prevInitialImagesRef.current ||
+      (prevInitialImagesRef.current.length || 0) !== (initialImages?.length || 0) ||
+      (initialImages?.length > 0 && initialImages.some((url, i) => prevInitialImagesRef.current?.[i] !== url));
+
+    if (hasChanged) {
+      prevInitialImagesRef.current = initialImages ? [...initialImages] : [];
+      if (initialImages && initialImages.length > 0) {
+        setImages(initialImages.map((url) => ({ type: 'url', data: url })));
+        setPreviews([...initialImages]);
+      } else {
+        setImages([]);
+        setPreviews([]);
+      }
+    }
+  }, [initialImages]);
+
+  const handleAddImage = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (images.length + files.length > MAX_IMAGES) {
+      alert(`Chá»‰ Ä‘Æ°á»£c upload tá»‘i Ä‘a ${MAX_IMAGES} áº£nh`);
+      return;
+    }
+
+    files.forEach((file) => {
+      if (!file.type.startsWith('image/')) {
+        alert('Chá»‰ cháº¥p nháº­n file áº£nh');
+        return;
+      }
+
+      setImages((prev) => [...prev, { type: 'file', data: file }]);
+
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        setPreviews((prev) => [...prev, evt.target.result]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveImage = (index) => {
+    if (isShowroom && images[index]?.type === 'url') {
+      return;
+    }
+    setImages((prev) => prev.filter((_, i) => i !== index));
+    setPreviews((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const canAddMore = images.length < MAX_IMAGES;
 
   return (
     <div className="bg-white rounded-2xl p-5 border border-gray-200">
@@ -49,127 +107,111 @@ function ImageUploadStep({
         </div>
       </div>
 
-      {(() => {
-        const beforeCount = pickupImagesUrls.filter((url) => url && typeof url === 'string' && url.trim()).length;
-        const afterCount = POSITIONS.filter((pos) => Boolean(posFiles[pos.key]?.after)).length;
+      {pickupImagesUrls.filter(Boolean).length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl px-3.5 py-2.5 mb-4 text-sm text-blue-800 flex gap-2">
+          <FaInfoCircle className="shrink-0 mt-0.5" />
+          <span>Đã có {pickupImagesUrls.filter(Boolean).length} ảnh bàn giao để AI đối chiếu với ảnh trả xe.</span>
+        </div>
+      )}
 
-        if (isShowroom && beforeCount > 0 && afterCount === 0) {
-          return (
-            <div className="bg-amber-50 border border-amber-300 rounded-xl px-3.5 py-2.5 mb-4 text-sm text-amber-800 flex gap-2">
-              <FaInfoCircle className="shrink-0 mt-0.5" />
-              <span>
-                <strong>Da co {beforeCount} anh ban giao.</strong> Showroom chi xem anh SAU do renter upload. Khi renter
-                gui anh tra xe, he thong se hien anh SAU o cot rieng de showroom doi chieu.
-              </span>
-            </div>
-          );
-        }
-
-        if (beforeCount > 0) {
-          return (
-            <div className="bg-emerald-50 border border-emerald-300 rounded-xl px-3.5 py-2.5 mb-4 text-sm text-emerald-800 flex gap-2">
-              <FaCheckCircle className="shrink-0 mt-0.5" />
-              <span>
-                <strong>Co {beforeCount} anh ban giao tren he thong.</strong>{' '}
-                {isShowroom
-                  ? `Showroom dang xem duoc ${afterCount} anh SAU tu renter. Chi cac vi tri co du TRUOC + SAU moi duoc phan tich.`
-                  : 'Anh TRUOC da duoc tu dong dien - chi can tai anh SAU cho tung vi tri.'}
-              </span>
-            </div>
-          );
-        }
-
-        return (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-3.5 py-2.5 mb-4 text-sm text-yellow-800 flex gap-2">
-            <FaInfoCircle className="shrink-0 mt-0.5" />
-            <span>
-              Chup anh cung goc cho moi vi tri. Can <strong>it nhat 1 vi tri</strong> co
-              {isShowroom
-                ? ' du anh TRUOC cua showroom va anh SAU do renter upload de phan tich.'
-                : ' du hai anh (TRUOC + SAU) de phan tich.'}
+      {pickupImagesUrls.filter(Boolean).length > 0 && (
+        <div className="mb-5">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-semibold text-gray-700">Ảnh bàn giao của showroom</span>
+            <span className="text-xs text-blue-700 bg-blue-50 border border-blue-200 px-2 py-1 rounded-full">
+              BEFORE ({pickupImagesUrls.filter(Boolean).length}/6)
             </span>
           </div>
-        );
-      })()}
 
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3 mb-5">
-        {POSITIONS.map((pos, posIdx) => {
-          const files = posFiles[pos.key];
-          const pickupUrl = pickupImagesUrls[posIdx];
-          const showroomAfterUrl = typeof files.after === 'string' ? files.after : '';
-          const hasBefore = !!(pickupUrl || files.before);
-          const complete = hasBefore && !!files.after;
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {pickupImagesUrls.filter(Boolean).map((url, idx) => (
+              <a
+                key={`${url}-${idx}`}
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                className="block rounded-lg overflow-hidden border-2 border-blue-200 bg-blue-50 aspect-square"
+                title={`Ảnh bàn giao ${idx + 1}`}
+              >
+                <img src={url} alt={`Ảnh bàn giao ${idx + 1}`} className="w-full h-full object-cover" />
+              </a>
+            ))}
+          </div>
 
-          return (
-            <div
-              key={pos.key}
-              className={`rounded-xl p-3 border-[1.5px] ${complete ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-gray-50'}`}
+          <div className="mt-2 text-[0.75rem] text-gray-500">
+            Ảnh BEFORE của showroom chỉ để đối chiếu, không thể xóa tại màn hình này.
+          </div>
+        </div>
+      )}
+
+      {images.length === 0 ? (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-3.5 py-2.5 mb-4 text-sm text-yellow-800 flex gap-2">
+          <FaInfoCircle className="shrink-0 mt-0.5" />
+          <span>
+            Tải lên tối đa <strong>{MAX_IMAGES} ảnh</strong> của xe để phân tích bằng AI. Không cần quan tâm tới vị trí
+            ảnh.
+          </span>
+        </div>
+      ) : (
+        <div className="bg-emerald-50 border border-emerald-300 rounded-xl px-3.5 py-2.5 mb-4 text-sm text-emerald-800 flex gap-2">
+          <FaCheckCircle className="shrink-0 mt-0.5" />
+          <span>
+            Đã có <strong>{images.length} ảnh</strong>.{' '}
+            {canAddMore ? `Có thể thêm ${MAX_IMAGES - images.length} ảnh nữa.` : 'Đã đạt giới hạn!'}
+          </span>
+        </div>
+      )}
+
+      <div className="mb-5">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-semibold text-gray-700">
+            Hình ảnh ({images.length}/{MAX_IMAGES})
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {previews.map((preview, idx) => {
+            const lockedExistingImage = isShowroom && images[idx]?.type === 'url';
+            return (
+              <div
+                key={idx}
+                className={`relative rounded-lg overflow-hidden border-2 bg-gray-100 aspect-square ${
+                  lockedExistingImage ? 'border-cyan-200' : 'group border-gray-200'
+                }`}
+              >
+                <img src={preview} alt={`Preview ${idx + 1}`} className="w-full h-full object-cover" />
+                {lockedExistingImage ? (
+                  <div className="absolute left-2 top-2 rounded-full bg-cyan-100 text-cyan-700 px-2 py-1 text-[0.65rem] font-semibold">
+                    Ảnh renter
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveImage(idx)}
+                    className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                    title="Xóa ảnh"
+                  >
+                    <FaTimes className="text-white text-2xl" />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+
+          {canAddMore && (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="border-2 border-dashed border-blue-400 rounded-lg flex items-center justify-center aspect-square bg-blue-50 hover:bg-blue-100 hover:border-blue-500 transition-all cursor-pointer"
+              title={`Thêm ảnh (${MAX_IMAGES - images.length} ảnh còn lại)`}
             >
-              <div className="flex items-center justify-between mb-2.5">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-base">{pos.icon}</span>
-                  <span className="font-bold text-[0.88rem] text-gray-900">{pos.label}</span>
-                </div>
-                {complete ? (
-                  <span className="text-[0.7rem] text-green-600 font-semibold flex items-center gap-1">
-                    <FaCheckCircle /> Du 2 anh
-                  </span>
-                ) : (
-                  <span className={`text-[0.7rem] ${hasBefore || files.after ? 'text-amber-500' : 'text-gray-300'}`}>
-                    {hasBefore || files.after ? '1/2 anh' : 'Chua tai'}
-                  </span>
-                )}
+              <div className="flex flex-col items-center gap-1">
+                <FaPlus className="text-blue-500 text-2xl" />
+                <span className="text-xs text-blue-600 font-semibold">Thêm</span>
               </div>
-
-              <div className="flex gap-2.5">
-                {pickupUrl ? (
-                  <UrlSlot label="khi giao xe" url={pickupUrl} type="before" badgeText="Anh ban giao" />
-                ) : (
-                  <FileSlot
-                    label="khi giao xe"
-                    hint={pos.hint}
-                    file={files.before}
-                    onFile={(f) => onSetPosFile(pos.key, 'before', f)}
-                    type="before"
-                  />
-                )}
-
-                {isShowroom ? (
-                  showroomAfterUrl ? (
-                    <UrlSlot label="khi nhan lai" url={showroomAfterUrl} type="after" badgeText="Anh tra xe" />
-                  ) : (
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1 mb-1.5">
-                        <span className="bg-green-100 text-green-700 font-bold text-[0.65rem] px-2 py-0.5 rounded-full">
-                          SAU
-                        </span>
-                        <span className="text-[0.72rem] text-gray-500">khi nhan lai</span>
-                      </div>
-                      <div className="w-full h-24 border-2 border-dashed border-green-300 rounded-lg bg-green-50 text-green-700 text-[0.72rem] flex items-center justify-center text-center px-3 leading-relaxed">
-                        Cho renter upload anh tra xe
-                      </div>
-                    </div>
-                  )
-                ) : (
-                  <FileSlot
-                    label="khi nhan lai"
-                    hint={pos.hint}
-                    file={files.after}
-                    onFile={(f) => onSetPosFile(pos.key, 'after', f)}
-                    type="after"
-                  />
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="flex items-center justify-between bg-slate-50 rounded-lg px-3.5 py-2 mb-3.5">
-        <span className="text-[0.82rem] text-gray-700">Vi tri du anh:</span>
-        <span className={`font-bold text-[0.85rem] ${readyToAnalyze ? 'text-emerald-600' : 'text-red-600'}`}>
-          {validPositions.length} / {POSITIONS.length}
-        </span>
+            </button>
+          )}
+        </div>
       </div>
 
       {analysisError && (
@@ -183,25 +225,34 @@ function ImageUploadStep({
 
       <div className="flex gap-2.5">
         <button type="button" className="btn-outline" onClick={onBack}>
-          &larr; Quay lai
+          &larr; Quay lại
         </button>
         <button
           type="button"
-          className="btn-primary disabled:opacity-50 min-w-[200px]"
-          onClick={onAnalyze}
-          disabled={analyzing || !readyToAnalyze}
+          className="btn-primary disabled:opacity-50"
+          onClick={() => onAnalyze(images)}
+          disabled={analyzing || images.length === 0}
         >
           {analyzing ? (
             <>
-              <FaSpinner className="animate-spin inline mr-1.5" aria-hidden /> Dang phan tich AI...
+              <FaSpinner className="animate-spin inline mr-1.5" aria-hidden /> Đang phân tích AI...
             </>
           ) : (
             <>
-              <FaRobot className="inline mr-1.5" aria-hidden /> Phan tich {validPositions.length} vi tri
+              <FaRobot className="inline mr-1.5" aria-hidden /> Phân tích {images.length} ảnh
             </>
           )}
         </button>
       </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept="image/jpeg,image/jpg,image/png,image/webp,image/*"
+        className="hidden"
+        onChange={handleAddImage}
+      />
     </div>
   );
 }

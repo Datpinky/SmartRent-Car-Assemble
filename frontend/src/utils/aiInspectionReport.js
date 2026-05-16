@@ -7,34 +7,6 @@ export const AI_SEVERITY_LABELS = {
 
 export const getAiInspectionResult = (report) => report?.result || null;
 
-const flattenPositionDifferences = (positions = []) =>
-  positions.flatMap((position, index) => {
-    const label = position?.position || `Vi tri ${index + 1}`;
-    const differences = Array.isArray(position?.differences) ? position.differences : [];
-
-    if (differences.length > 0) {
-      return differences.map((difference) => ({
-        ...difference,
-        area: difference?.area ? `${label} - ${difference.area}` : label,
-        description:
-          difference?.description || position?.notes || `AI ghi nhan thay doi o ${label.toLowerCase()}.`,
-        likely_new_damage: difference?.likely_new_damage ?? position?.damage_detected ?? false,
-      }));
-    }
-
-    if (!position?.damage_detected && !position?.notes) {
-      return [];
-    }
-
-    return [
-      {
-        area: label,
-        description: position?.notes || 'AI ghi nhan thay doi o vi tri nay.',
-        likely_new_damage: position?.damage_detected ?? false,
-      },
-    ];
-  });
-
 /** Chuẩn hóa payload server `ai_inspection` → shape dùng cho AIInspectionReportView (trước: local workflow.aiInspection). */
 export function mapServerAiInspectionToViewModel(inv) {
   if (!inv || inv.status !== 'ready' || !inv.result) {
@@ -66,8 +38,12 @@ export const getAiInspectionDifferences = (report) => {
     return differences;
   }
 
-  if (Array.isArray(result?.positions)) {
-    return flattenPositionDifferences(result.positions);
+  if (Array.isArray(result?.observations)) {
+    return result.observations.map((obs) => ({
+      area: obs.area || 'Khu vuc chua xac dinh',
+      description: obs.description || obs.evidence || '',
+      likely_new_damage: !!obs.likely_new_damage,
+    }));
   }
 
   return [];

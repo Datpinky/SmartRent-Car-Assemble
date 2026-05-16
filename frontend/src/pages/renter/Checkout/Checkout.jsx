@@ -17,6 +17,7 @@ import bookingService from '../../../services/bookingService';
 import mapService from '../../../services/mapService';
 import paymentService from '../../../services/paymentService';
 import vehicleService from '../../../services/vehicleService';
+import vehicleLocationService from '../../../services/vehicleLocationService';
 import { formatVnd, formatVndPerDay } from '../../../utils/currencyFormat';
 import {
   buildDefaultPickupDate,
@@ -84,6 +85,11 @@ const Checkout = () => {
   const [deliverySuggestions, setDeliverySuggestions] = useState([]);
   const [loadingDeliverySuggestions, setLoadingDeliverySuggestions] = useState(false);
   const [loadingDeliveryLocation, setLoadingDeliveryLocation] = useState(false);
+  const [vehicleLocationData, setVehicleLocationData] = useState(null);
+  const [resolvedVehicleLocation, setResolvedVehicleLocation] = useState(null);
+  const [loadingVehicleLocation, setLoadingVehicleLocation] = useState(false);
+  const [resolvingVehicleLocation, setResolvingVehicleLocation] = useState(false);
+  const [vehicleLocationError, setVehicleLocationError] = useState('');
   const minPickupDateTime = useMemo(() => buildDefaultPickupDate(), []);
   const incomingRentalWindow = useMemo(
     () => resolveRentalWindow({ state: location.state, search: location.search }),
@@ -105,8 +111,134 @@ const Checkout = () => {
   const [hasAcceptedContract, setHasAcceptedContract] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+    const vehicleId = vehicle?._id || vehicle?.id || carId;
+
+    if (!vehicleId || pickupMethod !== 'self') {
+      setVehicleLocationData(null);
+      setVehicleLocationError('');
+      setLoadingVehicleLocation(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setLoadingVehicleLocation(true);
+    setVehicleLocationError('');
+    vehicleLocationService
+      .getByVehicleId(vehicleId)
+      .then((loc) => {
+        if (!cancelled) setVehicleLocationData(loc || null);
+      })
+      .catch(() => {
+        if (!cancelled) setVehicleLocationData(null);
+        if (!cancelled) setVehicleLocationError('Không thể tải vị trí xe.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingVehicleLocation(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pickupMethod, vehicle?._id, vehicle?.id, carId]);
+
+  useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'auto' });
   }, [step]);
+
+  const resolveAddressFromCoordinates = useCallback(async (latitude, longitude) => {
+    try {
+      const result = await mapService.reverseGeocode(latitude, longitude);
+      return result?.address || formatCoordinates(latitude, longitude);
+    } catch {
+      return formatCoordinates(latitude, longitude);
+    }
+  }, []);
+
+  const normalizeVehicleLocation = useCallback((source, fallbackAddress = '') => {
+    if (!source) return null;
+
+    const latitude = Number(source.latitude ?? source.lat);
+    const longitude = Number(source.longitude ?? source.lng);
+    const address = String(source.address || source.location || source.pickupAddress || fallbackAddress || '').trim();
+
+    if (!address || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return null;
+    }
+
+    return {
+      address,
+      latitude,
+      longitude,
+      plusCode: source.plusCode || source.plus_code || '',
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (pickupMethod !== 'self') {
+      setResolvedVehicleLocation(null);
+      setResolvingVehicleLocation(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const directLocation = normalizeVehicleLocation(vehicleLocationData, vehicle?.location || vehicle?.address || '');
+    if (directLocation) {
+      setResolvedVehicleLocation(directLocation);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const vehicleNativeLocation = normalizeVehicleLocation(vehicle, vehicle?.location || vehicle?.address || vehicle?.pickupAddress || '');
+    if (vehicleNativeLocation) {
+      setResolvedVehicleLocation(vehicleNativeLocation);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const fallbackAddress = String(vehicle?.pickupAddress || vehicle?.address || vehicle?.location || '').trim();
+    if (!fallbackAddress) {
+      setResolvedVehicleLocation(null);
+      setResolvingVehicleLocation(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setResolvingVehicleLocation(true);
+    mapService
+      .directForwardGeocode(fallbackAddress, { limit: 1 })
+      .then((results) => {
+        if (cancelled) return;
+        const bestMatch = results?.[0];
+        if (!bestMatch) {
+          setResolvedVehicleLocation(null);
+          return;
+        }
+        setResolvedVehicleLocation({
+          address: fallbackAddress,
+          latitude: bestMatch.lat,
+          longitude: bestMatch.lng,
+          plusCode: bestMatch.plusCode || '',
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setResolvedVehicleLocation(null);
+      })
+      .finally(() => {
+        if (!cancelled) setResolvingVehicleLocation(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pickupMethod, vehicle, vehicleLocationData, normalizeVehicleLocation]);
 
   const fetchVehicle = useCallback(async () => {
     if (!carId) {
@@ -307,10 +439,10 @@ const Checkout = () => {
     setLoadingDeliveryLocation(true);
     setPrepError('');
     navigator.geolocation.getCurrentPosition(
-      (position) => {
+      async (position) => {
         const latitude = position.coords.latitude;
         const longitude = position.coords.longitude;
-        const address = formatCoordinates(latitude, longitude);
+        const address = await resolveAddressFromCoordinates(latitude, longitude);
         setDeliveryAddress(address);
         setDeliverySuggestions([]);
         setDeliveryLocation({ address, latitude, longitude, plusCode: '' });
@@ -379,6 +511,9 @@ const Checkout = () => {
         total_price: total,
         delivery_type: pickupMethod === 'delivery' ? 'delivery' : 'self',
         delivery_address: trimmedDeliveryAddress,
+        delivery_latitude: deliveryLocation?.latitude ?? null,
+        delivery_longitude: deliveryLocation?.longitude ?? null,
+        delivery_plus_code: deliveryLocation?.plusCode ?? '',
         note: pickupMethod === 'delivery' ? 'Giao tan noi' : 'Tu den lay',
       });
       const bId = nextBookingId || booking?._id || booking?.id || booking;
@@ -650,6 +785,31 @@ const Checkout = () => {
                     <p className="text-gray-600 font-semibold text-[0.85rem] mt-1">+ {formatVnd(DELIVERY_FEE_VND)}</p>
                   </button>
                 </div>
+
+                {pickupMethod === 'self' && (
+                  <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
+                    <label className="mb-2 block text-[0.8rem] font-semibold text-gray-800">Vi tri xe</label>
+                    {loadingVehicleLocation || resolvingVehicleLocation ? (
+                      <div className="text-[0.8rem] text-gray-500 flex items-center gap-2">
+                        <FaSpinner className="animate-spin" /> Dang tai vi tri xe...
+                      </div>
+                    ) : vehicleLocationError ? (
+                      resolvedVehicleLocation ? null : <p className="text-[0.8rem] text-red-600">{vehicleLocationError}</p>
+                    ) : resolvedVehicleLocation ? (
+                      <div className="mt-3 overflow-hidden rounded-xl">
+                        <CarLocationMap
+                          locationText={resolvedVehicleLocation.address}
+                          lat={resolvedVehicleLocation.latitude}
+                          lng={resolvedVehicleLocation.longitude}
+                          openMapLabel="Mo trong map"
+                          mapHeight={220}
+                        />
+                      </div>
+                    ) : (
+                      <p className="text-[0.8rem] text-gray-500">Khong co vi tri hien tai cua xe.</p>
+                    )}
+                  </div>
+                )}
 
                 {pickupMethod === 'delivery' && (
                   <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">

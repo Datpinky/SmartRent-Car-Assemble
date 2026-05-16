@@ -9,29 +9,26 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 router.post(
   '/image/files',
-  upload.array('files', 10),
+  upload.array('files', 6),
   ...uploadValidation.validateImageUpload,
   validate,
   uploadController.uploadImageFiles,
 );
 
-router.post(
-  '/image/vehicle-damage',
-  upload.fields([
-    { name: 'before_rental', maxCount: 1 },
-    { name: 'after_return', maxCount: 1 },
-  ]),
-  ...uploadValidation.validateVehicleDamageImages,
-  validate,
-  uploadController.compareVehicleDamage,
-);
+// Gallery: image_0, image_1, ... (up to 6 images, free-form)
+const GALLERY_FIELDS = Array.from({ length: 6 }, (_, i) => ({ name: `image_${i}`, maxCount: 1 }));
 
-// Multi-position: pos_0_before, pos_0_after, pos_1_before, ... (up to 6 positions)
-const POSITION_FIELDS = Array.from({ length: 6 }, (_, i) => [
-  { name: `pos_${i}_before`, maxCount: 1 },
-  { name: `pos_${i}_after`, maxCount: 1 },
+router.post('/image/vehicle-damage-gallery', upload.fields(GALLERY_FIELDS), uploadController.compareGalleryImages);
+
+const GALLERY_COMPARE_FIELDS = Array.from({ length: 6 }, (_, i) => [
+  { name: `before_${i}`, maxCount: 1 },
+  { name: `after_${i}`, maxCount: 1 },
 ]).flat();
 
-router.post('/image/vehicle-damage-multi', upload.fields(POSITION_FIELDS), uploadController.compareMultiPosition);
+router.post(
+  '/image/vehicle-damage-gallery-compare',
+  upload.fields(GALLERY_COMPARE_FIELDS),
+  uploadController.compareBeforeAfterGallery,
+);
 
 module.exports = router;

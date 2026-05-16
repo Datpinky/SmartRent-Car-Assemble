@@ -13,7 +13,6 @@ import bookingService from '../../../services/bookingService';
 import inspectionService from '../../../services/inspectionService';
 import uploadService from '../../../services/uploadService';
 import { getRentalWorkflow } from '../../../utils/rentalWorkflowStorage';
-import { POSITIONS } from '../../showroom/AIInspection/aiInspection.helpers';
 import ReturnImageUploadStep from './components/ReturnImageUploadStep';
 
 const fmtDate = (d) =>
@@ -41,18 +40,11 @@ const SEVERITY_LABEL = {
   severe: 'Nặng',
 };
 
-const makeInitialPosFiles = () => Object.fromEntries(POSITIONS.map((p) => [p.key, { after: null }]));
-
-const getFirstStoredImage = (imagesByPosition, positionKey) => {
-  const value = imagesByPosition?.[positionKey];
-  if (Array.isArray(value)) {
-    return value.find((item) => typeof item === 'string' && item.trim()) || '';
-  }
-  if (typeof value === 'string' && value.trim()) {
-    return value.trim();
-  }
-  return '';
-};
+const normalizeUrlList = (value) =>
+  (Array.isArray(value) ? value : Object.values(value || {}).flat())
+    .map((url) => (typeof url === 'string' ? url.trim() : ''))
+    .filter(Boolean)
+    .slice(0, 6);
 
 const ReturnInspectionHistory = () => {
   const [tab, setTab] = useState('new');
@@ -63,7 +55,7 @@ const ReturnInspectionHistory = () => {
   const [loadingBookings, setLoadingBookings] = useState(false);
   const [selectedBookingId, setSelectedBookingId] = useState('');
   const [pickupImagesUrls, setPickupImagesUrls] = useState([]); // ảnh từ showroom
-  const [posFiles, setPosFiles] = useState(makeInitialPosFiles);
+  const [returnImagesUrls, setReturnImagesUrls] = useState([]);
 
   // Analysis state
   const [analyzing, setAnalyzing] = useState(false);
@@ -80,11 +72,6 @@ const ReturnInspectionHistory = () => {
   // ── Derived values ──
   const selectedBooking = bookings.find((b) => String(b._id || b.id) === selectedBookingId);
   const hasSomeShowroomImages = pickupImagesUrls.some((url) => !!url);
-  const validPositions = POSITIONS.filter((p) => {
-    const files = posFiles[p.key];
-    return !!files?.after;
-  });
-  const readyToAnalyze = validPositions.length >= 1;
 
   // ── Fetch bookings for return phase ──
   const fetchBookings = useCallback(async () => {
@@ -102,116 +89,46 @@ const ReturnInspectionHistory = () => {
     }
   }, []);
 
-  // ── Load pickup images from selected booking + renter's return images ──
+  // ?? Load pickup and return galleries for selected booking ??
   const loadPickupImages = useCallback(async (bookingId) => {
     setPickupImagesUrls([]);
-    setPosFiles(makeInitialPosFiles());
+    setReturnImagesUrls([]);
     if (!bookingId) return;
+
     try {
-      console.log('🔍 loadPickupImages START for booking:', bookingId);
-
-      // Load from booking API (showroom images)
       const booking = await bookingService.getBookingById(bookingId);
-      console.log('📋 Full booking object:', booking);
-      const bookingImages = booking?.pickup_images || [];
-      console.log('📦 Loaded from booking.pickup_images:', {
-        count: bookingImages.length,
-        images: bookingImages,
-        bookingStatus: booking?.status,
-        hasPickupImagesField: 'pickup_images' in booking,
-      });
+      const pickupImages = normalizeUrlList(booking?.pickup_images);
+      let returnImages = [];
 
-      // Load from localStorage (checklist images uploaded by renter)
-      const workflow = getRentalWorkflow(bookingId);
-      const checklistImagesByPosition =
-        workflow?.returnImages && !Array.isArray(workflow.returnImages) ? workflow.returnImages : {};
-      console.log('💾 Raw localStorage workflow:', workflow);
-      console.log('💾 workflow.returnImages structure:', {
-        type: typeof workflow?.returnImages,
-        isArray: Array.isArray(workflow?.returnImages),
-        isObject: typeof workflow?.returnImages === 'object',
-        keys: workflow?.returnImages ? Object.keys(workflow.returnImages) : 'N/A',
-        rawData: workflow?.returnImages,
-      });
-      const checklistImages = workflow?.returnImages
-        ? Array.isArray(workflow.returnImages)
-          ? workflow.returnImages
-          : Object.values(workflow.returnImages).flat()
-        : [];
-      console.log('📝 Loaded from localStorage (workflow):', {
-        count: checklistImages.length,
-        images: checklistImages,
-        rawWorkflow: workflow,
-      });
-
-      // Load renter's inspection record (return inspection) to get uploaded after_urls
-      let returnInspectionImages = {};
       try {
-        console.log('🔍 Querying inspections with params:', {
-          booking_id: bookingId,
-          inspection_type: 'return',
-          limit: 1,
-        });
+        const workflow = getRentalWorkflow(bookingId);
+        returnImages = normalizeUrlList(workflow?.returnImages);
+      } catch (err) {
+        console.warn('Failed to load renter return images from localStorage:', err);
+      }
+
+      try {
         const { items } = await inspectionService.list({
           booking_id: bookingId,
           inspection_type: 'return',
-          inspected_by_role: 'renter',
-          limit: 1,
+          limit: 10,
         });
-        console.log('🔍 Inspection query result:', items?.length || 0, 'inspections', 'Full items:', items);
-        if (items && items.length > 0) {
-          const returnInspection = items[0];
-          if (Array.isArray(returnInspection.positions)) {
-            // Extract after_urls from inspection positions
-            const inspectionImages = {};
-            returnInspection.positions.forEach((pos) => {
-              if (pos.position_key && pos.after_url) {
-                inspectionImages[pos.position_key] = pos.after_url;
-              }
-            });
-            returnInspectionImages = inspectionImages;
-            console.log('✅ Loaded renter return inspection images:', {
-              count: Object.keys(returnInspectionImages).length,
-              images: returnInspectionImages,
-            });
-          }
+        const latestWithReturnImages = (items || []).find(
+          (inspection) => Array.isArray(inspection.return_images) && inspection.return_images.length > 0,
+        );
+        if (latestWithReturnImages) {
+          returnImages = normalizeUrlList(latestWithReturnImages.return_images);
         }
       } catch (err) {
-        console.warn('Failed to load return inspection:', err);
+        console.warn('Failed to load return inspection gallery:', err);
       }
 
-      // Merge: booking images (showroom handoff) + prefer inspection images over localStorage
-      const mergedImages = [];
-      for (let i = 0; i < POSITIONS.length; i++) {
-        // Priority: inspection images (uploaded) > localStorage > booking images
-        mergedImages[i] = returnInspectionImages[i] || checklistImages[i] || bookingImages[i] || '';
-      }
-      const showroomBeforeImages = POSITIONS.map((_, index) => bookingImages[index] || '');
-      const hydratedPosFiles = makeInitialPosFiles();
-      POSITIONS.forEach((position) => {
-        hydratedPosFiles[position.key].after =
-          returnInspectionImages[position.key] || getFirstStoredImage(checklistImagesByPosition, position.key) || null;
-      });
-
-      console.log('✨ loadPickupImages COMPLETE:', {
-        bookingId,
-        totalSlots: showroomBeforeImages.length,
-        filled: showroomBeforeImages.filter(Boolean).length,
-        breakdown: {
-          fromBooking: bookingImages.length,
-          fromChecklist: Object.keys(checklistImagesByPosition).length,
-          fromInspection: Object.keys(returnInspectionImages).length,
-        },
-        images: showroomBeforeImages,
-        renterAfterImages: hydratedPosFiles,
-      });
-
-      setPickupImagesUrls(Array.isArray(showroomBeforeImages) ? showroomBeforeImages : []);
-      setPosFiles(hydratedPosFiles);
+      setPickupImagesUrls(pickupImages);
+      setReturnImagesUrls(returnImages);
     } catch (err) {
-      console.error('🚨 loadPickupImages ERROR:', err);
+      console.error('Failed to load booking galleries:', err);
       setPickupImagesUrls([]);
-      setPosFiles(makeInitialPosFiles());
+      setReturnImagesUrls([]);
     }
   }, []);
 
@@ -223,7 +140,6 @@ const ReturnInspectionHistory = () => {
         page: 1,
         limit: 50,
         inspection_type: 'return',
-        inspected_by_role: 'renter',
       });
       setHistoryRows(Array.isArray(items) ? items : []);
     } catch {
@@ -233,34 +149,26 @@ const ReturnInspectionHistory = () => {
     }
   }, []);
 
-  // ── Reset flow ──
+  // ?? Reset flow ??
   const resetFlow = () => {
     setStep(1);
     setAnalyzed(false);
     setSelectedBookingId('');
     setPickupImagesUrls([]);
-    setPosFiles(makeInitialPosFiles());
+    setReturnImagesUrls([]);
     setAnalysisResult(null);
     setAnalysisError('');
     setSaveNote('');
   };
 
-  // ── Set pos file ──
-  const setPosFile = (key, type, file) => {
-    setPosFiles((prev) => ({
-      ...prev,
-      [key]: { ...prev[key], [type]: file },
-    }));
-  };
-
   // ── Main analyze handler ──
-  const handleAnalyze = async () => {
-    if (!selectedBooking || !selectedBookingId) {
-      setAnalysisError('Vui lòng chọn booking.');
+  const handleAnalyze = async (galleryImages) => {
+    if (!Array.isArray(galleryImages) || galleryImages.length === 0) {
+      setAnalysisError('Can it nhat mot anh tra xe de phan tich.');
       return;
     }
-    if (!readyToAnalyze) {
-      setAnalysisError('Cần ít nhất một vị trí có ảnh.');
+    if (!selectedBooking || !selectedBookingId) {
+      setAnalysisError('Vui long chon booking.');
       return;
     }
 
@@ -269,120 +177,62 @@ const ReturnInspectionHistory = () => {
     setSaveNote('');
 
     try {
-      let analysisData = null;
-      let analyzedPositionsCount = 0;
-
-      // Only call AI if showroom has uploaded before images
-      if (hasSomeShowroomImages) {
-        // Collect files to compare
-        const positionsInput = await Promise.all(
-          validPositions.map(async (p) => {
-            const posIdx = POSITIONS.findIndex((pp) => pp.key === p.key);
-            let beforeFile = posFiles[p.key].before;
-            let afterFile = posFiles[p.key].after;
-            const afterUrl = typeof afterFile === 'string' ? afterFile : '';
-            const pickupUrl = pickupImagesUrls[posIdx];
-
-            // Fetch showroom image if available
-            if (!beforeFile && pickupUrl) {
-              try {
-                const resp = await fetch(pickupUrl);
-                const blob = await resp.blob();
-                beforeFile = new File([blob], `pickup_${p.key}.jpg`, { type: blob.type || 'image/jpeg' });
-              } catch {
-                /* keep null */
-              }
-            }
-
-            if (afterUrl) {
-              try {
-                const resp = await fetch(afterUrl);
-                const blob = await resp.blob();
-                afterFile = new File([blob], `return_${p.key}.jpg`, { type: blob.type || 'image/jpeg' });
-              } catch {
-                afterFile = null;
-              }
-            }
-
-            return {
-              key: p.key,
-              label: p.label,
-              beforeFile,
-              afterFile,
-              afterUrl,
-            };
-          }),
-        );
-
-        const analyzablePositions = positionsInput.filter((position) => position.beforeFile && position.afterFile);
-        if (analyzablePositions.length === 0) {
-          throw new Error('Cần ít nhất một cặp ảnh TRƯỚC và SAU hợp lệ để phân tích AI.');
+      const toAnalysisImage = async (img, idx, prefix) => {
+        if (img.type === 'file' && img.data instanceof File) return img;
+        if (img.type === 'url' && typeof img.data === 'string') {
+          try {
+            const resp = await fetch(img.data);
+            const blob = await resp.blob();
+            return { type: 'file', data: new File([blob], `${prefix}_${idx}.jpg`, { type: blob.type || 'image/jpeg' }) };
+          } catch {
+            return null;
+          }
         }
+        return null;
+      };
 
-        // Call AI comparison
-        analysisData = await uploadService.compareMultiPosition(analyzablePositions);
-        analyzedPositionsCount = analyzablePositions.length;
-        setAnalysisResult(analysisData);
+      const rawAfterImages = galleryImages.slice(0, 6);
+      const afterImages = (await Promise.all(rawAfterImages.map((img, idx) => toAnalysisImage(img, idx, 'after')))).filter(Boolean);
+      const beforeImages = (
+        await Promise.all(
+          pickupImagesUrls
+            .filter(Boolean)
+            .slice(0, 6)
+            .map((url, idx) => toAnalysisImage({ type: 'url', data: url }, idx, 'before')),
+        )
+      ).filter(Boolean);
+      if (afterImages.length === 0) {
+        throw new Error('Khong co anh hop le de phan tich.');
       }
 
-      // Upload files
-      const positionsRecord = [];
-      try {
-        const filesToUpload = [];
-        const uploadMap = [];
+      const analysisData =
+        beforeImages.length > 0
+          ? await uploadService.compareBeforeAfterGallery(beforeImages, afterImages)
+          : await uploadService.compareGalleryImages(afterImages);
+      setAnalysisResult(analysisData);
 
-        validPositions.forEach((p) => {
-          const posIdx = POSITIONS.findIndex((pp) => pp.key === p.key);
-          const pickupUrl = pickupImagesUrls[posIdx];
+      const existingAfterUrls = rawAfterImages
+        .filter((img) => img.type === 'url' && typeof img.data === 'string')
+        .map((img) => img.data);
+      const filesToUpload = rawAfterImages
+        .filter((img) => img.type === 'file' && img.data instanceof File)
+        .map((img) => img.data);
 
-          // Upload before image if not from showroom
-          if (!pickupUrl && posFiles[p.key].before) {
-            filesToUpload.push(posFiles[p.key].before);
-            uploadMap.push({ posKey: p.key, type: 'before' });
-          }
-
-          // Upload after image
-          const existingAfterUrl = typeof posFiles[p.key].after === 'string' ? posFiles[p.key].after : '';
-          if (!existingAfterUrl && posFiles[p.key].after) {
-            filesToUpload.push(posFiles[p.key].after);
-            uploadMap.push({ posKey: p.key, type: 'after' });
-          }
-        });
-
-        const uploadedUrls = filesToUpload.length > 0 ? await uploadService.uploadImages(filesToUpload) : [];
-        const urlByPosType = {};
-        uploadMap.forEach((entry, i) => {
-          urlByPosType[`${entry.posKey}_${entry.type}`] = uploadedUrls[i]?.url || '';
-        });
-
-        // Build positions record
-        validPositions.forEach((p) => {
-          const posIdx = POSITIONS.findIndex((pp) => pp.key === p.key);
-          const beforeUrl = pickupImagesUrls[posIdx] || urlByPosType[`${p.key}_before`] || '';
-          const existingAfterUrl = typeof posFiles[p.key].after === 'string' ? posFiles[p.key].after : '';
-          const afterUrl = existingAfterUrl || urlByPosType[`${p.key}_after`] || '';
-
-          positionsRecord.push({
-            position_key: p.key,
-            position_label: p.label,
-            before_url: beforeUrl,
-            after_url: afterUrl,
-          });
-        });
-      } catch {
-        setSaveNote('Không tải được ảnh lên lưu trữ.');
-        validPositions.forEach((p) => {
-          positionsRecord.push({
-            position_key: p.key,
-            position_label: p.label,
-            before_url: '',
-            after_url: '',
-          });
-        });
+      let uploadedUrls = [];
+      if (filesToUpload.length > 0) {
+        try {
+          uploadedUrls = await uploadService.uploadImages(filesToUpload);
+        } catch (err) {
+          setSaveNote('Khong tai duoc anh len luu tru.');
+        }
       }
 
-      // Save inspection record
-      const bookingCodeShort = (id) => (id ? `BK${String(id).slice(-6).toUpperCase()}` : '');
+      const returnImageRecord = [
+        ...existingAfterUrls,
+        ...uploadedUrls.map((item) => item.url || item).filter(Boolean),
+      ].slice(0, 6);
+
+      const bookingCodeShort = (id) => (id ? 'BK' + String(id).slice(-6).toUpperCase() : '');
       const bCode = bookingCodeShort(selectedBookingId);
       const vehicleName =
         selectedBooking?.vehicleName ||
@@ -391,30 +241,32 @@ const ReturnInspectionHistory = () => {
         'Xe';
 
       await inspectionService.create({
-        vehicle_id: selectedBooking.vehicle_id?._id || selectedBooking.vehicle_id?.id,
+        vehicle_id: selectedBooking.vehicle_id?._id || selectedBooking.vehicle_id?.id || selectedBooking.vehicle_id,
         booking_id: selectedBookingId,
         inspection_type: 'return',
         inspected_by_role: 'renter',
         vehicle_name: vehicleName,
         vehicle_plate: selectedBooking.vehicle_plate || selectedBooking.plate || '',
         booking_code: bCode,
-        positions: positionsRecord,
-        positions_analyzed: analyzedPositionsCount,
+        pickup_images: pickupImagesUrls.filter(Boolean).slice(0, 6),
+        return_images: returnImageRecord,
+        gallery_images: returnImageRecord,
+        gallery_analyzed: afterImages.length,
         ai_payload: analysisData || {},
         damage_detected: !!analysisData?.damage_detected,
         severity: analysisData?.severity || 'none',
-        position_results: Array.isArray(analysisData?.positions) ? analysisData.positions : [],
+        observations: Array.isArray(analysisData?.observations) ? analysisData.observations : [],
+        summary: analysisData?.summary || '',
+        conclusion: analysisData?.conclusion || '',
+        disclaimer: analysisData?.disclaimer || '',
+        comparison_mode: beforeImages.length > 0 ? 'gallery' : 'current_only',
       });
 
-      setSaveNote(
-        hasSomeShowroomImages
-          ? 'Đã lưu báo cáo kiểm tra AI.'
-          : 'Đã lưu báo cáo kiểm tra (chứng cứ hình ảnh). AI không khả dụng vì chưa có ảnh trước.',
-      );
+      setSaveNote('Da luu bao cao kiem tra AI.');
       setAnalyzed(true);
       setStep(3);
     } catch (err) {
-      setAnalysisError(err?.message || 'Phân tích thất bại. Vui lòng thử lại.');
+      setAnalysisError(err?.message || 'Phan tich that bai. Vui long thu lai.');
     } finally {
       setAnalyzing(false);
     }
@@ -518,7 +370,7 @@ const ReturnInspectionHistory = () => {
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20, gap: 8 }}>
             {[
               { n: 1, label: 'Chọn xe & đơn đặt xe' },
-              { n: 2, label: 'Tải ảnh (6 vị trí)' },
+              { n: 2, label: 'Tải ảnh trả xe' },
               { n: 3, label: 'Kết quả' },
             ].map(({ n, label }) => {
               const done = step > n;
@@ -709,10 +561,7 @@ const ReturnInspectionHistory = () => {
             <ReturnImageUploadStep
               selectedBooking={selectedBooking}
               pickupImagesUrls={pickupImagesUrls}
-              posFiles={posFiles}
-              onSetPosFile={setPosFile}
-              validPositions={validPositions}
-              readyToAnalyze={readyToAnalyze}
+              initialImages={returnImagesUrls}
               analyzing={analyzing}
               analysisError={analysisError}
               onBack={() => {
@@ -747,7 +596,7 @@ const ReturnInspectionHistory = () => {
                 </div>
               )}
 
-              {hasSomeShowroomImages && analysisResult && (
+              {analysisResult && (
                 <div style={{ marginBottom: 20 }}>
                   <div style={{ fontSize: '0.9rem', color: '#374151', marginBottom: 12 }}>
                     <strong>Kết quả phân tích AI:</strong>
@@ -770,7 +619,7 @@ const ReturnInspectionHistory = () => {
                 </div>
               )}
 
-              {!hasSomeShowroomImages && (
+              {!hasSomeShowroomImages && analysisResult && (
                 <div
                   style={{
                     background: '#fef3c7',
@@ -785,7 +634,7 @@ const ReturnInspectionHistory = () => {
                   }}
                 >
                   <FaInfoCircle style={{ marginTop: 2, flexShrink: 0 }} />
-                  <span>Đã lưu bằng chứng hình ảnh. Không có ảnh trước nên chưa có phân tích AI.</span>
+                  <span>Không có ảnh bàn giao, AI chỉ đánh giá tình trạng hiện tại và không kết luận hư hỏng mới.</span>
                 </div>
               )}
 
@@ -886,9 +735,9 @@ const ReturnInspectionHistory = () => {
                   {/* Stats */}
                   <div style={{ display: 'flex', gap: 16, alignItems: 'center', paddingRight: 8 }}>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>Vị trí được kiểm tra:</div>
+                      <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>Anh tra xe:</div>
                       <div style={{ fontSize: '1rem', fontWeight: 600, color: '#111827' }}>
-                        {row.positions_analyzed}/6
+                        {(row.return_images || row.gallery_images || []).length}/6
                       </div>
                     </div>
                     <div style={{ color: '#9ca3af', fontSize: '1.2rem' }}>
@@ -900,53 +749,44 @@ const ReturnInspectionHistory = () => {
                 {/* Expanded content */}
                 {expandedRow === row._id && (
                   <div style={{ borderTop: '1px solid #e5e7eb', padding: 16, background: '#f9fafb' }}>
-                    {row.positions && row.positions.length > 0 && (
+                    {((row.pickup_images || []).length > 0 || (row.return_images || row.gallery_images || []).length > 0) && (
                       <div>
                         <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: 12, color: '#374151' }}>
-                          Hình ảnh kiểm tra:
+                          Hinh anh kiem tra:
                         </div>
-                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-                          {row.positions
-                            .filter((p) => p.before_url || p.after_url)
-                            .map((p, i) => (
-                              <div key={i} style={{ textAlign: 'center' }}>
-                                <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: 6 }}>
-                                  {p.position_label}
-                                </div>
-                                <div style={{ display: 'flex', gap: 4 }}>
-                                  {p.before_url && (
-                                    <a href={p.before_url} target="_blank" rel="noopener noreferrer">
-                                      <img
-                                        src={p.before_url}
-                                        alt="truoc"
-                                        style={{
-                                          width: '72px',
-                                          height: '52px',
-                                          objectFit: 'cover',
-                                          borderRadius: '4px',
-                                          border: '2px solid #bfdbfe',
-                                        }}
-                                      />
-                                    </a>
-                                  )}
-                                  {p.after_url && (
-                                    <a href={p.after_url} target="_blank" rel="noopener noreferrer">
-                                      <img
-                                        src={p.after_url}
-                                        alt="sau"
-                                        style={{
-                                          width: '72px',
-                                          height: '52px',
-                                          objectFit: 'cover',
-                                          borderRadius: '4px',
-                                          border: '2px solid #86efac',
-                                        }}
-                                      />
-                                    </a>
-                                  )}
-                                </div>
+                        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginBottom: 16 }}>
+                          {(row.pickup_images || []).length > 0 && (
+                            <div>
+                              <div style={{ fontSize: '0.75rem', color: '#1d4ed8', marginBottom: 6, fontWeight: 700 }}>BEFORE</div>
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                {(row.pickup_images || []).map((url, i) => (
+                                  <a key={url || i} href={url} target="_blank" rel="noopener noreferrer">
+                                    <img
+                                      src={url}
+                                      alt="before"
+                                      style={{ width: '72px', height: '52px', objectFit: 'cover', borderRadius: 4, border: '2px solid #bfdbfe' }}
+                                    />
+                                  </a>
+                                ))}
                               </div>
-                            ))}
+                            </div>
+                          )}
+                          {(row.return_images || row.gallery_images || []).length > 0 && (
+                            <div>
+                              <div style={{ fontSize: '0.75rem', color: '#059669', marginBottom: 6, fontWeight: 700 }}>AFTER</div>
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                {(row.return_images || row.gallery_images || []).map((url, i) => (
+                                  <a key={url || i} href={url} target="_blank" rel="noopener noreferrer">
+                                    <img
+                                      src={url}
+                                      alt="after"
+                                      style={{ width: '72px', height: '52px', objectFit: 'cover', borderRadius: 4, border: '2px solid #86efac' }}
+                                    />
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}

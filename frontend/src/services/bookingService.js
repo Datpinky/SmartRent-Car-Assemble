@@ -320,6 +320,23 @@ export const bookingService = {
       start_date: payload.start_date,
       end_date: payload.end_date,
       note,
+      // optional delivery fields
+      delivery_type: payload.delivery_type || payload.deliveryType || undefined,
+      delivery_address: payload.delivery_address || payload.deliveryAddress || undefined,
+      delivery_latitude:
+        payload.delivery_latitude ??
+        payload.latitude ??
+        payload.deliveryLatitude ??
+        payload.deliveryLocation?.latitude ??
+        undefined,
+      delivery_longitude:
+        payload.delivery_longitude ??
+        payload.longitude ??
+        payload.deliveryLongitude ??
+        payload.deliveryLocation?.longitude ??
+        undefined,
+      delivery_plus_code:
+        payload.delivery_plus_code ?? payload.deliveryPlusCode ?? payload.deliveryLocation?.plusCode ?? undefined,
     };
 
     const res = await apiClient.post('/api/booking/createBooking', body);

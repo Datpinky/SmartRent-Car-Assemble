@@ -11,17 +11,7 @@ const JSON_ONLY_SYSTEM_INSTRUCTION = [
   'Use Vietnamese for human-readable string fields.',
 ].join(' ');
 
-const DIFFERENCE_SCHEMA = {
-  type: SchemaType.OBJECT,
-  properties: {
-    area: { type: SchemaType.STRING },
-    description: { type: SchemaType.STRING },
-    likely_new_damage: { type: SchemaType.BOOLEAN },
-  },
-  required: ['area', 'description', 'likely_new_damage'],
-};
-
-const DAMAGE_RESPONSE_SCHEMA = {
+const GALLERY_DAMAGE_RESPONSE_SCHEMA = {
   type: SchemaType.OBJECT,
   properties: {
     damage_detected: { type: SchemaType.BOOLEAN },
@@ -31,53 +21,42 @@ const DAMAGE_RESPONSE_SCHEMA = {
       enum: SEVERITY_VALUES,
     },
     summary: { type: SchemaType.STRING },
-    differences: {
+    observations: {
       type: SchemaType.ARRAY,
-      items: DIFFERENCE_SCHEMA,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          area: { type: SchemaType.STRING },
+          description: { type: SchemaType.STRING },
+          evidence: { type: SchemaType.STRING },
+          severity_level: {
+            type: SchemaType.STRING,
+            format: 'enum',
+            enum: SEVERITY_VALUES,
+          },
+          likely_new_damage: { type: SchemaType.BOOLEAN },
+          confidence: {
+            type: SchemaType.STRING,
+            format: 'enum',
+            enum: ['low', 'medium', 'high'],
+          },
+          needs_manual_review: { type: SchemaType.BOOLEAN },
+        },
+        required: [
+          'area',
+          'description',
+          'evidence',
+          'severity_level',
+          'likely_new_damage',
+          'confidence',
+          'needs_manual_review',
+        ],
+      },
     },
     conclusion: { type: SchemaType.STRING },
     disclaimer: { type: SchemaType.STRING },
   },
-  required: ['damage_detected', 'severity', 'summary', 'differences', 'conclusion', 'disclaimer'],
-};
-
-const POSITION_RESULT_SCHEMA = {
-  type: SchemaType.OBJECT,
-  properties: {
-    position: { type: SchemaType.STRING },
-    damage_detected: { type: SchemaType.BOOLEAN },
-    severity: {
-      type: SchemaType.STRING,
-      format: 'enum',
-      enum: SEVERITY_VALUES,
-    },
-    differences: {
-      type: SchemaType.ARRAY,
-      items: DIFFERENCE_SCHEMA,
-    },
-    notes: { type: SchemaType.STRING },
-  },
-  required: ['position', 'damage_detected', 'severity', 'differences', 'notes'],
-};
-
-const MULTI_DAMAGE_RESPONSE_SCHEMA = {
-  type: SchemaType.OBJECT,
-  properties: {
-    damage_detected: { type: SchemaType.BOOLEAN },
-    severity: {
-      type: SchemaType.STRING,
-      format: 'enum',
-      enum: SEVERITY_VALUES,
-    },
-    summary: { type: SchemaType.STRING },
-    positions: {
-      type: SchemaType.ARRAY,
-      items: POSITION_RESULT_SCHEMA,
-    },
-    conclusion: { type: SchemaType.STRING },
-    disclaimer: { type: SchemaType.STRING },
-  },
-  required: ['damage_detected', 'severity', 'summary', 'positions', 'conclusion', 'disclaimer'],
+  required: ['damage_detected', 'severity', 'summary', 'observations', 'conclusion', 'disclaimer'],
 };
 
 class AiService {
@@ -151,94 +130,45 @@ class AiService {
     );
   }
 
-  _normalizeDifference(item) {
+  _normalizeConfidence(value) {
+    const normalized = this._toString(value, '').toLowerCase();
+    return ['low', 'medium', 'high'].includes(normalized) ? normalized : 'low';
+  }
+
+  _normalizeGalleryObservation(obs) {
     return {
-      area: this._toString(item?.area, 'Khong xac dinh'),
-      description: this._toString(item?.description, ''),
-      likely_new_damage: this._toBoolean(item?.likely_new_damage),
+      area: this._toString(obs?.area, 'Khong xac dinh'),
+      description: this._toString(obs?.description, ''),
+      evidence: this._toString(obs?.evidence, ''),
+      severity_level: this._normalizeSeverity(obs?.severity_level, 'none'),
+      likely_new_damage: this._toBoolean(obs?.likely_new_damage),
+      confidence: this._normalizeConfidence(obs?.confidence),
+      needs_manual_review: this._toBoolean(obs?.needs_manual_review),
     };
   }
 
-  _defaultSingleSummary(damageDetected) {
+  _defaultGallerySummary(damageDetected, hasBefore = false) {
+    if (!hasBefore) {
+      return damageDetected
+        ? 'AI phat hien mot so dau hieu hu hong can kiem tra them trong gallery anh hien tai.'
+        : 'AI chua phat hien hu hong ro rang trong gallery anh hien tai.';
+    }
+
     return damageDetected
-      ? 'AI phat hien thay doi can kiem tra them giua anh truoc va anh sau.'
-      : 'AI chua phat hien hu hong moi ro rang giua hai anh.';
+      ? 'AI phat hien mot so thay doi can kiem tra them giua nhom anh BEFORE va AFTER.'
+      : 'AI chua phat hien hu hong moi ro rang khi doi chieu nhom anh BEFORE va AFTER.';
   }
 
-  _defaultSingleConclusion(damageDetected) {
+  _defaultGalleryConclusion(damageDetected, hasBefore = false) {
+    if (!hasBefore) {
+      return damageDetected
+        ? 'Nen kiem tra truc tiep cac khu vuc duoc canh bao de xac nhan tinh trang xe.'
+        : 'Xe co ve khong co dau hieu bat thuong ro rang trong cac anh da gui.';
+    }
+
     return damageDetected
-      ? 'Nen kiem tra truc tiep de xac nhan muc do va nguyen nhan thay doi.'
-      : 'Xe co ve khong co thay doi ro rang canh bao trong cap anh nay.';
-  }
-
-  _defaultMultiSummary(damageDetected, count) {
-    return damageDetected
-      ? `AI phat hien it nhat mot vi tri can luu y trong ${count} vi tri da so sanh.`
-      : `AI chua phat hien hu hong moi ro rang trong ${count} vi tri da so sanh.`;
-  }
-
-  _defaultMultiConclusion(damageDetected) {
-    return damageDetected
-      ? 'Nen doi chieu truc tiep tung vi tri duoc canh bao de xac nhan ket qua.'
-      : 'Khong co dau hieu bat thuong ro rang trong cac vi tri da duoc AI so sanh.';
-  }
-
-  _normalizePositionResult(item, fallbackLabel) {
-    const differences = Array.isArray(item?.differences) ? item.differences.map((entry) => this._normalizeDifference(entry)) : [];
-    const damageDetected = this._toBoolean(item?.damage_detected) || differences.some((entry) => entry.likely_new_damage);
-    const rawSeverity = this._normalizeSeverity(item?.severity, damageDetected ? 'minor' : 'none');
-
-    return {
-      position: this._toString(item?.position, fallbackLabel),
-      damage_detected: damageDetected,
-      severity: damageDetected ? rawSeverity : 'none',
-      differences,
-      notes: this._toString(
-        item?.notes,
-        damageDetected ? 'Can doi chieu thuc te de xac nhan thay doi.' : 'Khong thay thay doi moi ro rang.',
-      ),
-    };
-  }
-
-  _normalizeSingleDamagePayload(payload) {
-    const differences = Array.isArray(payload?.differences) ? payload.differences.map((entry) => this._normalizeDifference(entry)) : [];
-    const damageDetected = this._toBoolean(payload?.damage_detected) || differences.some((entry) => entry.likely_new_damage);
-    const rawSeverity = this._normalizeSeverity(payload?.severity, damageDetected ? 'minor' : 'none');
-
-    return {
-      damage_detected: damageDetected,
-      severity: damageDetected ? rawSeverity : 'none',
-      summary: this._toString(payload?.summary, this._defaultSingleSummary(damageDetected)),
-      differences,
-      conclusion: this._toString(payload?.conclusion, this._defaultSingleConclusion(damageDetected)),
-      disclaimer: this._toString(payload?.disclaimer, DEFAULT_DISCLAIMER),
-    };
-  }
-
-  _normalizeMultiDamagePayload(payload, expectedLabels = []) {
-    const sourcePositions = Array.isArray(payload?.positions) ? payload.positions : [];
-    const fallbackLabels =
-      expectedLabels.length > 0 ? expectedLabels : sourcePositions.map((_, index) => `Vi tri ${index + 1}`);
-
-    const normalizedPositions = fallbackLabels.map((label, index) =>
-      this._normalizePositionResult(sourcePositions[index], label),
-    );
-
-    const damageDetected =
-      this._toBoolean(payload?.damage_detected) || normalizedPositions.some((position) => position.damage_detected);
-    const derivedSeverity = this._maxSeverity(normalizedPositions.map((position) => position.severity));
-    const topSeverity = damageDetected
-      ? this._normalizeSeverity(payload?.severity, derivedSeverity === 'none' ? 'minor' : derivedSeverity)
-      : 'none';
-
-    return {
-      damage_detected: damageDetected,
-      severity: topSeverity,
-      summary: this._toString(payload?.summary, this._defaultMultiSummary(damageDetected, normalizedPositions.length)),
-      positions: normalizedPositions,
-      conclusion: this._toString(payload?.conclusion, this._defaultMultiConclusion(damageDetected)),
-      disclaimer: this._toString(payload?.disclaimer, DEFAULT_DISCLAIMER),
-    };
+      ? 'Nen kiem tra truc tiep cac thay doi duoc canh bao de xac nhan muc do va nguyen nhan.'
+      : 'Xe co ve khong co thay doi ro rang canh bao trong nhom anh AFTER.';
   }
 
   _concatCandidateTextParts(response) {
@@ -367,65 +297,147 @@ class AiService {
     throwError(`Gemini khong tra ve noi dung (${contextLabel})`, 502);
   }
 
-  async compareVehicleRentalDamage(before, after) {
-    const model = this._getModel(DAMAGE_RESPONSE_SCHEMA, 4096);
-    const prompt = [
-      'Ban nhan 2 anh cua cung mot vi tri xe.',
-      'Anh 1 la truoc khi cho thue.',
-      'Anh 2 la khi tra xe.',
-      'So sanh de phat hien hu hong moi, tray xuoc moi, bien dang moi hoac thay doi dang luu y.',
-      'Neu goc chup khac nhau, hay ghi ro muc do anh huong den do tin cay.',
-      'Tra ve DUY NHAT 1 JSON object hop le, khong markdown, khong code fence, khong text ngoai JSON.',
-      'Neu khong thay hu hong moi, van phai giu day du cac key va de differences = [].',
-      'disclaimer phai nhac ro day chi la danh gia ho tro.',
-    ].join('\n');
-
-    const result = await model.generateContent([{ text: prompt }, this._toInlineData(before), this._toInlineData(after)]);
-    const response = result.response;
-    const raw = this._getRawResponseText(response);
-    this._throwIfEmptyResponse(response, raw, 'single-position');
-
-    const parsed = this._parseJsonResponse(raw, 'single-position');
-    return this._normalizeSingleDamagePayload(parsed);
-  }
-
-  async compareMultiPosition(positions) {
-    if (!Array.isArray(positions) || positions.length === 0) {
-      throwError('Can it nhat mot cap anh de phan tich', 400);
+  /**
+   * Phân tích gallery ảnh xe tự do (không yêu cầu vị trí cụ thể).
+   * images: Array of { type: 'file', buffer, mimetype } or { type: 'url', url }
+   */
+  async compareGalleryImages(images) {
+    if (!Array.isArray(images) || images.length === 0) {
+      throwError('Can it nhat mot anh de phan tich', 400);
+    }
+    if (images.length > 6) {
+      throwError('Chi duoc phan tich toi da 6 anh', 400);
     }
 
-    const model = this._getModel(MULTI_DAMAGE_RESPONSE_SCHEMA, 8192);
-    const positionLines = positions.map(
-      (position, index) => `- Vi tri ${index + 1}: ${position.label}. Cap anh gui theo thu tu TRUOC roi SAU.`,
-    );
+    const model = this._getModel(GALLERY_DAMAGE_RESPONSE_SCHEMA, 8192);
 
     const prompt = [
-      'Ban nhan nhieu cap anh xe. Moi vi tri co dung 2 anh: TRUOC roi SAU.',
-      ...positionLines,
+      `Ban nhan ${images.length} anh cua mot chiec xe. Anh co the chup tu nhieu goc, khoang cach va khu vuc khac nhau.`,
+      'Hay phan tich tinh trang hien tai cua xe, phat hien hu hong, tray xuoc, bien dang hoac diem dang luu y.',
+      'Khong co nhom anh TRUOC nen khong duoc khang dinh chac chan hu hong moi. Neu can doi chieu thuc te, dat needs_manual_review = true.',
       '',
-      'Voi tung vi tri, hay so sanh anh TRUOC va anh SAU de phat hien thay doi moi.',
-      `Mang "positions" bat buoc co dung ${positions.length} phan tu va giu dung thu tu nhu danh sach tren.`,
       'Tra ve DUY NHAT 1 JSON object hop le, khong markdown, khong code fence, khong text ngoai JSON.',
-      'Neu mot vi tri khong co hu hong moi ro rang, van phai giu du key voi differences = [].',
+      'Neu khong thay hu hong hoac diem dang luu y, van phai giu du key va de observations = [].',
       'disclaimer phai nhac ro day chi la danh gia ho tro.',
     ].join('\n');
 
     const content = [{ text: prompt }];
-    for (const position of positions) {
-      content.push(this._toInlineData(position.before));
-      content.push(this._toInlineData(position.after));
+
+    // Add all image data to content
+    for (const image of images) {
+      if (image.type === 'file' && image.buffer && image.mimetype) {
+        content.push({
+          inlineData: {
+            mimeType: image.mimetype,
+            data: image.buffer.toString('base64'),
+          },
+        });
+      } else if (image.type === 'url' && image.url) {
+        // For URLs, we'll add them as text references in the prompt
+        // (Gemini API has limited support for external URLs)
+        content[0].text += `\n- Anh tu URL: ${image.url}`;
+      }
     }
 
     const result = await model.generateContent(content);
     const response = result.response;
     const raw = this._getRawResponseText(response);
-    this._throwIfEmptyResponse(response, raw, 'multi-position');
+    this._throwIfEmptyResponse(response, raw, 'gallery');
 
-    const parsed = this._parseJsonResponse(raw, 'multi-position');
-    return this._normalizeMultiDamagePayload(
-      parsed,
-      positions.map((position) => this._toString(position.label, 'Vi tri can doi chieu')),
+    const parsed = this._parseJsonResponse(raw, 'gallery');
+
+    const observations = Array.isArray(parsed?.observations)
+      ? parsed.observations.map((obs) => this._normalizeGalleryObservation(obs))
+      : [];
+
+    const damageDetected =
+      this._toBoolean(parsed?.damage_detected) || observations.some((obs) => obs.likely_new_damage);
+    const rawSeverity = this._normalizeSeverity(parsed?.severity, damageDetected ? 'minor' : 'none');
+
+    return {
+      damage_detected: damageDetected,
+      severity: damageDetected ? rawSeverity : 'none',
+      summary: this._toString(parsed?.summary, this._defaultGallerySummary(damageDetected)),
+      observations,
+      conclusion: this._toString(parsed?.conclusion, this._defaultGalleryConclusion(damageDetected)),
+      disclaimer: this._toString(parsed?.disclaimer, DEFAULT_DISCLAIMER),
+    };
+  }
+
+  async compareBeforeAfterGallery(beforeImages, afterImages) {
+    if (!Array.isArray(afterImages) || afterImages.length === 0) {
+      throwError('Can it nhat mot anh SAU de phan tich', 400);
+    }
+    if ((Array.isArray(beforeImages) && beforeImages.length > 6) || afterImages.length > 6) {
+      throwError('Moi nhom anh chi duoc toi da 6 anh', 400);
+    }
+
+    const safeBefore = Array.isArray(beforeImages) ? beforeImages : [];
+    const safeAfter = afterImages;
+    const model = this._getModel(GALLERY_DAMAGE_RESPONSE_SCHEMA, 8192);
+
+    const prompt = [
+      `Ban nhan 2 nhom anh cua cung mot chiec xe: ${safeBefore.length} anh BEFORE va ${safeAfter.length} anh AFTER.`,
+      'BEFORE la anh xe truoc khi ban giao. AFTER la anh xe khi duoc tra.',
+      'Anh khong duoc gan vi tri co dinh, co the khac goc chup, anh sang, khoang cach hoac vung xe xuat hien.',
+      '',
+      'Nhiem vu:',
+      '1. Tu nhan dien khu vuc xe co the doi chieu giua BEFORE va AFTER.',
+      '2. Chi ket luan hu hong moi khi co bang chung hop ly giua BEFORE va AFTER.',
+      '3. Neu AFTER co dau hieu hu hong nhung BEFORE thieu goc tuong ung, dat likely_new_damage = false va needs_manual_review = true.',
+      '4. Khong coi khac biet do anh sang, bong, phan chieu, bui ban, goc chup, crop anh hoac anh mo la hu hong moi neu khong du bang chung.',
+      '5. Moi observation phai ghi area, description, evidence, severity_level, likely_new_damage, confidence, needs_manual_review.',
+      '',
+      'Tra ve DUY NHAT 1 JSON object hop le, khong markdown, khong code fence, khong text ngoai JSON.',
+      'Neu khong thay hu hong moi ro rang va khong co diem nao can review thu cong, van phai giu du key va de observations = [].',
+      'disclaimer phai nhac ro day chi la danh gia ho tro.',
+    ].join('\n');
+
+    const content = [{ text: prompt }];
+    safeBefore.forEach((image, index) => {
+      if (image.type === 'file' && image.buffer && image.mimetype) {
+        content.push({ text: `BEFORE image ${index + 1}` });
+        content.push(this._toInlineData(image));
+      } else if (image.type === 'url' && image.url) {
+        content[0].text += `\n- BEFORE URL ${index + 1}: ${image.url}`;
+      }
+    });
+    safeAfter.forEach((image, index) => {
+      if (image.type === 'file' && image.buffer && image.mimetype) {
+        content.push({ text: `AFTER image ${index + 1}` });
+        content.push(this._toInlineData(image));
+      } else if (image.type === 'url' && image.url) {
+        content[0].text += `\n- AFTER URL ${index + 1}: ${image.url}`;
+      }
+    });
+
+    const result = await model.generateContent(content);
+    const response = result.response;
+    const raw = this._getRawResponseText(response);
+    this._throwIfEmptyResponse(response, raw, 'before-after-gallery');
+
+    const parsed = this._parseJsonResponse(raw, 'before-after-gallery');
+    const observations = Array.isArray(parsed?.observations)
+      ? parsed.observations.map((obs) => this._normalizeGalleryObservation(obs))
+      : [];
+
+    const damageDetected =
+      this._toBoolean(parsed?.damage_detected) || observations.some((obs) => obs.likely_new_damage);
+    const derivedSeverity = this._maxSeverity(observations.map((obs) => obs.severity_level));
+    const rawSeverity = this._normalizeSeverity(
+      parsed?.severity,
+      damageDetected && derivedSeverity === 'none' ? 'minor' : derivedSeverity,
     );
+
+    return {
+      damage_detected: damageDetected,
+      severity: damageDetected ? rawSeverity : 'none',
+      summary: this._toString(parsed?.summary, this._defaultGallerySummary(damageDetected, true)),
+      observations,
+      conclusion: this._toString(parsed?.conclusion, this._defaultGalleryConclusion(damageDetected, true)),
+      disclaimer: this._toString(parsed?.disclaimer, DEFAULT_DISCLAIMER),
+      comparison_mode: 'gallery',
+    };
   }
 }
 

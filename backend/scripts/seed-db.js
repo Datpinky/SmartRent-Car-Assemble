@@ -38,7 +38,7 @@ const Payment = require('../src/models/payment.model');
 const Review = require('../src/models/review.model');
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
-const hashPw = (pw) => bcrypt.hash(pw, 10);
+const hashPw = async (pw) => bcrypt.hash(pw, await bcrypt.genSalt(10));
 const daysFromNow = (n) => new Date(Date.now() + n * 86400000);
 const daysAgo = (n) => new Date(Date.now() - n * 86400000);
 
@@ -50,6 +50,9 @@ function ok(msg) {
 }
 function info(msg) {
   console.log(`  ℹ️   ${msg}`);
+}
+function warn(msg) {
+  console.log(`  ⚠️   ${msg}`);
 }
 
 // ─── Data definitions ──────────────────────────────────────────────────────
@@ -63,7 +66,7 @@ const USERS_DEF = [
     phone: '0900000000',
     address: 'Hà Nội',
     is_active: true,
-    driver_license_status: 'none',
+    driver_license_status: 'approved',
   },
   {
     name: 'Showroom Hà Nội',
@@ -75,7 +78,7 @@ const USERS_DEF = [
     business_name: 'SmartRent Hà Nội',
     tax_code: '0123456789',
     is_active: true,
-    driver_license_status: 'none',
+    driver_license_status: 'approved',
   },
   {
     name: 'Showroom Sài Gòn',
@@ -87,7 +90,7 @@ const USERS_DEF = [
     business_name: 'SmartRent Sài Gòn',
     tax_code: '9876543210',
     is_active: true,
-    driver_license_status: 'none',
+    driver_license_status: 'approved',
   },
   {
     name: 'Nguyễn Văn An',
@@ -603,7 +606,7 @@ async function run() {
       createdUsers.push({ ...def, _id: new mongoose.Types.ObjectId() });
       continue;
     }
-    // Không hash thủ công — User model đã có pre('save') hook tự hash
+    // User model pre-save hook sẽ tự hash password
     const user = await User.create(def);
     ok(`Tạo: ${def.email} (${def.role})`);
     createdUsers.push(user);
@@ -622,6 +625,18 @@ async function run() {
   const sh2 = createdUsers.find((u) => u.email === 'showroom2@smartrent.com');
   const vehiclesDef = makeVehicles(sh1._id, sh2._id);
   const createdVehicles = [];
+  // Ensure any previous seed vehicles with the same plate numbers are removed
+  if (!DRY_RUN) {
+    try {
+      const plates = vehiclesDef.map((v) => v.vehicle_plate_number).filter(Boolean);
+      if (plates.length) {
+        await Vehicle.deleteMany({ vehicle_plate_number: { $in: plates } });
+        info(`Cleared existing seed vehicles (${plates.length}) by plate numbers`);
+      }
+    } catch (e) {
+      warn(`Failed to clear existing vehicles: ${e.message}`);
+    }
+  }
 
   for (const def of vehiclesDef) {
     const exists = await Vehicle.findOne({

@@ -4,11 +4,9 @@ import Modal from '../../../components/common/Modal';
 import { RENTAL_CONTRACT_UI } from '../../../constants/rentalContractTemplate';
 import bookingService from '../../../services/bookingService';
 import inspectionService from '../../../services/inspectionService';
-import uploadService from '../../../services/uploadService';
 import { getBookingFlowState } from '../../../utils/bookingFlowState';
 import { canRenterViewOfficialRentalContract } from '../../../utils/rentalContractEligibility';
 import { getRentalWorkflow, saveRentalWorkflow } from '../../../utils/rentalWorkflowStorage';
-import { POSITIONS } from '../../showroom/AIInspection/aiInspection.helpers';
 import RentalBookingOverview from './rentalFlow/components/RentalBookingOverview';
 import RentalChecklistSection from './rentalFlow/components/RentalChecklistSection';
 import RentalReturnSection from './rentalFlow/components/RentalReturnSection';
@@ -50,15 +48,13 @@ const RentalFlowModal = ({ isOpen, onClose, booking, onSaved }) => {
   const receiveChecklistCount = countChecked(workflow.receiveChecklist);
   const returnNoteFilled = workflow.returnNote?.trim() ? 1 : 0;
 
-  // Count completed inspection positions (6 required)
-  const returnImages = workflow.returnImages || {};
-  const completedPositions = Object.values(returnImages).filter(
-    (images) => Array.isArray(images) && images.length > 0,
-  ).length;
-  const allPositionsComplete = completedPositions === 6;
+  const returnImages = Array.isArray(workflow.returnImages)
+    ? workflow.returnImages.filter(Boolean).slice(0, 6)
+    : Object.values(workflow.returnImages || {}).flat().filter(Boolean).slice(0, 6);
+  const hasReturnImages = returnImages.length > 0;
 
   const returnProgressPercent = Math.round(
-    ((returnChecklistCount + returnNoteFilled + (allPositionsComplete ? 1 : 0)) / (RETURN_FIELDS.length + 2)) * 100,
+    ((returnChecklistCount + returnNoteFilled + (hasReturnImages ? 1 : 0)) / (RETURN_FIELDS.length + 2)) * 100,
   );
   const showReceiveSection = ['waiting_handover', 'handed_over'].includes(booking?.status);
   const showReturnSection = ['in_use', 'waiting_return_confirmation', 'completed'].includes(booking?.status);
@@ -152,127 +148,22 @@ const RentalFlowModal = ({ isOpen, onClose, booking, onSaved }) => {
       let returnStatusUpdated = false;
       if (booking?.status === 'in_use') {
         try {
-          // ✅ Upload return images before requesting return
-          const returnImages = workflow.returnImages || {};
-          console.log('📸 handleSaveSection - Return workflow data:', {
-            status: booking?.status,
-            bookingId: booking._id || booking.id,
-            returnImagesStructure: {
-              type: typeof returnImages,
-              isArray: Array.isArray(returnImages),
-              keys: Object.keys(returnImages),
-              total: Object.values(returnImages).flat().length,
-            },
-            rawReturnImages: returnImages,
-          });
+          const rawReturnImages = Array.isArray(workflow.returnImages)
+            ? workflow.returnImages
+            : Object.values(workflow.returnImages || {}).flat();
+          const returnImageUrls = rawReturnImages
+            .map((img) => (typeof img === 'string' ? img : img?.url || ''))
+            .filter((url) => url && url.startsWith('http'))
+            .slice(0, 6);
 
-          const filesToUpload = [];
-          const uploadMap = [];
-
-          // Collect return images (stored as File objects or URL strings)
-          POSITIONS.forEach((pos, idx) => {
-            const images = returnImages[pos.key] || [];
-            console.log(`🖼️ Position ${pos.key} images:`, {
-              count: images.length,
-              types: images.map((img) => {
-                if (img instanceof File) return 'File';
-                if (typeof img === 'string') return 'URL';
-                if (img?.url) return 'Object.url';
-                return 'Unknown';
-              }),
-              images,
-            });
-            if (Array.isArray(images)) {
-              images.forEach((img) => {
-                // If it's a File object, collect it for upload
-                if (img instanceof File) {
-                  filesToUpload.push(img);
-                  uploadMap.push({ posKey: pos.key, type: 'after', isFile: true });
-                }
-                // If it's already a URL string, mark it for later use
-                else if (typeof img === 'string' && img.startsWith('http')) {
-                  uploadMap.push({ posKey: pos.key, type: 'after', isFile: false, url: img });
-                }
-              });
-            }
-          });
-
-          console.log('📤 Collecting Files and URLs for upload:', {
-            filesToUpload: filesToUpload.length,
-            totalEntries: uploadMap.length,
-            uploadMap,
-          });
-
-          // Upload return images
-          const uploadedUrls = filesToUpload.length > 0 ? await uploadService.uploadImages(filesToUpload) : [];
-          console.log('✅ Uploaded return images:', {
-            count: uploadedUrls.length,
-            urls: uploadedUrls.map((u) => (typeof u === 'string' ? u : u?.url)),
-          });
-
-          // Create a map: uploadMapIndex -> uploadedUrl
-          const uploadedUrlsByMapIndex = {};
-          let uploadUrlCounter = 0;
-          uploadMap.forEach((entry, idx) => {
-            if (entry.isFile) {
-              uploadedUrlsByMapIndex[idx] = uploadedUrls[uploadUrlCounter]?.url || uploadedUrls[uploadUrlCounter];
-              uploadUrlCounter++;
-            }
-          });
-
-          // Build positions record
-          const positionsRecord = [];
-          POSITIONS.forEach((pos) => {
-            // Find first upload entry for this position
-            const firstUploadForPos = uploadMap.find((m) => m.posKey === pos.key);
-            let afterUrl = '';
-
-            console.log(`📍 Processing position ${pos.key}:`, {
-              hasUpload: !!firstUploadForPos,
-              uploadEntry: firstUploadForPos,
-            });
-
-            if (firstUploadForPos) {
-              if (firstUploadForPos.isFile) {
-                // Get URL from uploadedUrls
-                const mapIdx = uploadMap.indexOf(firstUploadForPos);
-                afterUrl = uploadedUrlsByMapIndex[mapIdx] || '';
-                console.log(`  ├─ isFile: mapping index ${mapIdx} -> ${afterUrl?.substring(0, 50)}`);
-              } else {
-                // Already a URL
-                afterUrl = firstUploadForPos.url || '';
-                console.log(`  ├─ isURL: using ${afterUrl?.substring(0, 50)}`);
-              }
-            }
-
-            if (afterUrl) {
-              console.log(`  └─ ✅ Added to positionsRecord`);
-              positionsRecord.push({
-                position_key: pos.key,
-                position_label: pos.label,
-                before_url: '', // Empty for return inspection
-                after_url: afterUrl,
-              });
-            } else {
-              console.log(`  └─ ⚠️ No URL found`);
-            }
-          });
-
-          console.log('📋 Built positionsRecord:', {
-            totalPositions: POSITIONS.length,
-            filled: positionsRecord.length,
-            records: positionsRecord,
-          });
-
-          // ✅ Create inspection record for renter return images
-          if (positionsRecord.length > 0) {
+          if (returnImageUrls.length > 0) {
             // Fetch full booking to ensure vehicle_id is populated
             let fullBooking = booking;
             try {
               const freshBooking = await bookingService.getBookingById(booking._id || booking.id);
               if (freshBooking) {
                 fullBooking = freshBooking;
-                console.log('📋 Fetched full booking for inspection:', {
+                console.log('Fetched full booking for inspection:', {
                   bookingId: fullBooking._id || fullBooking.id,
                   vehicle_id: fullBooking.vehicle_id,
                 });
@@ -281,14 +172,13 @@ const RentalFlowModal = ({ isOpen, onClose, booking, onSaved }) => {
               console.warn('Failed to fetch fresh booking, using existing:', fetchErr);
             }
 
-            // Extract vehicle ID from booking (could be string, object with _id, or object with id)
             const vehicleId =
               (typeof fullBooking.vehicle_id === 'string' ? fullBooking.vehicle_id : null) ||
               fullBooking.vehicle_id?._id ||
               fullBooking.vehicle_id?.id;
 
             if (!vehicleId) {
-              console.error('⚠️ Cannot create inspection: vehicle_id is missing or invalid', {
+              console.error('Cannot create inspection: vehicle_id is missing or invalid', {
                 bookingId: fullBooking._id || fullBooking.id,
                 vehicle_id: fullBooking.vehicle_id,
               });
@@ -300,36 +190,35 @@ const RentalFlowModal = ({ isOpen, onClose, booking, onSaved }) => {
                 inspected_by_role: 'renter',
                 vehicle_name: fullBooking.vehicleName || fullBooking.vehicle_id?.vehicle_name || 'Xe',
                 vehicle_plate: fullBooking.vehicle_plate || fullBooking.plate || '',
-                booking_code: `BK${String(fullBooking._id || fullBooking.id)
-                  .slice(-6)
-                  .toUpperCase()}`,
-                positions: positionsRecord,
-                positions_analyzed: 0,
+                booking_code: 'BK' + String(fullBooking._id || fullBooking.id).slice(-6).toUpperCase(),
+                pickup_images: Array.isArray(fullBooking.pickup_images) ? fullBooking.pickup_images.slice(0, 6) : [],
+                return_images: returnImageUrls,
+                gallery_images: returnImageUrls,
+                gallery_analyzed: returnImageUrls.length,
                 ai_payload: {},
                 damage_detected: false,
                 severity: 'none',
-                position_results: [],
+                observations: [],
+                comparison_mode: 'gallery',
               };
-              console.log('📝 Creating renter return inspection record:', {
+              console.log('Creating renter return inspection record:', {
                 bookingId: booking._id || booking.id,
                 vehicleId,
-                positionsCount: positionsRecord.length,
-                positions: positionsRecord,
+                returnImagesCount: returnImageUrls.length,
                 payload: inspectionPayload,
               });
               try {
                 const createdInspection = await inspectionService.create(inspectionPayload);
-                console.log('✅ Inspection record created:', {
+                console.log('Inspection record created:', {
                   inspectionId: createdInspection?._id || createdInspection?.id,
                   response: createdInspection,
                 });
               } catch (inspectionErr) {
-                console.error('⚠️ Failed to create inspection record:', inspectionErr);
-                // Don't block return request if inspection save fails
+                console.error('Failed to create inspection record:', inspectionErr);
               }
             }
           } else {
-            console.log('⚠️ No positions to create inspection record');
+            console.log('No return images to create inspection record');
           }
 
           // Request return status update

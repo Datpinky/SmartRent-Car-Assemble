@@ -8,6 +8,11 @@ const bookingSchema = new mongoose.Schema(
     start_date: { type: Date, required: true },
     end_date: { type: Date, required: true },
     total_price: { type: Number, required: true },
+    delivery_type: { type: String, enum: ['delivery', 'self'], default: 'self' },
+    delivery_address: { type: String, default: '' },
+    delivery_latitude: { type: Number, default: null },
+    delivery_longitude: { type: Number, default: null },
+    delivery_plus_code: { type: String, default: '' },
     status: {
       type: String,
       required: true,

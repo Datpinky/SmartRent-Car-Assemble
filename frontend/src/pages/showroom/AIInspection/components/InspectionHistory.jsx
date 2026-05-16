@@ -1,7 +1,6 @@
 import { FaCheckCircle, FaChevronDown, FaChevronUp, FaExclamationTriangle, FaSpinner } from 'react-icons/fa';
 import StatusBadge from '../../../../components/common/StatusBadge';
 import {
-  POSITIONS,
   SEVERITY_LABEL,
   bookingCodeShort,
   fmtDate,
@@ -61,21 +60,15 @@ function InspectionHistory({ historyRows, loadingHistory, expandedRow, onToggleR
 
             const isExpand = expandedRow === latestH._id;
 
-            // Merge positions from all related inspections
-            const mergedPositions = {};
+            const mergedPickupImages = [];
+            const mergedReturnImages = [];
             group.inspections.forEach((h) => {
-              if (Array.isArray(h.positions)) {
-                h.positions.forEach((pos) => {
-                  const key = pos.position_key || pos.position_label;
-                  if (!mergedPositions[key]) {
-                    mergedPositions[key] = { position_label: pos.position_label, position_key: key };
-                  }
-                  // Merge URLs
-                  if (pos.before_url) mergedPositions[key].before_url = pos.before_url;
-                  if (pos.after_url) mergedPositions[key].after_url = pos.after_url;
-                });
-              }
+              if (Array.isArray(h.pickup_images)) mergedPickupImages.push(...h.pickup_images);
+              if (Array.isArray(h.return_images)) mergedReturnImages.push(...h.return_images);
+              if (Array.isArray(h.gallery_images) && h.inspection_type === 'return') mergedReturnImages.push(...h.gallery_images);
             });
+            const pickupImages = [...new Set(mergedPickupImages.filter(Boolean))].slice(0, 6);
+            const returnImages = [...new Set(mergedReturnImages.filter(Boolean))].slice(0, 6);
 
             return (
               <div
@@ -151,31 +144,25 @@ function InspectionHistory({ historyRows, loadingHistory, expandedRow, onToggleR
                           </div>
                         )}
 
-                        {Array.isArray(h.position_results) && h.position_results.length > 0 && (
+                        {Array.isArray(h.observations) && h.observations.length > 0 && (
                           <div className="mb-2">
-                            <div className="font-bold text-[0.75rem] text-gray-700 mb-1">Kết quả chi tiết</div>
+                            <div className="font-bold text-[0.75rem] text-gray-700 mb-1">Ket qua chi tiet</div>
                             <div className="flex flex-wrap gap-1">
-                              {h.position_results.slice(0, 3).map((pr, pi) => {
-                                const posInfo = POSITIONS.find(
-                                  (p) => p.label === pr.position || p.key === pr.position_key,
-                                );
-                                return (
-                                  <div
-                                    key={pi}
-                                    className={`rounded px-2 py-1 text-[0.7rem] border ${
-                                      pr.damage_detected
-                                        ? 'bg-amber-50 border-amber-200 text-amber-700'
-                                        : 'bg-white border-gray-200 text-gray-600'
-                                    }`}
-                                  >
-                                    {posInfo && <span>{posInfo.icon}</span>} {pr.position}
-                                  </div>
-                                );
-                              })}
-                              {h.position_results.length > 3 && (
-                                <span className="text-[0.7rem] text-gray-500 px-2 py-1">
-                                  +{h.position_results.length - 3}
-                                </span>
+                              {h.observations.slice(0, 3).map((obs, pi) => (
+                                <div
+                                  key={pi}
+                                  className={
+                                    'rounded px-2 py-1 text-[0.7rem] border ' +
+                                    (obs.likely_new_damage
+                                      ? 'bg-amber-50 border-amber-200 text-amber-700'
+                                      : 'bg-white border-gray-200 text-gray-600')
+                                  }
+                                >
+                                  {obs.area || 'Khu vuc'}
+                                </div>
+                              ))}
+                              {h.observations.length > 3 && (
+                                <span className="text-[0.7rem] text-gray-500 px-2 py-1">+{h.observations.length - 3}</span>
                               )}
                             </div>
                           </div>
@@ -183,58 +170,48 @@ function InspectionHistory({ historyRows, loadingHistory, expandedRow, onToggleR
 
                         {h.ai_payload?.summary && (
                           <div className="text-[0.75rem] text-slate-600 bg-white rounded px-2 py-1.5 mb-2 border border-gray-200">
-                            <strong>Tóm tắt:</strong> {h.ai_payload.summary}
+                            <strong>Tom tat:</strong> {h.ai_payload.summary}
                           </div>
                         )}
                       </div>
                     ))}
 
-                    {/* Merged images section */}
-                    {Object.values(mergedPositions).some((p) => p.before_url || p.after_url) && (
+                    {(pickupImages.length > 0 || returnImages.length > 0) && (
                       <div className="mt-3 pt-3 border-t border-gray-200">
-                        <div className="font-bold text-[0.82rem] text-gray-700 mb-2">Ảnh so sánh (Minh bạch)</div>
-                        <div className="flex gap-3 flex-wrap">
-                          {Object.values(mergedPositions)
-                            .filter((p) => p.before_url || p.after_url)
-                            .map((p, pi) => (
-                              <div key={pi} className="text-center">
-                                <div className="text-[0.7rem] text-gray-500 mb-1 font-semibold">{p.position_label}</div>
-                                <div className="flex gap-1.5">
-                                  {p.before_url && (
-                                    <a
-                                      href={p.before_url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      title="Ảnh bàn giao (Showroom)"
-                                    >
-                                      <img
-                                        src={p.before_url}
-                                        alt="trước"
-                                        className="w-[72px] h-[52px] object-cover rounded-md border-2 border-blue-200 cursor-pointer hover:border-blue-400 transition"
-                                      />
-                                    </a>
-                                  )}
-                                  {p.after_url && (
-                                    <a
-                                      href={p.after_url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      title="Ảnh trả về (Renter)"
-                                    >
-                                      <img
-                                        src={p.after_url}
-                                        alt="sau"
-                                        className="w-[72px] h-[52px] object-cover rounded-md border-2 border-green-200 cursor-pointer hover:border-green-400 transition"
-                                      />
-                                    </a>
-                                  )}
-                                </div>
-                                <div className="text-[0.65rem] text-gray-400 mt-0.5 flex gap-1 justify-center">
-                                  {p.before_url && <span>🔵 Trước</span>}
-                                  {p.after_url && <span>🟢 Sau</span>}
-                                </div>
+                        <div className="font-bold text-[0.82rem] text-gray-700 mb-2">Anh so sanh</div>
+                        <div className="flex gap-5 flex-wrap">
+                          {pickupImages.length > 0 && (
+                            <div>
+                              <div className="text-[0.72rem] text-blue-700 font-semibold mb-1">BEFORE</div>
+                              <div className="flex gap-2 flex-wrap">
+                                {pickupImages.map((url, pi) => (
+                                  <a key={url || pi} href={url} target="_blank" rel="noopener noreferrer">
+                                    <img
+                                      src={url}
+                                      alt="before"
+                                      className="w-[72px] h-[52px] object-cover rounded-md border-2 border-blue-200 cursor-pointer hover:border-blue-400 transition"
+                                    />
+                                  </a>
+                                ))}
                               </div>
-                            ))}
+                            </div>
+                          )}
+                          {returnImages.length > 0 && (
+                            <div>
+                              <div className="text-[0.72rem] text-green-700 font-semibold mb-1">AFTER</div>
+                              <div className="flex gap-2 flex-wrap">
+                                {returnImages.map((url, pi) => (
+                                  <a key={url || pi} href={url} target="_blank" rel="noopener noreferrer">
+                                    <img
+                                      src={url}
+                                      alt="after"
+                                      className="w-[72px] h-[52px] object-cover rounded-md border-2 border-green-200 cursor-pointer hover:border-green-400 transition"
+                                    />
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}

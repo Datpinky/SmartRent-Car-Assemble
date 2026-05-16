@@ -59,16 +59,29 @@ const mergeProfileWithLocation = (user, userLocation) =>
   });
 
 export const profileService = {
-  async getProfileById(userId) {
+  async getProfileById(userId, options = { fetchUserLocation: false }) {
     if (!userId) {
       return null;
     }
 
+    const { fetchUserLocation = false } = options || {};
+
     try {
-      const [profileRes, userLocation] = await Promise.all([
-        apiClient.get(`/api/profile/getProfileById/${userId}`),
-        userLocationService.getByUserId(userId),
-      ]);
+      const profileRes = await apiClient.get(`/api/profile/getProfileById/${userId}`);
+
+      let userLocation = null;
+      if (fetchUserLocation) {
+        try {
+          userLocation = await userLocationService.getByUserId(userId);
+        } catch (err) {
+          const status = err?.status ?? err?.response?.status;
+          if (status === 404) {
+            userLocation = null;
+          } else {
+            throw err;
+          }
+        }
+      }
 
       const mappedProfile = mergeProfileWithLocation(profileRes.data?.data || profileRes.data, userLocation);
       const storedUser = readStoredUser();
@@ -96,7 +109,8 @@ export const profileService = {
       return null;
     }
 
-    return this.getProfileById(userId);
+    // Do not fetch stored userLocation by default for current profile.
+    return this.getProfileById(userId, { fetchUserLocation: false });
   },
 
   async updateProfile(userId, payload = {}) {

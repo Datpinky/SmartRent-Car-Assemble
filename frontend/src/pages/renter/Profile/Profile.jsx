@@ -7,6 +7,7 @@ import SavedCardManager from '../../../components/common/SavedCardManager';
 import { useAuth } from '../../../contexts/AuthContext';
 import mapService from '../../../services/mapService';
 import profileService from '../../../services/profileService';
+import userLocationService from '../../../services/userLocationService';
 import DriverLicenseSection from './components/DriverLicenseSection';
 import {
   buildInitialForm,
@@ -107,6 +108,15 @@ const Profile = () => {
     return null;
   }, []);
 
+  const resolveAddressFromCoordinates = useCallback(async (latitude, longitude) => {
+    try {
+      const result = await mapService.reverseGeocode(latitude, longitude);
+      return result?.address || formatCoordinates(latitude, longitude);
+    } catch {
+      return formatCoordinates(latitude, longitude);
+    }
+  }, []);
+
   const hydrateProfileLocation = useCallback(
     async (profileData) => {
       const nextAddress = String(profileData?.address || '').trim();
@@ -115,7 +125,34 @@ const Profile = () => {
         setMapLocation(resolvedLocation);
         return;
       }
-      if (applyStoredLocation(profileData?.userLocation, nextAddress)) return;
+
+      // If there is a stored userLocation, only display it automatically
+      // when the browser already granted geolocation permission. This
+      // prevents the app from appearing to "take" the user's current
+      // device location without an explicit consent prompt.
+      const stored = profileData?.userLocation;
+      if (stored) {
+        let allowed = false;
+        try {
+          if (navigator.permissions && navigator.permissions.query) {
+            const status = await navigator.permissions.query({ name: 'geolocation' });
+            allowed = status.state === 'granted';
+          }
+        } catch (e) {
+          // If Permissions API is not available, default to not auto-showing
+          allowed = false;
+        }
+
+        if (allowed) {
+          applyStoredLocation(stored, nextAddress);
+          return;
+        }
+
+        // Do not auto-show stored location — require user action (button).
+        setMapLocation(null);
+        return;
+      }
+
       setMapLocation(null);
     },
     [applyStoredLocation, resolveAddressLocation],
@@ -136,10 +173,31 @@ const Profile = () => {
     let mounted = true;
     setLoadingProfile(true);
     profileService
-      .getProfileById(authUserId)
+      .getProfileById(authUserId, { fetchUserLocation: false })
       .then(async (nextProfile) => {
         if (!mounted) return;
         const resolvedProfile = nextProfile || fallbackProfileRef.current;
+
+        // Only fetch stored userLocation from the server when the browser
+        // geolocation permission is already granted. This avoids making a
+        // backend request that would expose a stored location without
+        // explicit client-side permission.
+        try {
+          if (navigator.permissions && navigator.permissions.query) {
+            try {
+              const status = await navigator.permissions.query({ name: 'geolocation' });
+              if (status.state === 'granted') {
+                const stored = await userLocationService.getByUserId(authUserId);
+                if (stored) resolvedProfile.userLocation = stored;
+              }
+            } catch (e) {
+              // ignore permission check or fetch errors and do not auto-show
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+
         setProfile(resolvedProfile);
         setSavedAddress(resolvedProfile.address || '');
         updateUser(resolvedProfile);
@@ -234,7 +292,7 @@ const Profile = () => {
     });
   };
 
-  const handleUseCurrentLocation = () => {
+  const handleUseCurrentLocation = useCallback(() => {
     if (!navigator.geolocation) {
       setNotice({ type: 'error', message: 'Trinh duyet khong ho tro lay vi tri.' });
       return;
@@ -242,9 +300,9 @@ const Profile = () => {
     setLoadingLocation(true);
     setNotice({ type: '', message: '' });
     navigator.geolocation.getCurrentPosition(
-      (position) => {
+      async (position) => {
         const { latitude, longitude } = position.coords;
-        const address = formatCoordinates(latitude, longitude);
+        const address = await resolveAddressFromCoordinates(latitude, longitude);
         setForm((current) => ({ ...current, address }));
         setAddressSuggestions([]);
         setMapLocation({ address, latitude, longitude, plusCode: '' });
@@ -256,6 +314,79 @@ const Profile = () => {
       },
       { enableHighAccuracy: true, timeout: 10000 },
     );
+  }, [resolveAddressFromCoordinates]);
+
+  // show current location without touching the form (viewer action)
+  const getCurrentPositionAsync = (options = { enableHighAccuracy: true, timeout: 10000 }) =>
+    new Promise((resolve, reject) => {
+      if (!navigator.geolocation) return reject(new Error('Trinh duyet khong ho tro lay vi tri.'));
+      navigator.geolocation.getCurrentPosition(resolve, reject, options);
+    });
+
+  const showCurrentLocation = async () => {
+    setNotice({ type: '', message: '' });
+    try {
+      if (navigator.permissions && navigator.permissions.query) {
+        try {
+          const status = await navigator.permissions.query({ name: 'geolocation' });
+          if (status.state === 'denied') {
+            setNotice({ type: 'error', message: 'Truy cập vị trí đã bị từ chối — bật lại trong cài đặt trình duyệt.' });
+            return;
+          }
+        } catch {
+          // ignore permission check failures and fall through to prompting
+        }
+      }
+      setLoadingLocation(true);
+      const position = await getCurrentPositionAsync();
+      const { latitude, longitude } = position.coords;
+      const address = await resolveAddressFromCoordinates(latitude, longitude);
+      setAddressSuggestions([]);
+      setMapLocation({ address, latitude, longitude, plusCode: '' });
+    } catch (err) {
+      const message = err?.message || 'Khong the lay vi tri. Hay kiem tra quyen truy cap.';
+      setNotice({ type: 'error', message });
+    } finally {
+      setLoadingLocation(false);
+    }
+  };
+
+  // get current location and save it to backend (updates user's address + userLocation)
+  const saveCurrentLocation = async () => {
+    setNotice({ type: '', message: '' });
+    try {
+      if (navigator.permissions && navigator.permissions.query) {
+        try {
+          const status = await navigator.permissions.query({ name: 'geolocation' });
+          if (status.state === 'denied') {
+            setNotice({ type: 'error', message: 'Truy cập vị trí đã bị từ chối — bật lại trong cài đặt trình duyệt.' });
+            return;
+          }
+        } catch {
+          // ignore
+        }
+      }
+      setLoadingLocation(true);
+      const position = await getCurrentPositionAsync();
+      const { latitude, longitude } = position.coords;
+      const address = await resolveAddressFromCoordinates(latitude, longitude);
+      const updatedProfile = await profileService.updateProfile(userId, {
+        address,
+        latitude,
+        longitude,
+        plusCode: '',
+      });
+      setProfile(updatedProfile);
+      updateUser(updatedProfile);
+      setSavedAddress(updatedProfile.address || '');
+      if (updatedProfile?.userLocation) applyStoredLocation(updatedProfile.userLocation, updatedProfile.address || '');
+      setNotice({ type: 'success', message: 'Đã lưu vị trí hiện tại.' });
+    } catch (err) {
+      const message = err?.message || 'Khong the lay vi tri. Hay kiem tra quyen truy cap.';
+      setNotice({ type: 'error', message });
+    } finally {
+      setLoadingLocation(false);
+    }
   };
 
   const handleStartEdit = () => {
@@ -661,6 +792,29 @@ const Profile = () => {
                 <FaMapMarkerAlt style={{ fontSize: '2rem' }} />
                 <span>Chưa xác định được vị trí</span>
                 {isEditing && <span style={{ fontSize: '0.78rem' }}>Nhập địa chỉ ở trên hoặc dùng nút lấy vị trí</span>}
+                {!isEditing && (
+                  <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={showCurrentLocation}
+                      className="btn-outline"
+                      disabled={loadingLocation}
+                      style={{ fontSize: '0.86rem', padding: '8px 12px' }}
+                    >
+                      {loadingLocation ? <FaSpinner className="animate-spin" /> : <FaLocationArrow />} Hiện vị trí
+                    </button>
+                    <button
+                      type="button"
+                      onClick={saveCurrentLocation}
+                      className="btn-primary"
+                      disabled={loadingLocation}
+                      style={{ fontSize: '0.86rem', padding: '8px 12px' }}
+                    >
+                      {loadingLocation ? <FaSpinner className="animate-spin" /> : <FaLocationArrow />} Lưu vị trí hiện
+                      tại
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

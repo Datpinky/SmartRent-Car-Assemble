@@ -1,5 +1,25 @@
 import apiClient from './apiClient';
 
+const toNumberOrNull = (value) => {
+  const nextValue = Number(value);
+  return Number.isFinite(nextValue) ? nextValue : null;
+};
+
+const normalizeVehicleLocation = (location = {}) => ({
+  id: location._id || location.id || '',
+  _id: location._id || location.id || '',
+  vehicleId:
+    (typeof location.vehicle === 'object' ? location.vehicle?._id || location.vehicle?.id : location.vehicle)
+    || location.vehicleId
+    || '',
+  address: location.address || '',
+  latitude: toNumberOrNull(location.latitude),
+  longitude: toNumberOrNull(location.longitude),
+  plusCode: location.plus_code || location.plusCode || '',
+  createdAt: location.createdAt || '',
+  updatedAt: location.updatedAt || '',
+});
+
 export const vehicleLocationService = {
   /**
    * Create a location record for a vehicle (requires auth).
@@ -11,7 +31,7 @@ export const vehicleLocationService = {
       `/api/vehicle_location/createVehicleLocation/${vehicleId}`,
       payload
     );
-    return res.data.data;
+    return normalizeVehicleLocation(res.data.data);
   },
 
   /**
@@ -19,10 +39,18 @@ export const vehicleLocationService = {
    * Returns: { address, latitude, longitude, plus_code, vehicle } or null
    */
   async getByVehicleId(vehicleId) {
-    const res = await apiClient.get(
-      `/api/vehicle_location/getVehicleLocationByVehicleId/${vehicleId}`
-    );
-    return res.data.data;
+    try {
+      const res = await apiClient.get(
+        `/api/vehicle_location/getVehicleLocationByVehicleId/${vehicleId}`
+      );
+      return normalizeVehicleLocation(res.data.data);
+    } catch (error) {
+      const status = error?.status ?? error?.response?.status;
+      if (status === 404) {
+        return null;
+      }
+      throw error;
+    }
   },
 
   /**
@@ -34,7 +62,7 @@ export const vehicleLocationService = {
       `/api/vehicle_location/vehicle/${vehicleId}`,
       payload
     );
-    return res.data.data;
+    return normalizeVehicleLocation(res.data.data);
   },
 };
 

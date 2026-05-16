@@ -123,6 +123,9 @@ class BookingController {
         console.error('❌ pickup_images không phải array:', typeof pickup_images);
         return res.status(400).json({ message: 'pickup_images phải là mảng URL' });
       }
+      if (pickup_images.length > 6) {
+        return res.status(400).json({ message: 'Chỉ được lưu tối đa 6 ảnh bàn giao' });
+      }
       const result = await bookingService.savePickupImages(bookingId, req.user.userId, pickup_images);
       console.log('✅ Backend saved:', { bookingId, savedCount: result.pickup_images?.length });
       return res.status(200).json({ message: 'Lưu ảnh bàn giao thành công', data: result });

@@ -34,6 +34,7 @@ const COLLECTIONS_TO_CLEAR = [
   { name: 'userlocations', label: 'User Locations' },
   { name: 'vehiclelocations', label: 'Vehicle Locations' },
   { name: 'vehicles', label: 'Vehicles' },
+  { name: 'vehicleinspections', label: 'Vehicle Inspections' },
 ];
 
 const USER_COLLECTION = { name: 'users', label: 'Users' };

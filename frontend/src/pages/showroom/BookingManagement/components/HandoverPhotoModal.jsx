@@ -1,64 +1,158 @@
 import { useRef, useState } from 'react';
-import { FaCamera, FaTimesCircle } from 'react-icons/fa';
+import { FaCamera, FaPlus, FaTimesCircle } from 'react-icons/fa';
 import Modal from '../../../../components/common/Modal';
-import { HANDOVER_POSITIONS } from '../bookingManagement.helpers';
+
+const MAX_HANDOVER_PHOTOS = 6;
 
 const HandoverPhotoModal = ({ handoverPhotoModal, handoverUploading, onConfirm, onClose }) => {
-  const [handoverPhotos, setHandoverPhotos] = useState({});
-  const photoInputRefs = useRef({});
+  const [handoverPhotos, setHandoverPhotos] = useState([]);
+  const photoInputRef = useRef(null);
 
   const handleClose = () => {
-    if (!handoverUploading) { setHandoverPhotos({}); onClose(); }
+    if (!handoverUploading) {
+      setHandoverPhotos([]);
+      onClose();
+    }
   };
 
   const handleConfirm = (skipPhotos) => {
     onConfirm(handoverPhotos, skipPhotos);
-    setHandoverPhotos({});
+    setHandoverPhotos([]);
+  };
+
+  const handleSelectPhotos = (event) => {
+    const files = Array.from(event.target.files || []).filter((file) => file.type.startsWith('image/'));
+    event.target.value = '';
+    if (!files.length) return;
+
+    setHandoverPhotos((current) => [...current, ...files].slice(0, MAX_HANDOVER_PHOTOS));
+  };
+
+  const removePhoto = (index) => {
+    setHandoverPhotos((current) => current.filter((_, idx) => idx !== index));
   };
 
   return (
-    <Modal isOpen={!!handoverPhotoModal} onClose={handleClose} title="Chụp ảnh xe trước khi bàn giao (không bắt buộc)" width={540}>
+    <Modal
+      isOpen={!!handoverPhotoModal}
+      onClose={handleClose}
+      title="Chụp ảnh xe trước khi bàn giao (không bắt buộc)"
+      width={560}
+    >
       {handoverPhotoModal && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 14px', fontSize: '0.8rem', color: '#1e40af' }}>
-            <strong>Mẹo:</strong> Chụp ảnh xe từng góc trước khi bàn giao giúp AI so sánh tự động khi khách trả xe. Bạn có thể bỏ qua bước này và vẫn bàn giao xe bình thường.
+          <div
+            style={{
+              background: '#eff6ff',
+              border: '1px solid #bfdbfe',
+              borderRadius: 10,
+              padding: '10px 14px',
+              fontSize: '0.8rem',
+              color: '#1e40af',
+            }}
+          >
+            <strong>Mẹo:</strong> Tải tối đa {MAX_HANDOVER_PHOTOS} ảnh xe trước khi bàn giao. Ảnh này sẽ làm bộ BEFORE
+            để AI so sánh với ảnh trả xe sau này.
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
-            {HANDOVER_POSITIONS.map((label, idx) => {
-              const file = handoverPhotos[idx];
-              const preview = file ? URL.createObjectURL(file) : null;
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(104px, 1fr))', gap: 10 }}>
+            {handoverPhotos.map((file, idx) => {
+              const preview = URL.createObjectURL(file);
               return (
-                <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#374151' }}>{label}</span>
-                  {preview ? (
-                    <div style={{ position: 'relative' }}>
-                      <img src={preview} alt={label} style={{ width: '100%', height: 80, objectFit: 'cover', borderRadius: 8, border: '2px solid #2563eb' }} />
-                      <button type="button" onClick={() => setHandoverPhotos((p) => { const n = { ...p }; delete n[idx]; return n; })}
-                        style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: '50%', width: 20, height: 20, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <FaTimesCircle style={{ color: '#fff', fontSize: '0.7rem' }} />
-                      </button>
-                    </div>
-                  ) : (
-                    <button type="button" onClick={() => photoInputRefs.current[idx]?.click()}
-                      style={{ width: '100%', height: 80, border: '2px dashed #93c5fd', borderRadius: 8, background: '#eff6ff', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                      <FaCamera style={{ color: '#2563eb', fontSize: '1.1rem' }} />
-                      <span style={{ fontSize: '0.65rem', color: '#6b7280' }}>Chọn ảnh</span>
-                    </button>
-                  )}
-                  <input ref={(el) => { photoInputRefs.current[idx] = el; }} type="file" accept="image/*" style={{ display: 'none' }}
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) setHandoverPhotos((p) => ({ ...p, [idx]: f })); e.target.value = ''; }} />
+                <div key={`${file.name}-${idx}`} style={{ position: 'relative', aspectRatio: '1' }}>
+                  <img
+                    src={preview}
+                    alt={`Ảnh bàn giao ${idx + 1}`}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      borderRadius: 8,
+                      border: '2px solid #2563eb',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removePhoto(idx)}
+                    style={{
+                      position: 'absolute',
+                      top: 4,
+                      right: 4,
+                      background: 'rgba(0,0,0,0.55)',
+                      border: 'none',
+                      borderRadius: '50%',
+                      width: 22,
+                      height: 22,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                    aria-label="Xóa ảnh"
+                  >
+                    <FaTimesCircle style={{ color: '#fff', fontSize: '0.75rem' }} />
+                  </button>
                 </div>
               );
             })}
+
+            {handoverPhotos.length < MAX_HANDOVER_PHOTOS && (
+              <button
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={handoverUploading}
+                style={{
+                  aspectRatio: '1',
+                  border: '2px dashed #93c5fd',
+                  borderRadius: 8,
+                  background: '#eff6ff',
+                  cursor: handoverUploading ? 'default' : 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                }}
+              >
+                {handoverPhotos.length === 0 ? (
+                  <FaCamera style={{ color: '#2563eb', fontSize: '1.2rem' }} />
+                ) : (
+                  <FaPlus style={{ color: '#2563eb', fontSize: '1rem' }} />
+                )}
+                <span style={{ fontSize: '0.7rem', color: '#1d4ed8', fontWeight: 700 }}>Thêm ảnh</span>
+              </button>
+            )}
           </div>
+
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            style={{ display: 'none' }}
+            onChange={handleSelectPhotos}
+          />
+
           <div style={{ fontSize: '0.78rem', color: '#6b7280' }}>
-            {Object.keys(handoverPhotos).length} / {HANDOVER_POSITIONS.length} góc đã chọn
+            {handoverPhotos.length} / {MAX_HANDOVER_PHOTOS} ảnh đã chọn
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button type="button" className="btn-outline" style={{ flex: 1 }} onClick={() => handleConfirm(true)} disabled={handoverUploading}>
+            <button
+              type="button"
+              className="btn-outline"
+              style={{ flex: 1 }}
+              onClick={() => handleConfirm(true)}
+              disabled={handoverUploading}
+            >
               Bỏ qua ảnh & bàn giao
             </button>
-            <button type="button" className="btn-primary" style={{ flex: 1 }} onClick={() => handleConfirm(false)} disabled={handoverUploading}>
+            <button
+              type="button"
+              className="btn-primary"
+              style={{ flex: 1 }}
+              onClick={() => handleConfirm(false)}
+              disabled={handoverUploading}
+            >
               {handoverUploading ? 'Đang tải ảnh...' : 'Lưu ảnh & bàn giao'}
             </button>
           </div>

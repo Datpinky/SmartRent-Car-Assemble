@@ -49,7 +49,18 @@ const ALLOWED_TRANSITIONS = {
 
 class BookingService {
   static async createBooking(data, userId) {
-    const { vehicle_id, showroom_id, start_date, end_date, note } = data;
+    const {
+      vehicle_id,
+      showroom_id,
+      start_date,
+      end_date,
+      note,
+      delivery_type,
+      delivery_address,
+      delivery_latitude,
+      delivery_longitude,
+      delivery_plus_code,
+    } = data;
 
     // 1. Kiểm tra driver_license phía server (không phụ thuộc frontend)
     const renter = await User.findById(userId).select('driver_license_status').lean();
@@ -103,6 +114,26 @@ class BookingService {
 
         if (conflict) throwError('Xe đã có lịch đặt trong khoảng thời gian này', 409);
 
+        // Validate delivery fields server-side
+        const dType = String(delivery_type || 'self');
+        const dAddr = String(delivery_address || '').trim();
+        let dLat = null;
+        let dLng = null;
+        if (delivery_latitude !== undefined && delivery_latitude !== null && delivery_latitude !== '') {
+          const n = Number(delivery_latitude);
+          if (!Number.isFinite(n) || n < -90 || n > 90) throwError('delivery_latitude không hợp lệ', 400);
+          dLat = n;
+        }
+        if (delivery_longitude !== undefined && delivery_longitude !== null && delivery_longitude !== '') {
+          const n = Number(delivery_longitude);
+          if (!Number.isFinite(n) || n < -180 || n > 180) throwError('delivery_longitude không hợp lệ', 400);
+          dLng = n;
+        }
+        if (dType === 'delivery') {
+          if (!dAddr || dAddr.length < 6)
+            throwError('Khi chọn giao tận nơi, delivery_address phải có ít nhất 6 ký tự', 400);
+        }
+
         [booking] = await Booking.create(
           [
             {
@@ -113,6 +144,11 @@ class BookingService {
               end_date: endDate,
               total_price,
               note: note || '',
+              delivery_type: dType,
+              delivery_address: dAddr || '',
+              delivery_latitude: dLat,
+              delivery_longitude: dLng,
+              delivery_plus_code: delivery_plus_code || '',
             },
           ],
           { session },
@@ -248,7 +284,7 @@ class BookingService {
     console.log('📋 Booking found. showroom_id:', booking.showroom_id.toString(), 'userId:', showroomUserId.toString());
     if (booking.showroom_id.toString() !== showroomUserId.toString())
       throwError('Bạn không có quyền cập nhật booking này', 403);
-    const safeImages = images.filter((u) => typeof u === 'string' && u.startsWith('http')).slice(0, 30);
+    const safeImages = images.filter((u) => typeof u === 'string' && u.startsWith('http')).slice(0, 6);
     console.log('📸 Safe images after filter:', safeImages.length);
     booking.pickup_images = safeImages;
     await booking.save();

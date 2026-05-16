@@ -33,6 +33,49 @@ const fetchJson = async (url) => {
 };
 
 export const mapService = {
+  async directReverseGeocode(lat, lon) {
+    const latitude = Number(lat);
+    const longitude = Number(lon);
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return null;
+    }
+
+    const cacheKey = `${latitude.toFixed(6)}|${longitude.toFixed(6)}|direct`;
+    if (reverseCache.has(cacheKey)) {
+      return reverseCache.get(cacheKey);
+    }
+
+    const locationIqKey = String(LOCATIONIQ_API_KEY || '').trim();
+    const providerUrls = [];
+
+    if (locationIqKey) {
+      providerUrls.push(
+        `https://api.locationiq.com/v1/reverse?key=${encodeURIComponent(locationIqKey)}&lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}&accept-language=vi&format=json`
+      );
+    }
+
+    providerUrls.push(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}&accept-language=vi`
+    );
+
+    for (const url of providerUrls) {
+      try {
+        const payload = await fetchJson(url);
+        const result = payload ? normalizeReverseResult(payload) : null;
+        if (result?.address) {
+          reverseCache.set(cacheKey, result);
+          return result;
+        }
+      } catch {
+        // Try the next public map provider.
+      }
+    }
+
+    reverseCache.set(cacheKey, null);
+    return null;
+  },
+
   async forwardGeocode(query, { limit = 5, countrycodes = 'vn' } = {}) {
     const trimmedQuery = normalizeQuery(query);
     if (!trimmedQuery || trimmedQuery.length < 6) {
@@ -239,7 +282,15 @@ export const mapService = {
       return result;
     } catch (error) {
       if (error.status === 404) {
-        return null;
+        const fallback = await this.directReverseGeocode(latitude, longitude);
+        reverseCache.set(cacheKey, fallback);
+        return fallback;
+      }
+
+      const fallback = await this.directReverseGeocode(latitude, longitude);
+      if (fallback) {
+        reverseCache.set(cacheKey, fallback);
+        return fallback;
       }
 
       throw new Error(error.message || 'Khong the doi toa do thanh dia chi luc nay.');

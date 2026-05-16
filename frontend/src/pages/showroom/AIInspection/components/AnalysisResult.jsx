@@ -1,7 +1,7 @@
 import { FaCheckCircle, FaExclamationTriangle } from 'react-icons/fa';
 import { MdWarning } from 'react-icons/md';
 import StatusBadge from '../../../../components/common/StatusBadge';
-import { POSITIONS, SEVERITY_LABEL, severityToBadge } from '../aiInspection.helpers';
+import { SEVERITY_LABEL, severityToBadge } from '../aiInspection.helpers';
 
 function AnalysisResult({ analysisResult, saveNote, onReset }) {
   return (
@@ -39,51 +39,39 @@ function AnalysisResult({ analysisResult, saveNote, onReset }) {
         </div>
       )}
 
-      {Array.isArray(analysisResult.positions) && analysisResult.positions.length > 0 && (
+      {Array.isArray(analysisResult.observations) && analysisResult.observations.length > 0 && (
         <div className="mb-4">
-          <div className="font-bold text-[0.88rem] text-gray-700 mb-2.5">Chi tiet theo vi tri</div>
+          <div className="font-bold text-[0.88rem] text-gray-700 mb-2.5">Chi tiet AI</div>
           <div className="flex flex-col gap-2">
-            {analysisResult.positions.map((pos, i) => {
-              const posInfo = POSITIONS.find((p) => p.label === pos.position || p.key === pos.position_key);
+            {analysisResult.observations.map((obs, i) => {
               return (
                 <div
                   key={i}
                   className={`rounded-xl px-3.5 py-3 border ${
-                    pos.damage_detected ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'
+                    obs.likely_new_damage ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="font-bold text-[0.85rem] text-gray-900 flex items-center gap-1.5">
-                      {posInfo && <span>{posInfo.icon}</span>}
-                      {pos.position}
+                      {obs.area || 'Khu vuc chua xac dinh'}
                     </div>
                     <div className="flex items-center gap-1.5">
-                      {pos.damage_detected ? (
+                      {obs.likely_new_damage ? (
                         <FaExclamationTriangle className="text-amber-500 text-[0.85rem]" />
                       ) : (
                         <FaCheckCircle className="text-emerald-600 text-[0.85rem]" />
                       )}
                       <StatusBadge
-                        status={severityToBadge(pos.severity)}
-                        customLabel={SEVERITY_LABEL[pos.severity] || pos.severity || 'N/A'}
+                        status={severityToBadge(obs.severity_level)}
+                        customLabel={SEVERITY_LABEL[obs.severity_level] || obs.severity_level || 'N/A'}
                       />
                     </div>
                   </div>
-                  {pos.notes && <div className="text-[0.8rem] text-gray-500 mb-1.5">{pos.notes}</div>}
-                  {Array.isArray(pos.differences) &&
-                    pos.differences.map((d, j) => (
-                      <div
-                        key={j}
-                        className={`text-[0.8rem] text-gray-700 border-l-[3px] pl-2.5 mb-1 ${
-                          d.likely_new_damage ? 'border-amber-400' : 'border-gray-300'
-                        }`}
-                      >
-                        <strong>{d.area}</strong>: {d.description}
-                        {d.likely_new_damage && (
-                          <span className="ml-1.5 text-amber-700 font-semibold"> Co the hu hong moi</span>
-                        )}
-                      </div>
-                    ))}
+                  <div className="text-[0.8rem] text-gray-700">{obs.description}</div>
+                  {obs.evidence && <div className="text-[0.75rem] text-gray-500 mt-1">{obs.evidence}</div>}
+                  {obs.needs_manual_review && (
+                    <div className="text-[0.75rem] text-amber-700 font-semibold mt-1">Can kiem tra thu cong</div>
+                  )}
                 </div>
               );
             })}

@@ -1,52 +1,47 @@
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
-const positionResultSchema = new Schema(
+const observationSchema = new Schema(
   {
-    position: { type: String }, // label từ AI, e.g. "Đầu xe"
-    damage_detected: { type: Boolean, default: false },
-    severity: {
+    area: { type: String, default: '' },
+    description: { type: String, default: '' },
+    evidence: { type: String, default: '' },
+    likely_new_damage: { type: Boolean, default: false },
+    severity_level: {
       type: String,
       enum: ['none', 'minor', 'moderate', 'severe'],
       default: 'none',
     },
-    differences: { type: Schema.Types.Mixed, default: [] },
-    notes: { type: String, default: '' },
-  },
-  { _id: false },
-);
-
-const positionImageSchema = new Schema(
-  {
-    position_key: { type: String }, // 'front', 'rear', 'left', 'right', 'interior', 'odometer'
-    position_label: { type: String }, // 'Đầu xe', ...
-    before_url: { type: String, default: '' },
-    after_url: { type: String, default: '' },
+    confidence: {
+      type: String,
+      enum: ['low', 'medium', 'high'],
+      default: 'low',
+    },
+    needs_manual_review: { type: Boolean, default: false },
   },
   { _id: false },
 );
 
 const vehicleInspectionSchema = new Schema(
   {
-    // ── Trace ──────────────────────────────────────────────────────────────
     vehicle_id: { type: Schema.Types.ObjectId, ref: 'Vehicle', required: true, index: true },
     booking_id: { type: Schema.Types.ObjectId, ref: 'Booking', default: null, index: true },
-    showroom_id: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true }, // only for pickup inspections by showroom
-    inspection_type: { type: String, enum: ['pickup', 'return'], default: 'pickup' }, // pickup (before handover) or return (after)
-    inspected_by_role: { type: String, enum: ['showroom', 'renter'], default: 'showroom' }, // who did the inspection
-    inspected_by_id: { type: Schema.Types.ObjectId, ref: 'User', default: null }, // user who did the inspection
+    showroom_id: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+    inspection_type: { type: String, enum: ['pickup', 'return'], default: 'return' },
+    inspected_by_role: { type: String, enum: ['showroom', 'renter'], default: 'showroom' },
+    inspected_by_id: { type: Schema.Types.ObjectId, ref: 'User', default: null },
 
-    // Denormalised for fast display without populates
     vehicle_name: { type: String, default: '' },
     vehicle_plate: { type: String, default: '' },
     inspected_by_name: { type: String, default: '' },
-    booking_code: { type: String, default: '' }, // e.g. BK7855DA
+    booking_code: { type: String, default: '' },
 
-    // ── Images per position ───────────────────────────────────────────────
-    positions: { type: [positionImageSchema], default: [] },
-    positions_analyzed: { type: Number, default: 0 }, // positions where both images existed
+    // Free-form pickup and return galleries for the new inspection flow.
+    pickup_images: { type: [String], default: [] },
+    return_images: { type: [String], default: [] },
+    gallery_images: { type: [String], default: [] },
+    gallery_analyzed: { type: Number, default: 0 },
 
-    // ── AI result ─────────────────────────────────────────────────────────
     ai_payload: { type: Schema.Types.Mixed, default: {} },
     damage_detected: { type: Boolean, default: false },
     severity: {
@@ -54,8 +49,15 @@ const vehicleInspectionSchema = new Schema(
       enum: ['none', 'minor', 'moderate', 'severe'],
       default: 'none',
     },
-    // Per-position breakdown stored from AI response
-    position_results: { type: [positionResultSchema], default: [] },
+    observations: { type: [observationSchema], default: [] },
+    summary: { type: String, default: '' },
+    conclusion: { type: String, default: '' },
+    disclaimer: { type: String, default: '' },
+    comparison_mode: {
+      type: String,
+      enum: ['gallery', 'current_only'],
+      default: 'gallery',
+    },
   },
   { timestamps: true },
 );

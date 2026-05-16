@@ -88,8 +88,8 @@ const BookingManagement = () => {
     const { bookingId } = handoverPhotoModal;
     setHandoverUploading(true);
     try {
-      if (!skipPhotos && Object.keys(handoverPhotos).length > 0) {
-        const files = Object.values(handoverPhotos).filter(Boolean);
+      if (!skipPhotos && Array.isArray(handoverPhotos) && handoverPhotos.length > 0) {
+        const files = handoverPhotos.filter(Boolean).slice(0, 6);
         console.log('📸 Uploading handover photos:', files.length, 'files');
         try {
           const uploaded = await uploadService.uploadImages(files);
