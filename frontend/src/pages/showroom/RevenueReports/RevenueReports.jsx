@@ -5,7 +5,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import bookingService from '../../../services/bookingService';
 import vehicleService from '../../../services/vehicleService';
 import { formatVnd } from '../../../utils/currencyFormat';
-import { buildShowroomMonthlyFromBookings } from '../../../utils/dashboardFromApi';
+import { buildShowroomMonthlyFromBookings, isRevenueBooking } from '../../../utils/dashboardFromApi';
 
 const downloadBlob = (filename, text, mime) => {
   const blob = new Blob([text], { type: mime });
@@ -56,7 +56,7 @@ const RevenueReports = () => {
   }, [user?._id]);
 
   const showroomRevenue = useMemo(() => {
-    const monthly = buildShowroomMonthlyFromBookings(bookings, 12);
+    const monthly = buildShowroomMonthlyFromBookings((bookings || []).filter(isRevenueBooking), 12);
     return monthly.map((m) => ({
       ...m,
       expense: 0,
@@ -69,6 +69,23 @@ const RevenueReports = () => {
   const lastMonth = showroomRevenue[showroomRevenue.length - 1];
   const monthRevenueVnd = (lastMonth?.revenue || 0) * 1_000_000;
   const completedTrips = bookings.filter((b) => b.status === 'completed').length;
+
+  const resolveId = (v) => {
+    if (!v) return '';
+    return typeof v === 'string' ? v : v._id || v.id || '';
+  };
+
+  const tripsMap = useMemo(() => {
+    const m = new Map();
+    (bookings || [])
+      .filter((b) => String(b.status || '').toLowerCase() === 'completed')
+      .forEach((b) => {
+        const vid = resolveId(b.vehicle_id);
+        if (!vid) return;
+        m.set(vid, (m.get(vid) || 0) + 1);
+      });
+    return m;
+  }, [bookings]);
 
   const exportCsv = () => {
     const rows = [
@@ -290,7 +307,7 @@ const RevenueReports = () => {
                       <span className="code-badge">{v.plateNumber || '—'}</span>
                     </td>
                     <td>{v.type || v.category || '—'}</td>
-                    <td style={{ textAlign: 'center', fontWeight: 700 }}>{v.trips ?? 0}</td>
+                    <td style={{ textAlign: 'center', fontWeight: 700 }}>{tripsMap.get(resolveId(v)) ?? v.trips ?? 0}</td>
                     <td style={{ fontWeight: 700, color: '#00b14f' }}>{formatVnd(v.price || 0)}</td>
                   </tr>
                 ))}

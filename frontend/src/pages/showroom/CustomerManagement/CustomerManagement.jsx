@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FaRoute, FaSpinner } from 'react-icons/fa';
 import DataTable from '../../../components/common/DataTable';
 import StatusBadge from '../../../components/common/StatusBadge';
@@ -37,6 +37,10 @@ const CustomerManagement = () => {
     const customerMap = {};
 
     for (const booking of bookings) {
+      // ignore cancelled bookings to avoid inflating metrics
+      const bstatus = String(booking?.status || booking?.booking_status || '').toLowerCase();
+      if (bstatus.includes('cancel')) continue;
+
       const renter = booking.user_id;
       if (!renter) continue;
 
@@ -133,10 +137,7 @@ const CustomerManagement = () => {
       key: 'status',
       label: 'TK',
       render: (row) => (
-        <StatusBadge
-          status={row.status}
-          customLabel={row.status === 'locked' ? 'Bị khóa' : 'Hoạt động'}
-        />
+        <StatusBadge status={row.status} customLabel={row.status === 'locked' ? 'Bị khóa' : 'Hoạt động'} />
       ),
     },
   ];
@@ -158,9 +159,24 @@ const CustomerManagement = () => {
         ].map((summary) => (
           <div
             key={summary.label}
-            style={{ background: '#fff', borderRadius: 10, padding: '10px 18px', border: '1px solid #f0f0f0', flex: 1, minWidth: 160 }}
+            style={{
+              background: '#fff',
+              borderRadius: 10,
+              padding: '10px 18px',
+              border: '1px solid #f0f0f0',
+              flex: 1,
+              minWidth: 160,
+            }}
           >
-            <div style={{ fontSize: '0.72rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
+            <div
+              style={{
+                fontSize: '0.72rem',
+                color: '#9ca3af',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                marginBottom: 4,
+              }}
+            >
               {summary.label}
             </div>
             <div className="tabular-nums" style={{ fontWeight: 800, fontSize: '1.1rem', color: summary.color }}>

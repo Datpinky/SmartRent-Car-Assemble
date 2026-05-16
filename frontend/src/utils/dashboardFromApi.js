@@ -2,6 +2,17 @@
  * Helpers to build dashboard chart/table shapes from API data (no mock files).
  */
 
+export const REALIZED_REVENUE_STATUSES = new Set([
+  'paid',
+  'waiting_handover',
+  'handed_over',
+  'in_use',
+  'waiting_return_confirmation',
+  'completed',
+]);
+
+export const isRevenueBooking = (booking) => REALIZED_REVENUE_STATUSES.has(String(booking?.status || '').toLowerCase());
+
 export function buildEmptyRevenueMonths(months = 6) {
   const out = [];
   const now = new Date();
@@ -34,7 +45,11 @@ export function buildShowroomMonthlyFromBookings(bookings = [], monthsBack = 12)
     const d = new Date(raw);
     const key = `${d.getFullYear()}-${d.getMonth()}`;
     if (!sums[key]) continue;
-    sums[key].revenueVnd += Number(b.total_price) || 0;
+
+    if (isRevenueBooking(b)) {
+      sums[key].revenueVnd += Number(b.total_price) || 0;
+    }
+
     sums[key].bookings += 1;
   }
   return keys.map(({ key, month }) => ({

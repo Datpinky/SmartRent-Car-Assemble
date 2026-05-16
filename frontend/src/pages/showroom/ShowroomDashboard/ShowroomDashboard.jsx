@@ -8,6 +8,7 @@ import {
   buildShowroomAlertsFromBookings,
   buildShowroomMonthlyFromBookings,
   buildVehicleStatusPieFromVehicles,
+  isRevenueBooking,
   mapBookingToShowroomTableRow,
 } from '../../../utils/dashboardFromApi';
 import Variant1Layout from './components/Variant1Layout';
@@ -32,13 +33,13 @@ const ShowroomDashboard = () => {
       setLoadError('');
       try {
         const vFilters = user?._id ? { added_by: user._id, limit: 100 } : {};
-        const [{ data: vData }, { items: bItems }] = await Promise.all([
+        const [{ data: vData }, bItems] = await Promise.all([
           vehicleService.getList(vFilters),
-          bookingService.getListBookings({ limit: 100 }),
+          bookingService.getCurrentRoleBookingsDetailed(),
         ]);
         if (!cancelled) {
           setVehicles(vData || []);
-          setBookings(bItems || []);
+          setBookings(Array.isArray(bItems) ? bItems : []);
         }
       } catch (e) {
         if (!cancelled) {
@@ -55,7 +56,8 @@ const ShowroomDashboard = () => {
     };
   }, [user?._id]);
 
-  const monthlySeries = useMemo(() => buildShowroomMonthlyFromBookings(bookings, 12), [bookings]);
+  const revenueBookings = useMemo(() => (bookings || []).filter(isRevenueBooking), [bookings]);
+  const monthlySeries = useMemo(() => buildShowroomMonthlyFromBookings(revenueBookings, 12), [revenueBookings]);
   const bookingRows = useMemo(() => (bookings || []).map(mapBookingToShowroomTableRow), [bookings]);
   const vehicleStatusPie = useMemo(() => buildVehicleStatusPieFromVehicles(vehicles), [vehicles]);
   const initialAlerts = useMemo(() => buildShowroomAlertsFromBookings(bookings, 8), [bookings]);
