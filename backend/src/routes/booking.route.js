@@ -48,6 +48,9 @@ router.delete(
 // Renter xác nhận nhận xe bằng OTP showroom cung cấp
 router.post('/verifyHandoverOtp/:bookingId', authMiddleware, bookingController.verifyHandoverOtp);
 
+// Showroom/Admin tạo lại hoặc gửi lại mã OTP bàn giao
+router.post('/resendHandoverOtp/:bookingId', authMiddleware, bookingController.resendHandoverOtp);
+
 // Showroom lưu ảnh chụp xe trước khi bàn giao (tuỳ chọn)
 router.patch('/:bookingId/pickup-images', authMiddleware, bookingController.savePickupImages);
 

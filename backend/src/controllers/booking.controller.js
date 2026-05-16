@@ -114,6 +114,24 @@ class BookingController {
     }
   }
 
+  async resendHandoverOtp(req, res, next) {
+    try {
+      const { bookingId } = req.params;
+      const role = req.user.role;
+      const userId = req.user.userId;
+      const result = await bookingService.resendHandoverOtp(bookingId, role, userId);
+      return res.status(200).json({
+        message: 'Mã OTP đã được tạo lại',
+        data: {
+          handover_otp: result.handover_otp,
+          handover_otp_expires_at: result.handover_otp_expires_at,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async savePickupImages(req, res, next) {
     try {
       const { bookingId } = req.params;

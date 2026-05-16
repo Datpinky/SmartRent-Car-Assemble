@@ -6,13 +6,15 @@ export const uploadService = {
    * files: File[] array (from <input type="file">)
    * Returns: [{ url: string, publicId: string }]
    */
-  async uploadImages(files) {
+  async uploadImages(files, onUploadProgress) {
     const safeFiles = Array.from(files).slice(0, 6);
     const formData = new FormData();
     safeFiles.forEach((file) => formData.append('files', file));
 
     const res = await apiClient.post('/api/uploads/image/files', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress,
+      timeout: 120000,
     });
 
     return res.data.data || [];

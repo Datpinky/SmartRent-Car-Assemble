@@ -628,6 +628,11 @@ export const bookingService = {
     return res.data?.data;
   },
 
+  async resendHandoverOtp(id) {
+    const res = await apiClient.post(`/api/booking/resendHandoverOtp/${id}`);
+    return res.data?.data;
+  },
+
   // Renter gửi yêu cầu trả xe: in_use → waiting_return_confirmation
   async requestReturn(id) {
     return this.updateBookingStatus(id, 'waiting_return_confirmation');

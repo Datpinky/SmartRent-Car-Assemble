@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { FaCarSide, FaCheckCircle, FaInfoCircle, FaPlus, FaRobot, FaSpinner, FaTimes } from 'react-icons/fa';
+import { ACCEPTED_IMAGE_INPUT_ACCEPT, isAcceptedImageFile } from '../../../../utils/acceptedImageTypes';
 import { getVehicleName, getVehicleThumb } from '../aiInspection.helpers';
 
 const MAX_IMAGES = 6;
@@ -44,13 +45,13 @@ function ImageUploadStep({
   const handleAddImage = (e) => {
     const files = Array.from(e.target.files || []);
     if (images.length + files.length > MAX_IMAGES) {
-      alert(`Chá»‰ Ä‘Æ°á»£c upload tá»‘i Ä‘a ${MAX_IMAGES} áº£nh`);
+      alert(`Chỉ được tải tối đa ${MAX_IMAGES} ảnh. Vui lòng chọn ít hơn hoặc xóa bớt ảnh đã chọn.`);
       return;
     }
 
     files.forEach((file) => {
-      if (!file.type.startsWith('image/')) {
-        alert('Chá»‰ cháº¥p nháº­n file áº£nh');
+      if (!isAcceptedImageFile(file)) {
+        alert('Chỉ chấp nhận ảnh JPG, PNG hoặc WEBP. SVG không được hỗ trợ.');
         return;
       }
 
@@ -249,7 +250,7 @@ function ImageUploadStep({
         ref={fileInputRef}
         type="file"
         multiple
-        accept="image/jpeg,image/jpg,image/png,image/webp,image/*"
+        accept={ACCEPTED_IMAGE_INPUT_ACCEPT}
         className="hidden"
         onChange={handleAddImage}
       />

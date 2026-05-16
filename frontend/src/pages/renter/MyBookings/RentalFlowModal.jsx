@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import ContractModal from '../../../components/common/ContractModal';
 import Modal from '../../../components/common/Modal';
 import { RENTAL_CONTRACT_UI } from '../../../constants/rentalContractTemplate';
 import bookingService from '../../../services/bookingService';
 import inspectionService from '../../../services/inspectionService';
+import uploadService from '../../../services/uploadService';
 import { getBookingFlowState } from '../../../utils/bookingFlowState';
 import { canRenterViewOfficialRentalContract } from '../../../utils/rentalContractEligibility';
 import { getRentalWorkflow, saveRentalWorkflow } from '../../../utils/rentalWorkflowStorage';
@@ -20,6 +21,10 @@ const RentalFlowModal = ({ isOpen, onClose, booking, onSaved }) => {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [contractViewerOpen, setContractViewerOpen] = useState(false);
+  const [uploadConfirmOpen, setUploadConfirmOpen] = useState(false);
+  const uploadConfirmResolveRef = useRef(null);
+  const [uploadInProgress, setUploadInProgress] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   useEffect(() => {
     if (!isOpen || !bookingId) {
@@ -50,7 +55,10 @@ const RentalFlowModal = ({ isOpen, onClose, booking, onSaved }) => {
 
   const returnImages = Array.isArray(workflow.returnImages)
     ? workflow.returnImages.filter(Boolean).slice(0, 6)
-    : Object.values(workflow.returnImages || {}).flat().filter(Boolean).slice(0, 6);
+    : Object.values(workflow.returnImages || {})
+        .flat()
+        .filter(Boolean)
+        .slice(0, 6);
   const hasReturnImages = returnImages.length > 0;
 
   const returnProgressPercent = Math.round(
@@ -151,10 +159,95 @@ const RentalFlowModal = ({ isOpen, onClose, booking, onSaved }) => {
           const rawReturnImages = Array.isArray(workflow.returnImages)
             ? workflow.returnImages
             : Object.values(workflow.returnImages || {}).flat();
-          const returnImageUrls = rawReturnImages
-            .map((img) => (typeof img === 'string' ? img : img?.url || ''))
-            .filter((url) => url && url.startsWith('http'))
-            .slice(0, 6);
+
+          // Prepare files to upload (data URLs or file objects) and preserve existing http URLs
+          const filesToUpload = [];
+          const preservedUrls = [];
+
+          rawReturnImages.forEach((img, idx) => {
+            if (typeof img === 'string') {
+              if (img.startsWith('http')) preservedUrls.push(img);
+              else if (img.startsWith('data:')) {
+                // convert dataURL to File
+                const mime = img.match(/data:([^;]+);/)?.[1] || 'image/jpeg';
+                const ext = mime.split('/')[1] || 'jpg';
+                const byteString = atob(img.split(',')[1]);
+                const ab = new ArrayBuffer(byteString.length);
+                const ia = new Uint8Array(ab);
+                for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+                const blob = new Blob([ab], { type: mime });
+                const file = new File([blob], `return_${Date.now()}_${idx}.${ext}`, { type: mime });
+                filesToUpload.push(file);
+              }
+            } else if (img && typeof img === 'object') {
+              const url = img.url || img.data || img.dataUrl || '';
+              if (url && typeof url === 'string' && url.startsWith('http')) preservedUrls.push(url);
+              else if (img.file) filesToUpload.push(img.file);
+              else if (url && typeof url === 'string' && url.startsWith('data:')) {
+                const mime = url.match(/data:([^;]+);/)?.[1] || 'image/jpeg';
+                const ext = mime.split('/')[1] || 'jpg';
+                const byteString = atob(url.split(',')[1]);
+                const ab = new ArrayBuffer(byteString.length);
+                const ia = new Uint8Array(ab);
+                for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+                const blob = new Blob([ab], { type: mime });
+                const file = new File([blob], `return_${Date.now()}_${idx}.${ext}`, { type: mime });
+                filesToUpload.push(file);
+              }
+            }
+          });
+
+          let uploadedUrls = [];
+          if (filesToUpload.length > 0) {
+            // Ask user to confirm upload
+            const wantToUpload = await new Promise((resolve) => {
+              uploadConfirmResolveRef.current = resolve;
+              setUploadConfirmOpen(true);
+            });
+
+            if (!wantToUpload) {
+              // User chose not to upload now: save locally and exit without sending return request
+              setNotice('Đã lưu hồ sơ cục bộ. Ảnh chưa được tải lên.');
+              if (onSaved) {
+                await onSaved({
+                  workflow: saved,
+                  statusUpdated: false,
+                  notice: { tone: 'warning', text: 'Đã lưu cục bộ' },
+                });
+              }
+              setSavingSection('');
+              return;
+            }
+
+            // proceed with upload and show progress
+            setUploadInProgress(true);
+            setUploadProgress(0);
+            try {
+              const uploaded = await uploadService.uploadImages(filesToUpload, (evt) => {
+                try {
+                  const pct = evt.total ? Math.round((evt.loaded * 100) / evt.total) : 0;
+                  setUploadProgress(pct);
+                } catch (e) {
+                  // ignore progress calc errors
+                }
+              });
+              uploadedUrls = uploaded
+                .map((u) => u.url || u)
+                .filter(Boolean)
+                .slice(0, 6);
+            } catch (uploadErr) {
+              console.error('Upload error:', uploadErr);
+              setError(uploadErr?.message || 'Lỗi khi tải ảnh lên');
+              setUploadInProgress(false);
+              setSavingSection('');
+              return;
+            } finally {
+              setUploadInProgress(false);
+              setUploadProgress(0);
+            }
+          }
+
+          const returnImageUrls = [...preservedUrls, ...uploadedUrls].slice(0, 6);
 
           if (returnImageUrls.length > 0) {
             // Fetch full booking to ensure vehicle_id is populated
@@ -190,7 +283,11 @@ const RentalFlowModal = ({ isOpen, onClose, booking, onSaved }) => {
                 inspected_by_role: 'renter',
                 vehicle_name: fullBooking.vehicleName || fullBooking.vehicle_id?.vehicle_name || 'Xe',
                 vehicle_plate: fullBooking.vehicle_plate || fullBooking.plate || '',
-                booking_code: 'BK' + String(fullBooking._id || fullBooking.id).slice(-6).toUpperCase(),
+                booking_code:
+                  'BK' +
+                  String(fullBooking._id || fullBooking.id)
+                    .slice(-6)
+                    .toUpperCase(),
                 pickup_images: Array.isArray(fullBooking.pickup_images) ? fullBooking.pickup_images.slice(0, 6) : [],
                 return_images: returnImageUrls,
                 gallery_images: returnImageUrls,
@@ -213,6 +310,14 @@ const RentalFlowModal = ({ isOpen, onClose, booking, onSaved }) => {
                   inspectionId: createdInspection?._id || createdInspection?.id,
                   response: createdInspection,
                 });
+
+                // Update workflow to replace any data URLs with uploaded HTTP URLs so future saves use stable links
+                if (uploadedUrls.length > 0) {
+                  const merged = [...preservedUrls, ...uploadedUrls].slice(0, 6);
+                  const updatedWorkflow = { ...workflow, returnImages: merged };
+                  saveRentalWorkflow(bookingId, updatedWorkflow);
+                  setWorkflow(updatedWorkflow);
+                }
               } catch (inspectionErr) {
                 console.error('Failed to create inspection record:', inspectionErr);
               }
@@ -381,6 +486,64 @@ const RentalFlowModal = ({ isOpen, onClose, booking, onSaved }) => {
             )}
           </div>
         )}
+      </Modal>
+
+      {/* Confirm upload modal */}
+      <Modal
+        isOpen={uploadConfirmOpen}
+        onClose={() => {
+          setUploadConfirmOpen(false);
+          if (uploadConfirmResolveRef.current) uploadConfirmResolveRef.current(false);
+        }}
+        title="Xác nhận tải ảnh"
+        width={520}
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn-outline"
+              onClick={() => {
+                setUploadConfirmOpen(false);
+                if (uploadConfirmResolveRef.current) uploadConfirmResolveRef.current(false);
+              }}
+            >
+              Không, chỉ lưu cục bộ
+            </button>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => {
+                setUploadConfirmOpen(false);
+                if (uploadConfirmResolveRef.current) uploadConfirmResolveRef.current(true);
+              }}
+            >
+              Có, tải lên và gửi yêu cầu
+            </button>
+          </>
+        }
+      >
+        <div style={{ fontSize: '0.92rem', color: '#374151' }}>
+          Bạn có muốn tải ảnh trả xe lên ngay bây giờ và gửi yêu cầu trả xe tới showroom? Nếu chọn "Không", ảnh sẽ chỉ
+          được lưu cục bộ trên trình duyệt và không gửi yêu cầu trả xe.
+        </div>
+      </Modal>
+
+      {/* Upload progress modal */}
+      <Modal isOpen={uploadInProgress} onClose={() => {}} title="Đang tải ảnh lên" width={520} footer={null}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ fontSize: '0.92rem', color: '#374151' }}>Đang tải ảnh, vui lòng chờ...</div>
+          <div style={{ height: 12, background: '#e5e7eb', borderRadius: 999, overflow: 'hidden' }}>
+            <div
+              style={{
+                width: `${uploadProgress}%`,
+                height: '100%',
+                background: 'linear-gradient(90deg,#16a34a 0%,#22c55e 100%)',
+                transition: 'width 0.2s',
+              }}
+            />
+          </div>
+          <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>{uploadProgress}%</div>
+        </div>
       </Modal>
 
       {booking && (

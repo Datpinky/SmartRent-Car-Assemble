@@ -32,8 +32,18 @@ const STATUS_CONFIG = {
   waiting_return_confirmation: { label: 'Chờ xác nhận trả', bg: '#fef3c7', color: '#d97706' },
 };
 
-const StatusBadge = ({ status, customLabel }) => {
-  const cfg = STATUS_CONFIG[status] || { label: status || 'N/A', bg: '#f3f4f6', color: '#6b7280' };
+const LICENSE_STATUS_MAP = {
+  pending: { label: 'Đang chờ duyệt', bg: '#fef3c7', color: '#d97706' },
+  approved: { label: 'Đã duyệt', bg: '#d1fae5', color: '#059669' },
+  rejected: { label: 'Từ chối', bg: '#fee2e2', color: '#dc2626' },
+};
+
+const StatusBadge = ({ status, customLabel, isLicenseStatus }) => {
+  const cfg = (isLicenseStatus ? LICENSE_STATUS_MAP : STATUS_CONFIG)[status] || {
+    label: status || 'N/A',
+    bg: '#f3f4f6',
+    color: '#6b7280',
+  };
 
   return (
     <span

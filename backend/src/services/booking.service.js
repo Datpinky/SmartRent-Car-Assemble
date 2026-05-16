@@ -216,7 +216,10 @@ class BookingService {
     }
     if (normalizedRole === 'showroom') {
       const vehicle = await Vehicle.findById(booking.vehicle_id).select('added_by').lean();
-      if (!vehicle || vehicle.added_by.toString() !== userId.toString()) {
+      const vehicleOwnerId = vehicle && vehicle.added_by ? vehicle.added_by.toString() : null;
+      const bookingShowroomId = booking.showroom_id ? booking.showroom_id.toString() : null;
+      // Allow if user is vehicle owner (added_by) OR booking.showroom_id matches user
+      if (vehicleOwnerId !== userId.toString() && bookingShowroomId !== userId.toString()) {
         throwError('Bạn không có quyền cập nhật booking này', 403);
       }
     }
@@ -273,6 +276,35 @@ class BookingService {
     await booking.save();
 
     await Vehicle.findByIdAndUpdate(booking.vehicle_id, { status: 'rented' });
+
+    return booking;
+  }
+
+  static async resendHandoverOtp(bookingId, role, userId) {
+    const booking = await Booking.findById(bookingId);
+    if (!booking) throwError('Booking không tồn tại', 404);
+
+    // Only showroom that owns the vehicle or admin can resend OTP
+    const normalizedRole = role === 'user' ? 'renter' : role;
+    if (normalizedRole !== 'admin' && normalizedRole !== 'showroom') {
+      throwError('Bạn không có quyền lấy lại mã OTP', 403);
+    }
+
+    if (normalizedRole === 'showroom') {
+      const vehicle = await Vehicle.findById(booking.vehicle_id).select('added_by').lean();
+      if (!vehicle || vehicle.added_by.toString() !== userId.toString()) {
+        throwError('Bạn không có quyền cập nhật booking này', 403);
+      }
+    }
+
+    if (booking.status !== 'handed_over') {
+      throwError('Booking không ở trạng thái chờ xác nhận nhận xe', 400);
+    }
+
+    // Sinh OTP mới 6 chữ số, hiệu lực 24h
+    booking.handover_otp = String(Math.floor(100000 + Math.random() * 900000));
+    booking.handover_otp_expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await booking.save();
 
     return booking;
   }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { FaCarSide, FaCheckCircle, FaInfoCircle, FaPlus, FaRobot, FaSpinner, FaTimes } from 'react-icons/fa';
+import { ACCEPTED_IMAGE_INPUT_ACCEPT, isAcceptedImageFile } from '../../../../utils/acceptedImageTypes';
 import { getVehicleName, getVehicleThumb } from '../../../showroom/AIInspection/aiInspection.helpers';
 
 const MAX_IMAGES = 6;
@@ -52,8 +53,8 @@ function ReturnImageUploadStep({
     }
 
     files.forEach((file) => {
-      if (!file.type.startsWith('image/')) {
-        alert('Chỉ chấp nhận file ảnh');
+      if (!isAcceptedImageFile(file)) {
+        alert('Chỉ chấp nhận ảnh JPG, PNG hoặc WEBP. SVG không được hỗ trợ.');
         return;
       }
 
@@ -129,20 +130,18 @@ function ReturnImageUploadStep({
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {pickupImagesUrls
-              .filter(Boolean)
-              .map((url, idx) => (
-                <a
-                  key={`${url}-${idx}`}
-                  href={url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block rounded-lg overflow-hidden border-2 border-blue-200 bg-blue-50 aspect-square"
-                  title={`Anh ban giao ${idx + 1}`}
-                >
-                  <img src={url} alt={`Anh ban giao ${idx + 1}`} className="w-full h-full object-cover" />
-                </a>
-              ))}
+            {pickupImagesUrls.filter(Boolean).map((url, idx) => (
+              <a
+                key={`${url}-${idx}`}
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                className="block rounded-lg overflow-hidden border-2 border-blue-200 bg-blue-50 aspect-square"
+                title={`Anh ban giao ${idx + 1}`}
+              >
+                <img src={url} alt={`Anh ban giao ${idx + 1}`} className="w-full h-full object-cover" />
+              </a>
+            ))}
           </div>
         </div>
       )}
@@ -248,7 +247,7 @@ function ReturnImageUploadStep({
         ref={fileInputRef}
         type="file"
         multiple
-        accept="image/jpeg,image/jpg,image/png,image/webp,image/*"
+        accept={ACCEPTED_IMAGE_INPUT_ACCEPT}
         className="hidden"
         onChange={handleAddImage}
       />

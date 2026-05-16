@@ -21,12 +21,6 @@ const formatDate = (iso) => {
   }
 };
 
-const LICENSE_STATUS_MAP = {
-  pending: 'pending',
-  approved: 'active',
-  rejected: 'rejected',
-};
-
 const DriverLicenseVerification = () => {
   const [items, setItems] = useState([]);
   const [filter, setFilter] = useState('all');
@@ -153,7 +147,7 @@ const DriverLicenseVerification = () => {
     {
       key: 'licenseStatus',
       label: 'Trạng thái',
-      render: (row) => <StatusBadge status={LICENSE_STATUS_MAP[row.licenseStatus] || row.licenseStatus} />,
+      render: (row) => <StatusBadge status={row.licenseStatus} isLicenseStatus={true} />,
     },
     {
       key: 'actions',
@@ -298,7 +292,7 @@ const DriverLicenseVerification = () => {
                 {viewModal.email} · {viewModal.phone || 'Chưa có SĐT'}
               </div>
               <div style={{ marginTop: 8 }}>
-                <StatusBadge status={LICENSE_STATUS_MAP[viewModal.licenseStatus] || viewModal.licenseStatus} />
+                <StatusBadge status={viewModal.licenseStatus} isLicenseStatus={true} />
               </div>
             </div>
 

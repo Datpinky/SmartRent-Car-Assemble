@@ -1,6 +1,6 @@
 // Pure helpers and constants for Profile page
 
-export const LICENSE_CLASS_OPTIONS = ['A1', 'A2', 'B1', 'B2', 'C', 'D', 'E', 'F'];
+export const LICENSE_CLASS_OPTIONS = ['B1', 'B2', 'C', 'D', 'E', 'F'];
 
 export const LICENSE_STATUS_BADGE = {
   approved: { background: '#dcfce7', color: '#166534', label: 'Đã xác thực ✓' },

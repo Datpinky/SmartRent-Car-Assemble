@@ -1,19 +1,13 @@
 import { FaCheckCircle, FaChevronDown, FaChevronUp, FaExclamationTriangle, FaSpinner } from 'react-icons/fa';
 import StatusBadge from '../../../../components/common/StatusBadge';
-import {
-  SEVERITY_LABEL,
-  bookingCodeShort,
-  fmtDate,
-  getVehicleName,
-  severityToBadge,
-} from '../aiInspection.helpers';
+import { SEVERITY_LABEL, bookingCodeShort, fmtDate, getVehicleName, severityToBadge } from '../aiInspection.helpers';
 
 function InspectionHistory({ historyRows, loadingHistory, expandedRow, onToggleRow }) {
   if (loadingHistory) {
     return (
       <div className="bg-white rounded-2xl p-5 border border-gray-200">
         <div className="flex items-center gap-2 text-gray-500 justify-center py-10">
-          <FaSpinner className="animate-spin" /> Dang tai lich su...
+          <FaSpinner className="animate-spin" /> Đang tải lịch sử kiểm tra...
         </div>
       </div>
     );
@@ -39,9 +33,9 @@ function InspectionHistory({ historyRows, loadingHistory, expandedRow, onToggleR
 
   return (
     <div className="bg-white rounded-2xl p-5 border border-gray-200">
-      <div className="font-bold text-base text-gray-900 mb-3.5">Lich su kiem tra</div>
+      <div className="font-bold text-base text-gray-900 mb-3.5">Lịch sử kiểm tra</div>
       {historyRows.length === 0 ? (
-        <div className="text-center text-gray-400 text-sm py-10">Chua co bao cao kiem tra nao duoc luu.</div>
+        <div className="text-center text-gray-400 text-sm py-10">Chưa có báo cáo kiểm tra nào được lưu.</div>
       ) : (
         <div className="flex flex-col gap-2">
           {bookingGroups.map((group) => {
@@ -65,7 +59,8 @@ function InspectionHistory({ historyRows, loadingHistory, expandedRow, onToggleR
             group.inspections.forEach((h) => {
               if (Array.isArray(h.pickup_images)) mergedPickupImages.push(...h.pickup_images);
               if (Array.isArray(h.return_images)) mergedReturnImages.push(...h.return_images);
-              if (Array.isArray(h.gallery_images) && h.inspection_type === 'return') mergedReturnImages.push(...h.gallery_images);
+              if (Array.isArray(h.gallery_images) && h.inspection_type === 'return')
+                mergedReturnImages.push(...h.gallery_images);
             });
             const pickupImages = [...new Set(mergedPickupImages.filter(Boolean))].slice(0, 6);
             const returnImages = [...new Set(mergedReturnImages.filter(Boolean))].slice(0, 6);
@@ -96,11 +91,11 @@ function InspectionHistory({ historyRows, loadingHistory, expandedRow, onToggleR
                     <StatusBadge status={severityToBadge(sev)} customLabel={SEVERITY_LABEL[sev] || sev || '—'} />
                     {hasAnyDamage ? (
                       <span className="flex items-center gap-1 text-red-600 text-[0.8rem] font-semibold">
-                        <FaExclamationTriangle /> Co hu hong
+                        <FaExclamationTriangle /> Có hư hỏng mới được AI ghi nhận
                       </span>
                     ) : (
                       <span className="flex items-center gap-1 text-emerald-600 text-[0.8rem] font-semibold">
-                        <FaCheckCircle /> Khong hu hong
+                        <FaCheckCircle /> Không có hư hỏng mới rõ rệt được AI ghi nhận
                       </span>
                     )}
                     {/* Show inspection types included */}
@@ -146,7 +141,7 @@ function InspectionHistory({ historyRows, loadingHistory, expandedRow, onToggleR
 
                         {Array.isArray(h.observations) && h.observations.length > 0 && (
                           <div className="mb-2">
-                            <div className="font-bold text-[0.75rem] text-gray-700 mb-1">Ket qua chi tiet</div>
+                            <div className="font-bold text-[0.75rem] text-gray-700 mb-1">Kết quả chi tiết</div>
                             <div className="flex flex-wrap gap-1">
                               {h.observations.slice(0, 3).map((obs, pi) => (
                                 <div
@@ -158,11 +153,13 @@ function InspectionHistory({ historyRows, loadingHistory, expandedRow, onToggleR
                                       : 'bg-white border-gray-200 text-gray-600')
                                   }
                                 >
-                                  {obs.area || 'Khu vuc'}
+                                  {obs.area || 'Khu vực chưa xác định'}
                                 </div>
                               ))}
                               {h.observations.length > 3 && (
-                                <span className="text-[0.7rem] text-gray-500 px-2 py-1">+{h.observations.length - 3}</span>
+                                <span className="text-[0.7rem] text-gray-500 px-2 py-1">
+                                  +{h.observations.length - 3}
+                                </span>
                               )}
                             </div>
                           </div>
@@ -170,7 +167,7 @@ function InspectionHistory({ historyRows, loadingHistory, expandedRow, onToggleR
 
                         {h.ai_payload?.summary && (
                           <div className="text-[0.75rem] text-slate-600 bg-white rounded px-2 py-1.5 mb-2 border border-gray-200">
-                            <strong>Tom tat:</strong> {h.ai_payload.summary}
+                            <strong>Tóm tắt:</strong> {h.ai_payload.summary}
                           </div>
                         )}
                       </div>
@@ -178,7 +175,7 @@ function InspectionHistory({ historyRows, loadingHistory, expandedRow, onToggleR
 
                     {(pickupImages.length > 0 || returnImages.length > 0) && (
                       <div className="mt-3 pt-3 border-t border-gray-200">
-                        <div className="font-bold text-[0.82rem] text-gray-700 mb-2">Anh so sanh</div>
+                        <div className="font-bold text-[0.82rem] text-gray-700 mb-2">Ảnh so sánh</div>
                         <div className="flex gap-5 flex-wrap">
                           {pickupImages.length > 0 && (
                             <div>

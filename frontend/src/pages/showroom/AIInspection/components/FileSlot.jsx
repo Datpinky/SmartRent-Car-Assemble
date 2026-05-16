@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { FaCloudUploadAlt, FaTimesCircle } from 'react-icons/fa';
+import { ACCEPTED_IMAGE_INPUT_ACCEPT, isAcceptedImageFile } from '../../../../utils/acceptedImageTypes';
 
 function FileSlot({ label, hint, file, onFile, type }) {
   const inputRef = useRef(null);
@@ -56,11 +57,11 @@ function FileSlot({ label, hint, file, onFile, type }) {
       <input
         ref={inputRef}
         type="file"
-        accept="image/jpeg,image/jpg,image/png,image/webp,image/*"
+        accept={ACCEPTED_IMAGE_INPUT_ACCEPT}
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
-          if (f) onFile(f);
+          if (f && isAcceptedImageFile(f)) onFile(f);
           e.target.value = '';
         }}
       />

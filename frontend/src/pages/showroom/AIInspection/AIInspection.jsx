@@ -69,12 +69,7 @@ const AIInspection = () => {
           ['in_use', 'waiting_return_confirmation', 'completed'].includes(b.status),
         );
         fetchedVehicles = returnPhaseBookings
-          .filter(
-            (b, i, arr) =>
-              arr.findIndex(
-                (x) => resolveId(x.vehicle_id) === resolveId(b.vehicle_id),
-              ) === i,
-          )
+          .filter((b, i, arr) => arr.findIndex((x) => resolveId(x.vehicle_id) === resolveId(b.vehicle_id)) === i)
           .map((b) => b.vehicle_id)
           .filter(Boolean);
       }
@@ -202,11 +197,11 @@ const AIInspection = () => {
 
   const handleAnalyze = async (galleryImages) => {
     if (!Array.isArray(galleryImages) || galleryImages.length === 0) {
-      setAnalysisError('Can it nhat mot anh tra xe de phan tich.');
+      setAnalysisError('Cần ít nhất một ảnh trả xe để phân tích.');
       return;
     }
     if (!selectedVehicle) {
-      setAnalysisError('Vui long chon xe o buoc 1.');
+      setAnalysisError('Vui lòng chọn xe ở bước 1.');
       return;
     }
 
@@ -221,7 +216,10 @@ const AIInspection = () => {
           try {
             const resp = await fetch(img.data);
             const blob = await resp.blob();
-            return { type: 'file', data: new File([blob], `${prefix}_${idx}.jpg`, { type: blob.type || 'image/jpeg' }) };
+            return {
+              type: 'file',
+              data: new File([blob], `${prefix}_${idx}.jpg`, { type: blob.type || 'image/jpeg' }),
+            };
           } catch {
             return null;
           }
@@ -230,7 +228,9 @@ const AIInspection = () => {
       };
 
       const rawAfterImages = galleryImages.slice(0, 6);
-      const afterImages = (await Promise.all(rawAfterImages.map((img, idx) => toAnalysisImage(img, idx, 'after')))).filter(Boolean);
+      const afterImages = (
+        await Promise.all(rawAfterImages.map((img, idx) => toAnalysisImage(img, idx, 'after')))
+      ).filter(Boolean);
       const beforeImages = (
         await Promise.all(
           pickupImagesUrls
@@ -240,7 +240,7 @@ const AIInspection = () => {
         )
       ).filter(Boolean);
       if (afterImages.length === 0) {
-        throw new Error('Khong co anh hop le de phan tich.');
+        throw new Error('Không có ảnh hợp lệ để phân tích.');
       }
 
       const data =
@@ -261,7 +261,7 @@ const AIInspection = () => {
         try {
           uploadedUrls = await uploadService.uploadImages(filesToUpload);
         } catch (err) {
-          setSaveNote('Khong tai duoc anh len luu tru.');
+          setSaveNote('Không tải được ảnh lên lưu trữ.');
         }
       }
 
@@ -299,30 +299,29 @@ const AIInspection = () => {
           disclaimer: data?.disclaimer || '',
           comparison_mode: beforeImages.length > 0 ? 'gallery' : 'current_only',
         });
-        setSaveNote((s) => (s ? s + ' ' : '') + 'Da luu bao cao kiem tra.');
+        setSaveNote((s) => (s ? s + ' ' : '') + 'Đã lưu báo cáo kiểm tra.');
         fetchHistory();
       } catch (saveErr) {
         setSaveNote((s) =>
-          ((s ? s + ' ' : '') + 'Phan tich xong nhung khong luu duoc: ' + (saveErr.message || 'Loi server')).trim(),
+          ((s ? s + ' ' : '') + 'Phân tích xong nhưng không lưu được: ' + (saveErr.message || 'lỗi server')).trim(),
         );
       }
 
       setAnalyzed(true);
       setStep(3);
     } catch (err) {
-      setAnalysisError(err.message || 'Phan tich that bai. Vui long thu lai.');
+      setAnalysisError(err.message || 'Phân tích thất bại. Vui lòng thử lại.');
     } finally {
       setAnalyzing(false);
     }
   };
-
 
   return (
     <div className="max-w-[900px] mx-auto">
       <div className="page-header mb-5">
         <div>
           <h1 className="page-title">
-            {isRenter ? 'Kiểm tra AI — Xe trả về (Kiểm tra hướng' : 'Kiểm tra AI — Xe bàn giao'}
+            {isRenter ? 'Kiểm tra AI — Xe trả về (Kiểm tra hướng)' : 'Kiểm tra AI — Xe bàn giao'}
           </h1>
           <p className="page-subtitle">
             {isRenter

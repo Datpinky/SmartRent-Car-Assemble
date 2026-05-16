@@ -1,6 +1,7 @@
-import React, { useRef, useState, useId } from 'react';
-import { FaCloudUploadAlt, FaTimes, FaCheckCircle, FaSpinner, FaExclamationCircle } from 'react-icons/fa';
+import { useId, useRef, useState } from 'react';
+import { FaCheckCircle, FaCloudUploadAlt, FaExclamationCircle, FaSpinner, FaTimes } from 'react-icons/fa';
 import uploadService from '../../services/uploadService';
+import { ACCEPTED_IMAGE_INPUT_ACCEPT, isAcceptedImageFile } from '../../utils/acceptedImageTypes';
 
 /**
  * FileUpload
@@ -18,7 +19,7 @@ import uploadService from '../../services/uploadService';
  */
 const FileUpload = ({
   label,
-  accept = 'image/*',
+  accept = ACCEPTED_IMAGE_INPUT_ACCEPT,
   multiple = false,
   maxFiles = 5,
   onUpload,
@@ -36,7 +37,14 @@ const FileUpload = ({
 
   const handleFiles = async (newFiles) => {
     const arr = Array.from(newFiles).slice(0, maxFiles);
-    const withPrev = arr.map(f => ({
+    const invalidFiles = arr.filter((f) => !isAcceptedImageFile(f));
+
+    if (invalidFiles.length > 0) {
+      setUploadError('Chỉ chấp nhận ảnh JPG, PNG hoặc WEBP. SVG không được hỗ trợ.');
+      return;
+    }
+
+    const withPrev = arr.map((f) => ({
       file: f,
       id: Math.random().toString(36).slice(2),
       url: preview && f.type.startsWith('image/') ? URL.createObjectURL(f) : null,
@@ -48,38 +56,38 @@ const FileUpload = ({
     setFiles(updated);
     setUploadError('');
 
-    if (onFiles) onFiles(updated.map(f => f.file));
+    if (onFiles) onFiles(updated.map((f) => f.file));
 
     if (!autoUpload) return;
 
     setUploading(true);
     try {
-      const rawFiles = updated.map(f => f.file);
+      const rawFiles = updated.map((f) => f.file);
       const results = await uploadService.uploadImages(rawFiles);
-      const cloudUrls = results.map(r => r.url).filter(Boolean);
+      const cloudUrls = results.map((r) => r.url).filter(Boolean);
 
-      setFiles(prev =>
+      setFiles((prev) =>
         prev.map((f, i) => ({
           ...f,
           uploaded: true,
           cloudUrl: cloudUrls[i] || f.cloudUrl,
-        }))
+        })),
       );
 
       if (onUpload) onUpload(cloudUrls);
     } catch (err) {
       setUploadError(err.message || 'Upload thất bại. Vui lòng thử lại.');
-      if (onFiles) onFiles(updated.map(f => f.file));
+      if (onFiles) onFiles(updated.map((f) => f.file));
     } finally {
       setUploading(false);
     }
   };
 
   const remove = (id) => {
-    const updated = files.filter(f => f.id !== id);
+    const updated = files.filter((f) => f.id !== id);
     setFiles(updated);
     setUploadError('');
-    if (onFiles) onFiles(updated.map(f => f.file));
+    if (onFiles) onFiles(updated.map((f) => f.file));
     if (!autoUpload && onUpload) onUpload([]);
   };
 
@@ -97,25 +105,36 @@ const FileUpload = ({
         className={`border-2 border-dashed rounded-xl py-7 px-5 text-center cursor-pointer transition-[border-color,background-color]
           ${dragging ? 'border-primary bg-primary-light' : 'border-gray-300 bg-gray-50 hover:border-primary hover:bg-primary-light'}
           ${uploading ? 'opacity-70 pointer-events-none' : ''}`}
-        onDragOver={e => { e.preventDefault(); setDragging(true); }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
         onDragLeave={() => setDragging(false)}
-        onDrop={e => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files); }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          handleFiles(e.dataTransfer.files);
+        }}
       >
         {uploading ? (
           <FaSpinner aria-hidden="true" className="text-[2rem] mb-2 mx-auto text-primary animate-spin" />
         ) : (
-          <FaCloudUploadAlt aria-hidden="true" className={`text-[2rem] mb-2 mx-auto transition-colors ${dragging ? 'text-primary' : 'text-gray-400'}`} />
+          <FaCloudUploadAlt
+            aria-hidden="true"
+            className={`text-[2rem] mb-2 mx-auto transition-colors ${dragging ? 'text-primary' : 'text-gray-400'}`}
+          />
         )}
         <div className="text-[0.85rem] text-gray-500">
-          {uploading
-            ? 'Đang tải lên…'
-            : (<>Kéo thả hoặc <span className="text-primary font-semibold underline">chọn file</span></>)
-          }
+          {uploading ? (
+            'Đang tải lên…'
+          ) : (
+            <>
+              Kéo thả hoặc <span className="text-primary font-semibold underline">chọn file</span>
+            </>
+          )}
         </div>
         {hint && <div className="text-[0.75rem] text-gray-400 mt-1">{hint}</div>}
-        {maxFiles && (
-          <div className="text-[0.72rem] text-gray-400 mt-0.5">Tối đa {maxFiles} file</div>
-        )}
+        {maxFiles && <div className="text-[0.72rem] text-gray-400 mt-0.5">Tối đa {maxFiles} file</div>}
         <input
           ref={inputRef}
           id={inputId}
@@ -124,7 +143,7 @@ const FileUpload = ({
           accept={accept}
           multiple={multiple}
           className="sr-only"
-          onChange={e => handleFiles(e.target.files)}
+          onChange={(e) => handleFiles(e.target.files)}
         />
       </label>
 
@@ -140,16 +159,24 @@ const FileUpload = ({
 
       {files.length > 0 && (
         <div className="flex flex-col gap-2">
-          {files.map(f => (
-            <div key={f.id} className="flex items-center gap-2.5 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200">
-              {f.url
-                ? <img src={f.cloudUrl || f.url} alt={f.name} width={40} height={40} className="w-10 h-10 object-cover rounded-md" />
-                : (
-                  f.uploaded
-                    ? <FaCheckCircle aria-hidden="true" className="text-emerald-600 text-[1.2rem]" />
-                    : <FaCloudUploadAlt aria-hidden="true" className="text-gray-400 text-[1.2rem]" />
-                )
-              }
+          {files.map((f) => (
+            <div
+              key={f.id}
+              className="flex items-center gap-2.5 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200"
+            >
+              {f.url ? (
+                <img
+                  src={f.cloudUrl || f.url}
+                  alt={f.name}
+                  width={40}
+                  height={40}
+                  className="w-10 h-10 object-cover rounded-md"
+                />
+              ) : f.uploaded ? (
+                <FaCheckCircle aria-hidden="true" className="text-emerald-600 text-[1.2rem]" />
+              ) : (
+                <FaCloudUploadAlt aria-hidden="true" className="text-gray-400 text-[1.2rem]" />
+              )}
               <span className="flex-1 text-[0.8rem] text-gray-700 overflow-hidden text-ellipsis whitespace-nowrap">
                 {f.name}
               </span>

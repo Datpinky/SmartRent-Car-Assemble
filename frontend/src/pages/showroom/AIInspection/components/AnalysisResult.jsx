@@ -20,11 +20,11 @@ function AnalysisResult({ analysisResult, saveNote, onReset }) {
         <div>
           <div className="font-bold text-base text-gray-900">
             {analysisResult.damage_detected
-              ? 'AI ghi nhan kha nang co hu hong moi'
-              : 'AI khong ghi nhan hu hong moi ro ret'}
+              ? 'AI ghi nhận có dấu hiệu hư hỏng mới trên xe'
+              : 'AI không ghi nhận hư hỏng mới rõ rệt'}
           </div>
           <div className="text-[0.8rem] text-gray-500 mt-1.5 flex items-center gap-2">
-            Muc do tong the:
+            Mức độ tổng thể của các hư hỏng mới được AI phát hiện:
             <StatusBadge
               status={severityToBadge(analysisResult.severity)}
               customLabel={SEVERITY_LABEL[analysisResult.severity] || analysisResult.severity}
@@ -35,13 +35,13 @@ function AnalysisResult({ analysisResult, saveNote, onReset }) {
 
       {analysisResult.summary && (
         <div className="mb-4 text-[0.88rem] text-gray-700 leading-relaxed px-3.5 py-2.5 bg-slate-50 rounded-lg">
-          <strong>Tom tat:</strong> {analysisResult.summary}
+          <strong>Tóm tắt:</strong> {analysisResult.summary}
         </div>
       )}
 
       {Array.isArray(analysisResult.observations) && analysisResult.observations.length > 0 && (
         <div className="mb-4">
-          <div className="font-bold text-[0.88rem] text-gray-700 mb-2.5">Chi tiet AI</div>
+          <div className="font-bold text-[0.88rem] text-gray-700 mb-2.5">Chi tiết AI</div>
           <div className="flex flex-col gap-2">
             {analysisResult.observations.map((obs, i) => {
               return (
@@ -53,7 +53,7 @@ function AnalysisResult({ analysisResult, saveNote, onReset }) {
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="font-bold text-[0.85rem] text-gray-900 flex items-center gap-1.5">
-                      {obs.area || 'Khu vuc chua xac dinh'}
+                      {obs.area || 'Khu vực chưa xác định'}
                     </div>
                     <div className="flex items-center gap-1.5">
                       {obs.likely_new_damage ? (
@@ -70,7 +70,7 @@ function AnalysisResult({ analysisResult, saveNote, onReset }) {
                   <div className="text-[0.8rem] text-gray-700">{obs.description}</div>
                   {obs.evidence && <div className="text-[0.75rem] text-gray-500 mt-1">{obs.evidence}</div>}
                   {obs.needs_manual_review && (
-                    <div className="text-[0.75rem] text-amber-700 font-semibold mt-1">Can kiem tra thu cong</div>
+                    <div className="text-[0.75rem] text-amber-700 font-semibold mt-1">Cần kiểm tra thủ công</div>
                   )}
                 </div>
               );
@@ -81,7 +81,7 @@ function AnalysisResult({ analysisResult, saveNote, onReset }) {
 
       {analysisResult.conclusion && (
         <div className="mb-3.5 px-3.5 py-2.5 bg-slate-50 rounded-xl text-[0.85rem] text-slate-700">
-          <strong>Ket luan:</strong> {analysisResult.conclusion}
+          <strong>Kết luận:</strong> {analysisResult.conclusion}
         </div>
       )}
 
@@ -99,7 +99,7 @@ function AnalysisResult({ analysisResult, saveNote, onReset }) {
       )}
 
       <button type="button" className="btn-outline mt-2" onClick={onReset}>
-        &larr; Kiem tra moi
+        &larr; Kiểm tra mới
       </button>
     </div>
   );

@@ -29,6 +29,8 @@ const BookingManagement = () => {
   const [otpModal, setOtpModal] = useState(null);
   const [handoverPhotoModal, setHandoverPhotoModal] = useState(null);
   const [handoverUploading, setHandoverUploading] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState('');
 
   const fetchBookings = useCallback(async () => {
     setLoading(true);
@@ -62,6 +64,7 @@ const BookingManagement = () => {
         const renter = row?.user_id || {};
         setViewModal(null);
         setOtpModal({
+          bookingId,
           otp: updated.handover_otp,
           vehicleName: row?.vehicleName || row?.vehicle_id?.vehicle_name || 'Xe',
           renterName: renter.name || renter.email || 'Khách thuê',
@@ -146,6 +149,34 @@ const BookingManagement = () => {
       await fetchBookings();
     } finally {
       setUpdatingId('');
+    }
+  };
+
+  const showOtpForBooking = async (bookingId) => {
+    if (!bookingId) return;
+    setOtpLoading(true);
+    setOtpError('');
+    try {
+      const booking = await bookingService.getBookingById(bookingId);
+      if (!booking) {
+        setOtpError('Không tìm thấy booking');
+        return;
+      }
+      if (!booking.handover_otp) {
+        setOtpError('Mã OTP chưa được tạo hoặc đã bị xóa');
+        return;
+      }
+      const renter = booking.user_id || {};
+      setOtpModal({
+        bookingId: booking._id || booking.id,
+        otp: booking.handover_otp,
+        vehicleName: booking.vehicle_id?.vehicle_name || booking.vehicleName || 'Xe',
+        renterName: renter.name || renter.email || 'Khách thuê',
+      });
+    } catch (err) {
+      setOtpError(err?.response?.data?.message || err?.message || 'Không thể lấy mã OTP');
+    } finally {
+      setOtpLoading(false);
     }
   };
 
@@ -464,7 +495,19 @@ const BookingManagement = () => {
                   {PRIMARY_ACTIONS[viewModal.status].label} <FaCheckCircle aria-hidden="true" />
                 </button>
               )}
+              {viewModal.status === 'handed_over' && (
+                <button
+                  type="button"
+                  className="btn-outline"
+                  style={{ flex: 1 }}
+                  onClick={() => showOtpForBooking(viewModal._id || viewModal.id)}
+                  disabled={otpLoading}
+                >
+                  {otpLoading ? 'Đang tải...' : 'Xem mã OTP'}
+                </button>
+              )}
             </div>
+            {otpError && <div style={{ color: '#dc2626', fontSize: '0.85rem', marginTop: 8 }}>{otpError}</div>}
           </div>
         )}
       </Modal>

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { FaCamera, FaPlus, FaTimesCircle } from 'react-icons/fa';
 import Modal from '../../../../components/common/Modal';
+import { ACCEPTED_IMAGE_INPUT_ACCEPT, isAcceptedImageFile } from '../../../../utils/acceptedImageTypes';
 
 const MAX_HANDOVER_PHOTOS = 6;
 
@@ -21,7 +22,7 @@ const HandoverPhotoModal = ({ handoverPhotoModal, handoverUploading, onConfirm, 
   };
 
   const handleSelectPhotos = (event) => {
-    const files = Array.from(event.target.files || []).filter((file) => file.type.startsWith('image/'));
+    const files = Array.from(event.target.files || []).filter((file) => isAcceptedImageFile(file));
     event.target.value = '';
     if (!files.length) return;
 
@@ -51,8 +52,9 @@ const HandoverPhotoModal = ({ handoverPhotoModal, handoverUploading, onConfirm, 
               color: '#1e40af',
             }}
           >
-            <strong>Mẹo:</strong> Tải tối đa {MAX_HANDOVER_PHOTOS} ảnh xe trước khi bàn giao. Ảnh này sẽ làm bộ BEFORE
-            để AI so sánh với ảnh trả xe sau này.
+            <strong>Mẹo:</strong> Tải tối đa {MAX_HANDOVER_PHOTOS} ảnh xe trước khi bàn giao. Ảnh này sẽ được sử dụng
+            làm bằng chứng tình trạng xe khi bàn giao, giúp AI so sánh với ảnh trả xe sau này. Nếu bạn không có ảnh hoặc
+            không muốn tải lên, vẫn có thể tiếp tục bàn giao xe bình thường mà không cần ảnh.
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(104px, 1fr))', gap: 10 }}>
@@ -102,7 +104,7 @@ const HandoverPhotoModal = ({ handoverPhotoModal, handoverUploading, onConfirm, 
                 onClick={() => photoInputRef.current?.click()}
                 disabled={handoverUploading}
                 style={{
-                  aspectRatio: '1',
+                  aspectRatio: '1/0.5',
                   border: '2px dashed #93c5fd',
                   borderRadius: 8,
                   background: '#eff6ff',
@@ -127,7 +129,7 @@ const HandoverPhotoModal = ({ handoverPhotoModal, handoverUploading, onConfirm, 
           <input
             ref={photoInputRef}
             type="file"
-            accept="image/*"
+            accept={ACCEPTED_IMAGE_INPUT_ACCEPT}
             multiple
             style={{ display: 'none' }}
             onChange={handleSelectPhotos}

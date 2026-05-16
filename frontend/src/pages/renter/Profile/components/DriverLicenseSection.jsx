@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { FaEdit, FaIdCard, FaSave, FaSpinner, FaUpload } from 'react-icons/fa';
 import apiClient from '../../../../services/apiClient';
 import profileService from '../../../../services/profileService';
+import { ACCEPTED_IMAGE_INPUT_ACCEPT, isAcceptedImageFile } from '../../../../utils/acceptedImageTypes';
 import { formatDateInput, LICENSE_CLASS_OPTIONS, LICENSE_STATUS_BADGE } from '../profile.helpers';
 
 const DriverLicenseSection = ({ userId, profile, onSaved }) => {
@@ -36,6 +37,11 @@ const DriverLicenseSection = ({ userId, profile, onSaved }) => {
   }, [profile, editing]);
 
   const uploadImage = async (file, side) => {
+    if (!isAcceptedImageFile(file)) {
+      setNotice({ type: 'error', message: 'Chỉ chấp nhận ảnh JPG, PNG hoặc WEBP. SVG không được hỗ trợ.' });
+      return;
+    }
+
     const setter = side === 'front' ? setUploadingFront : setUploadingBack;
     const field = side === 'front' ? 'driver_license_front_image' : 'driver_license_back_image';
     setter(true);
@@ -316,7 +322,10 @@ const DriverLicenseSection = ({ userId, profile, onSaved }) => {
           {['front', 'back'].map((side) => {
             const field = `driver_license_${side}_image`;
             const uploading = side === 'front' ? uploadingFront : uploadingBack;
-            const label = side === 'front' ? 'Ảnh đối chiếu mặt trước Giấy phép lái xe *' : 'Ảnh đối chiếu mặt sau Giấy phép lái xe *';
+            const label =
+              side === 'front'
+                ? 'Ảnh đối chiếu mặt trước Giấy phép lái xe *'
+                : 'Ảnh đối chiếu mặt sau Giấy phép lái xe *';
             return (
               <div key={side}>
                 <label className="form-label">{label}</label>
@@ -347,7 +356,7 @@ const DriverLicenseSection = ({ userId, profile, onSaved }) => {
                   )}
                   <input
                     type="file"
-                    accept="image/*"
+                    accept={ACCEPTED_IMAGE_INPUT_ACCEPT}
                     style={{ display: 'none' }}
                     onChange={(e) => {
                       if (e.target.files?.[0]) uploadImage(e.target.files[0], side);

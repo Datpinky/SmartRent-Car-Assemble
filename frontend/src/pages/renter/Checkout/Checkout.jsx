@@ -1,5 +1,5 @@
 import { loadStripe } from '@stripe/stripe-js';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FaArrowRight,
   FaCar,
@@ -16,8 +16,9 @@ import { RENTAL_CONTRACT_UI } from '../../../constants/rentalContractTemplate';
 import bookingService from '../../../services/bookingService';
 import mapService from '../../../services/mapService';
 import paymentService from '../../../services/paymentService';
-import vehicleService from '../../../services/vehicleService';
+import profileService from '../../../services/profileService';
 import vehicleLocationService from '../../../services/vehicleLocationService';
+import vehicleService from '../../../services/vehicleService';
 import { formatVnd, formatVndPerDay } from '../../../utils/currencyFormat';
 import {
   buildDefaultPickupDate,
@@ -90,6 +91,12 @@ const Checkout = () => {
   const [loadingVehicleLocation, setLoadingVehicleLocation] = useState(false);
   const [resolvingVehicleLocation, setResolvingVehicleLocation] = useState(false);
   const [vehicleLocationError, setVehicleLocationError] = useState('');
+  const [resolvedShowroomLocation, setResolvedShowroomLocation] = useState(null);
+  const [resolvingShowroomLocation, setResolvingShowroomLocation] = useState(false);
+  const [showroomLocationError, setShowroomLocationError] = useState('');
+  const showroomProfileCacheRef = useRef(new Map());
+  const showroomProfileInFlightRef = useRef(new Map());
+  const showroomGeocodeKeyRef = useRef('');
   const minPickupDateTime = useMemo(() => buildDefaultPickupDate(), []);
   const incomingRentalWindow = useMemo(
     () => resolveRentalWindow({ state: location.state, search: location.search }),
@@ -143,6 +150,199 @@ const Checkout = () => {
     };
   }, [pickupMethod, vehicle?._id, vehicle?.id, carId]);
 
+  // Resolve showroom location (use showroom/addedBy address or geocode fallback) when self pickup selected
+  useEffect(() => {
+    let cancelled = false;
+
+    if (pickupMethod !== 'self') {
+      setResolvedShowroomLocation(null);
+      setResolvingShowroomLocation(false);
+      setShowroomLocationError('');
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const addedByRaw = vehicle?.addedBy;
+    const addedByObject = addedByRaw && typeof addedByRaw === 'object' ? addedByRaw : null;
+    const showroomId = typeof addedByRaw === 'string' ? addedByRaw : addedByObject?._id || addedByObject?.id || '';
+    const baseAddress = String(
+      (addedByObject && (addedByObject.address || addedByObject.pickupAddress)) ||
+        vehicle?.pickupAddress ||
+        vehicle?.address ||
+        vehicle?.location ||
+        '',
+    ).trim();
+
+    const applyResolvedLocation = (source, fallbackAddress = '') => {
+      const latitude = Number(source?.latitude ?? source?.lat);
+      const longitude = Number(source?.longitude ?? source?.lng);
+      const address = String(
+        fallbackAddress || source?.address || source?.location || source?.pickupAddress || '',
+      ).trim();
+      const resolved =
+        address && Number.isFinite(latitude) && Number.isFinite(longitude)
+          ? {
+              address,
+              latitude,
+              longitude,
+              plusCode: source?.plusCode || source?.plus_code || '',
+            }
+          : null;
+      if (!resolved) return false;
+      setResolvedShowroomLocation(resolved);
+      setShowroomLocationError('');
+      return true;
+    };
+
+    if (applyResolvedLocation(addedByObject, baseAddress) || applyResolvedLocation(vehicle, baseAddress)) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const resolveLocation = async () => {
+      setResolvingShowroomLocation(true);
+      setShowroomLocationError('');
+
+      try {
+        let fallbackAddress = baseAddress;
+
+        if (showroomId) {
+          const profile = await resolveShowroomProfile(showroomId);
+          if (cancelled) return;
+          fallbackAddress = String(
+            profile?.address || profile?.userLocation?.address || fallbackAddress || vehicle?.showroom || '',
+          ).trim();
+
+          if (
+            applyResolvedLocation(profile, fallbackAddress) ||
+            applyResolvedLocation(profile?.userLocation, fallbackAddress)
+          ) {
+            return;
+          }
+        }
+
+        const finalAddress = String(fallbackAddress || vehicle?.showroom || '').trim();
+        if (!finalAddress) {
+          setResolvedShowroomLocation(null);
+          return;
+        }
+
+        const geocodeKey = `${showroomId || 'vehicle'}:${finalAddress.toLowerCase()}`;
+        if (showroomGeocodeKeyRef.current !== geocodeKey) {
+          showroomGeocodeKeyRef.current = geocodeKey;
+          const results = await mapService.directForwardGeocode(finalAddress, { limit: 1 });
+          if (cancelled) return;
+          const best = results?.[0];
+
+          if (best) {
+            setResolvedShowroomLocation({
+              address: finalAddress,
+              latitude: best.lat,
+              longitude: best.lng,
+              plusCode: best.plusCode || '',
+            });
+            return;
+          }
+        }
+
+        setResolvedShowroomLocation({
+          address: finalAddress,
+          latitude: null,
+          longitude: null,
+          plusCode: '',
+        });
+        setShowroomLocationError('Không tìm thấy tọa độ showroom. Đang hiển thị địa chỉ văn bản.');
+      } catch {
+        if (!cancelled) {
+          const fallbackAddress = String(baseAddress || vehicle?.showroom || '').trim();
+          setResolvedShowroomLocation(
+            fallbackAddress
+              ? {
+                  address: fallbackAddress,
+                  latitude: null,
+                  longitude: null,
+                  plusCode: '',
+                }
+              : null,
+          );
+          setShowroomLocationError('Không thể tải vị trí showroom. Đang hiển thị địa chỉ văn bản.');
+        }
+      } finally {
+        if (!cancelled) setResolvingShowroomLocation(false);
+      }
+    };
+
+    resolveLocation();
+    return () => {
+      cancelled = true;
+    };
+
+    const addedBy = vehicle?.addedBy && typeof vehicle.addedBy === 'object' ? vehicle.addedBy : null;
+    const fallbackAddress = String(
+      (addedBy && (addedBy.address || addedBy.pickupAddress)) ||
+        vehicle?.showroom ||
+        vehicle?.pickupAddress ||
+        vehicle?.address ||
+        vehicle?.location ||
+        '',
+    ).trim();
+
+    // Try to use direct coordinates on addedBy if available
+    const directLat = Number(addedBy?.latitude ?? addedBy?.lat ?? addedBy?.pickup_latitude ?? null);
+    const directLng = Number(addedBy?.longitude ?? addedBy?.lng ?? addedBy?.pickup_longitude ?? null);
+    if (fallbackAddress && Number.isFinite(directLat) && Number.isFinite(directLng)) {
+      setResolvedShowroomLocation({
+        address: fallbackAddress,
+        latitude: directLat,
+        longitude: directLng,
+        plusCode: addedBy?.plusCode || addedBy?.plus_code || '',
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!fallbackAddress) {
+      setResolvedShowroomLocation(null);
+      setResolvingShowroomLocation(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setResolvingShowroomLocation(true);
+    setShowroomLocationError('');
+    mapService
+      .directForwardGeocode(fallbackAddress, { limit: 1 })
+      .then((results) => {
+        if (cancelled) return;
+        const best = results?.[0];
+        if (!best) {
+          setResolvedShowroomLocation(null);
+          setShowroomLocationError('Không tìm thấy vị trí showroom.');
+          return;
+        }
+        setResolvedShowroomLocation({
+          address: fallbackAddress,
+          latitude: best.lat,
+          longitude: best.lng,
+          plusCode: best.plusCode || '',
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setShowroomLocationError('Không thể tải vị trí showroom.');
+      })
+      .finally(() => {
+        if (!cancelled) setResolvingShowroomLocation(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pickupMethod, vehicle]);
+
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'auto' });
   }, [step]);
@@ -175,6 +375,34 @@ const Checkout = () => {
     };
   }, []);
 
+  const resolveShowroomProfile = useCallback(async (showroomId) => {
+    if (!showroomId) return null;
+
+    if (showroomProfileCacheRef.current.has(showroomId)) {
+      return showroomProfileCacheRef.current.get(showroomId);
+    }
+
+    if (showroomProfileInFlightRef.current.has(showroomId)) {
+      return showroomProfileInFlightRef.current.get(showroomId);
+    }
+
+    const request = profileService
+      .getProfileById(showroomId, { fetchUserLocation: true })
+      .then((profile) => {
+        const normalized = profile || null;
+        showroomProfileCacheRef.current.set(showroomId, normalized);
+        showroomProfileInFlightRef.current.delete(showroomId);
+        return normalized;
+      })
+      .catch((error) => {
+        showroomProfileInFlightRef.current.delete(showroomId);
+        throw error;
+      });
+
+    showroomProfileInFlightRef.current.set(showroomId, request);
+    return request;
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -194,7 +422,10 @@ const Checkout = () => {
       };
     }
 
-    const vehicleNativeLocation = normalizeVehicleLocation(vehicle, vehicle?.location || vehicle?.address || vehicle?.pickupAddress || '');
+    const vehicleNativeLocation = normalizeVehicleLocation(
+      vehicle,
+      vehicle?.location || vehicle?.address || vehicle?.pickupAddress || '',
+    );
     if (vehicleNativeLocation) {
       setResolvedVehicleLocation(vehicleNativeLocation);
       return () => {
@@ -249,7 +480,7 @@ const Checkout = () => {
     setLoadVeh(true);
     try {
       const v = await vehicleService.getById(carId);
-      if (!v) throw new Error('Xe khong ton tai');
+      if (!v) throw new Error('Xe không tồn tại.');
       setVehicle(v);
     } catch {
       setVehError('Không thể tải thông tin xe. Vui lòng thử lại.');
@@ -286,7 +517,7 @@ const Checkout = () => {
       .catch(() => {
         if (!cancelled) {
           setBookedIntervals([]);
-          setBookedDateError('Chua the tai lich da dat cua xe nay.');
+          setBookedDateError('Không thể tải lịch đã đặt của xe này.');
         }
       })
       .finally(() => {
@@ -411,7 +642,7 @@ const Checkout = () => {
         setClientSecret('');
         setProcessing(false);
         setStep(2);
-        setStripeSessionError('Phien thanh toan cu da bi huy tren Stripe. Vui long tao lai phien thanh toan moi.');
+        setStripeSessionError('Phiên thanh toán cũ đã bị hủy trên Stripe. Vui lòng tạo lại phiên thanh toán mới.');
         return true;
       }
       return false;
@@ -433,7 +664,7 @@ const Checkout = () => {
 
   const handleUseCurrentDeliveryLocation = () => {
     if (!navigator.geolocation) {
-      setPrepError('Trinh duyet khong ho tro lay vi tri hien tai.');
+      setPrepError('Trình duyệt không hỗ trợ lấy vị trí hiện tại.');
       return;
     }
     setLoadingDeliveryLocation(true);
@@ -459,7 +690,7 @@ const Checkout = () => {
   const handleContinue = async () => {
     if (!vehicle) return;
     if (!hasAcceptedContract) {
-      setPrepError('Vui long doc va tick dong y voi hop dong thue xe truoc khi tiep tuc thanh toan.');
+      setPrepError('Vui lòng đọc và tick đồng ý với hợp đồng thuê xe trước khi tiếp tục thanh toán.');
       return;
     }
     setPreparingPay(true);
@@ -470,16 +701,16 @@ const Checkout = () => {
       const ret = parseLocalDateTime(returnDate);
 
       if (!pickup || !ret) {
-        throw new Error('Vui long chon day du thoi gian nhan va tra xe.');
+        throw new Error('Vui lòng chọn đầy đủ thời gian nhận và trả xe.');
       }
       if (minPickup && pickup < minPickup) {
-        throw new Error('Thoi gian nhan xe phai sau thoi diem hien tai.');
+        throw new Error('Thời gian nhận xe phải sau thời điểm hiện tại.');
       }
       if (ret <= pickup) {
-        throw new Error('Thoi gian tra xe phai sau thoi gian nhan xe.');
+        throw new Error('Thời gian trả xe phải sau thời gian nhận xe.');
       }
       if (isSameCalendarDate(pickup, ret)) {
-        throw new Error('Ngay tra xe khong duoc trung voi ngay nhan xe.');
+        throw new Error('Ngày trả xe không được trùng với ngày nhận xe.');
       }
       if (hasBookedDateSelection) {
         throw new Error('Xe đã có đơn đặt trong ngày bạn chọn. Vui lòng chọn ngày khác.');
@@ -487,7 +718,7 @@ const Checkout = () => {
 
       const trimmedDeliveryAddress = String(deliveryAddress || '').trim();
       if (pickupMethod === 'delivery' && trimmedDeliveryAddress.length < 6) {
-        throw new Error('Vui long nhap dia chi giao xe hop le.');
+        throw new Error('Vui lòng nhập địa chỉ giao xe hợp lệ.');
       }
 
       const availability = await bookingService.checkAvailability({
@@ -514,7 +745,7 @@ const Checkout = () => {
         delivery_latitude: deliveryLocation?.latitude ?? null,
         delivery_longitude: deliveryLocation?.longitude ?? null,
         delivery_plus_code: deliveryLocation?.plusCode ?? '',
-        note: pickupMethod === 'delivery' ? 'Giao tan noi' : 'Tu den lay',
+        note: pickupMethod === 'delivery' ? 'Giao tận nơi' : 'Tự đến lấy',
       });
       const bId = nextBookingId || booking?._id || booking?.id || booking;
       setBookingId(bId);
@@ -528,7 +759,7 @@ const Checkout = () => {
       setClientSecret(secret);
       setStep(2);
     } catch (err) {
-      setPrepError(err?.response?.data?.message || err?.message || 'Da co loi xay ra.');
+      setPrepError(err?.response?.data?.message || err?.message || 'Đã có lỗi xảy ra.');
     } finally {
       setPreparingPay(false);
     }
@@ -580,7 +811,7 @@ const Checkout = () => {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center gap-3 text-gray-500">
         <FaSpinner aria-hidden="true" className="animate-spin text-primary text-xl" />
-        <span>Dang tai thong tin xe...</span>
+        <span>Đang tải thông tin xe...</span>
       </div>
     );
   }
@@ -591,7 +822,7 @@ const Checkout = () => {
         <FaExclamationCircle aria-hidden="true" className="text-red-500 text-4xl" />
         <p className="text-center text-red-600">{vehicleError || 'Không tìm thấy xe.'}</p>
         <button type="button" className="btn-primary" onClick={() => navigate('/')}>
-          Ve trang chu
+          Về trang chủ
         </button>
       </div>
     );
@@ -614,9 +845,15 @@ const Checkout = () => {
     name: addedBy?.business_name || addedBy?.name || vehicle?.showroom || vehicle?.listerProfile?.displayName || '',
     email: addedBy?.email || '',
     phone: addedBy?.phone || '',
-    address: addedBy?.address || '',
+    address:
+      resolvedShowroomLocation?.address ||
+      addedBy?.address ||
+      vehicle?.pickupAddress ||
+      vehicle?.address ||
+      vehicle?.location ||
+      '',
   };
-  const pickupMethodLabel = pickupMethod === 'delivery' ? 'Giao tan noi' : 'Toi diem nhan';
+  const pickupMethodLabel = pickupMethod === 'delivery' ? 'Giao tận nơi' : 'Tới điểm nhận xe';
 
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4 sm:px-5">
@@ -638,7 +875,7 @@ const Checkout = () => {
               </React.Fragment>
             ))}
           </div>
-          <p className="text-[0.75rem] text-gray-500">{step === 1 ? 'Thong tin dat xe' : 'Thanh toan'}</p>
+          <p className="text-[0.75rem] text-gray-500">{step === 1 ? 'Thông tin đặt xe' : 'Thanh toán'}</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-8 items-start">
@@ -649,7 +886,7 @@ const Checkout = () => {
                   <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light text-primary">
                     <FaCar aria-hidden="true" className="text-xl" />
                   </span>
-                  <h2 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">Thong tin dat xe</h2>
+                  <h2 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">Thông tin đặt xe</h2>
                 </div>
 
                 <div className="rounded-xl border-2 border-primary/25 bg-primary-light/35 p-4 sm:p-5 mb-8">
@@ -698,11 +935,11 @@ const Checkout = () => {
                   </div>
                 </div>
 
-                <p className="text-[0.8rem] font-semibold text-gray-800 mb-3">Thoi gian thue xe</p>
+                <p className="text-[0.8rem] font-semibold text-gray-800 mb-3">Thời gian thuê xe</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
                   <DateTimeField
                     id="pickup-date"
-                    label="Nhan xe"
+                    label="Nhận xe"
                     value={pickupDate}
                     minValue={minPickupDateTime}
                     onChange={setPickupDate}
@@ -715,7 +952,7 @@ const Checkout = () => {
                   />
                   <DateTimeField
                     id="return-date"
-                    label="Tra xe"
+                    label="Trả xe"
                     value={returnDate}
                     minValue={pickupDate}
                     onChange={setReturnDate}
@@ -730,10 +967,10 @@ const Checkout = () => {
                   />
                 </div>
                 <div className="mb-4 text-[0.75rem] text-gray-500">
-                  Ngay <span className="font-bold text-orange-600">cam</span> trong lich tra xe la ngay trung voi ngay
-                  nhan xe va khong duoc chon.
+                  Ngày <span className="font-bold text-orange-600">cấm</span> trong lịch trả xe là ngày trùng với ngày
+                  nhận xe và không được chọn.
                 </div>
-                {loadingBookedDates && <div className="mb-3 text-[0.75rem] text-gray-400">Dang tai lich da dat...</div>}
+                {loadingBookedDates && <div className="mb-3 text-[0.75rem] text-gray-400">Đang tải lịch đã đặt...</div>}
                 {bookedDateError && (
                   <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[0.75rem] text-amber-700">
                     {bookedDateError}
@@ -741,20 +978,20 @@ const Checkout = () => {
                 )}
                 {hasBookedDateSelection && (
                   <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[0.78rem] text-red-700">
-                    Khoang thoi gian nay trung lich da dat cua xe. Vui long chon ngay khong bi danh dau do.
+                    Khoảng thời gian này trùng lịch đã đặt của xe. Vui lòng chọn ngày không bị đánh dấu đỏ.
                   </div>
                 )}
                 <div className="mb-8">
                   <span className="inline-flex items-center rounded-full bg-primary-light px-3 py-1 text-[0.75rem] font-semibold text-primary border border-primary/20">
-                    Tong thue: {days} ngay
+                    Tổng thuê: {days} ngày
                   </span>
                 </div>
 
-                <p className="text-[0.8rem] font-semibold text-gray-800 mb-3">Hinh thuc nhan xe</p>
+                <p className="text-[0.8rem] font-semibold text-gray-800 mb-3">Hình thức nhận xe</p>
                 <div
                   className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8"
                   role="radiogroup"
-                  aria-label="Hinh thuc nhan xe"
+                  aria-label="Hình thức nhận xe"
                 >
                   <button
                     type="button"
@@ -767,8 +1004,8 @@ const Checkout = () => {
                         : 'border-gray-200 bg-white hover:border-gray-300'
                     }`}
                   >
-                    <p className="font-bold text-gray-900 text-[0.9rem]">Toi diem nhan</p>
-                    <p className="text-primary font-semibold text-[0.85rem] mt-1">Mien phi</p>
+                    <p className="font-bold text-gray-900 text-[0.9rem]">Tới điểm nhận</p>
+                    <p className="text-primary font-semibold text-[0.85rem] mt-1">Miễn phí</p>
                   </button>
                   <button
                     type="button"
@@ -781,32 +1018,51 @@ const Checkout = () => {
                         : 'border-gray-200 bg-white hover:border-gray-300'
                     }`}
                   >
-                    <p className="font-bold text-gray-900 text-[0.9rem]">Giao tan noi</p>
+                    <p className="font-bold text-gray-900 text-[0.9rem]">Giao tận nơi</p>
                     <p className="text-gray-600 font-semibold text-[0.85rem] mt-1">+ {formatVnd(DELIVERY_FEE_VND)}</p>
                   </button>
                 </div>
 
                 {pickupMethod === 'self' && (
                   <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
-                    <label className="mb-2 block text-[0.8rem] font-semibold text-gray-800">Vi tri xe</label>
-                    {loadingVehicleLocation || resolvingVehicleLocation ? (
+                    <label className="mb-2 block text-[0.8rem] font-semibold text-gray-800">Vị trí nhận xe</label>
+                    {resolvingShowroomLocation || loadingVehicleLocation ? (
                       <div className="text-[0.8rem] text-gray-500 flex items-center gap-2">
-                        <FaSpinner className="animate-spin" /> Dang tai vi tri xe...
+                        <FaSpinner className="animate-spin" /> Đang tải vị trí showroom...
                       </div>
-                    ) : vehicleLocationError ? (
-                      resolvedVehicleLocation ? null : <p className="text-[0.8rem] text-red-600">{vehicleLocationError}</p>
-                    ) : resolvedVehicleLocation ? (
-                      <div className="mt-3 overflow-hidden rounded-xl">
-                        <CarLocationMap
-                          locationText={resolvedVehicleLocation.address}
-                          lat={resolvedVehicleLocation.latitude}
-                          lng={resolvedVehicleLocation.longitude}
-                          openMapLabel="Mo trong map"
-                          mapHeight={220}
-                        />
-                      </div>
+                    ) : resolvedShowroomLocation ? (
+                      hasCoordinates(resolvedShowroomLocation.latitude, resolvedShowroomLocation.longitude) ? (
+                        <div className="mt-3 overflow-hidden rounded-xl">
+                          <CarLocationMap
+                            locationText={resolvedShowroomLocation.address}
+                            lat={resolvedShowroomLocation.latitude}
+                            lng={resolvedShowroomLocation.longitude}
+                            openMapLabel="Mở trong map"
+                            mapHeight={220}
+                          />
+                        </div>
+                      ) : (
+                        <div className="space-y-2 text-[0.8rem]">
+                          <p className="text-gray-700">{resolvedShowroomLocation.address}</p>
+                          {showroomLocationError && <p className="text-amber-700">{showroomLocationError}</p>}
+                        </div>
+                      )
+                    ) : showroomLocationError ? (
+                      resolvedVehicleLocation ? (
+                        <div className="mt-3 overflow-hidden rounded-xl">
+                          <CarLocationMap
+                            locationText={resolvedVehicleLocation.address}
+                            lat={resolvedVehicleLocation.latitude}
+                            lng={resolvedVehicleLocation.longitude}
+                            openMapLabel="Mở trong map"
+                            mapHeight={220}
+                          />
+                        </div>
+                      ) : (
+                        <p className="text-[0.8rem] text-red-600">{showroomLocationError}</p>
+                      )
                     ) : (
-                      <p className="text-[0.8rem] text-gray-500">Khong co vi tri hien tai cua xe.</p>
+                      <p className="text-[0.8rem] text-gray-500">Không có vị trí showroom.</p>
                     )}
                   </div>
                 )}
@@ -814,7 +1070,7 @@ const Checkout = () => {
                 {pickupMethod === 'delivery' && (
                   <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
                     <label className="mb-2 block text-[0.8rem] font-semibold text-gray-800" htmlFor="delivery-address">
-                      Dia chi giao xe
+                      Địa chỉ giao xe
                     </label>
                     <div className="relative">
                       <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-slate-50 px-3 py-2.5">
@@ -839,13 +1095,13 @@ const Checkout = () => {
                             );
                             if (parsedCoordinates) setDeliverySuggestions([]);
                           }}
-                          placeholder="Nhap dia chi nhan xe"
+                          placeholder="Nhập địa chỉ nhận xe"
                           className="min-w-0 flex-1 bg-transparent text-sm text-gray-800 outline-none"
                         />
                         <button
                           type="button"
-                          aria-label="Lay vi tri hien tai"
-                          title="Lay vi tri hien tai"
+                          aria-label="Lấy vị trí hiện tại của tôi"
+                          title="Lấy vị trí hiện tại của tôi"
                           onClick={handleUseCurrentDeliveryLocation}
                           disabled={loadingDeliveryLocation}
                           className="rounded-md p-1.5 text-primary hover:bg-primary-light disabled:opacity-50"
@@ -857,7 +1113,7 @@ const Checkout = () => {
                         <div className="absolute left-0 right-0 z-30 mt-1 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
                           {loadingDeliverySuggestions && (
                             <div className="flex items-center gap-2 px-3 py-2 text-[0.78rem] text-gray-500">
-                              <FaSpinner className="animate-spin" /> Dang tim goi y dia chi...
+                              <FaSpinner className="animate-spin" /> Đang tìm gợi ý địa chỉ...
                             </div>
                           )}
                           {!loadingDeliverySuggestions &&
@@ -875,7 +1131,7 @@ const Checkout = () => {
                       )}
                     </div>
                     {deliveryLocation?.address && (
-                      <p className="mt-2 text-[0.75rem] text-primary">Da xac dinh toa do giao xe.</p>
+                      <p className="mt-2 text-[0.75rem] text-primary">Đã xác định tọa độ giao xe.</p>
                     )}
                     {hasCoordinates(deliveryLocation) && (
                       <div className="mt-3 overflow-hidden rounded-xl">
@@ -883,7 +1139,7 @@ const Checkout = () => {
                           locationText={deliveryLocation.address || deliveryAddress}
                           lat={deliveryLocation.latitude}
                           lng={deliveryLocation.longitude}
-                          openMapLabel="Mo trong map"
+                          openMapLabel="Mở trong map"
                           mapHeight={220}
                         />
                       </div>
@@ -931,11 +1187,11 @@ const Checkout = () => {
                 >
                   {preparingPay ? (
                     <>
-                      <FaSpinner aria-hidden="true" className="animate-spin" /> Dang xu ly...
+                      <FaSpinner aria-hidden="true" className="animate-spin" /> Đang chuẩn bị thanh toán...
                     </>
                   ) : (
                     <>
-                      Tiep tuc
+                      Tiếp tục
                       <FaArrowRight aria-hidden="true" />
                     </>
                   )}

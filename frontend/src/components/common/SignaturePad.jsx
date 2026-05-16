@@ -10,7 +10,7 @@ import SignatureCanvas from 'react-signature-canvas';
  *  - width, height — kích thước canvas (px)
  *  - label — nhãn hiển thị trên pad
  */
-const SignaturePad = ({ onSign, onClear, width = 400, height = 150, label = 'Vẽ chữ ký của bạn' }) => {
+const SignaturePad = ({ onSign, onSave, onClear, width = 400, height = 150, label = 'Vẽ chữ ký của bạn' }) => {
   const sigRef = useRef(null);
   const [isEmpty, setIsEmpty] = useState(true);
 
@@ -18,7 +18,9 @@ const SignaturePad = ({ onSign, onClear, width = 400, height = 150, label = 'V�
     if (!sigRef.current) return;
     if (sigRef.current.isEmpty()) return;
     setIsEmpty(false);
-    if (onSign) onSign(sigRef.current.toDataURL('image/png'));
+    const data = sigRef.current.toDataURL('image/png');
+    if (onSign) onSign(data);
+    if (onSave) onSave(data);
   };
 
   const handleClear = () => {
@@ -27,6 +29,7 @@ const SignaturePad = ({ onSign, onClear, width = 400, height = 150, label = 'V�
     setIsEmpty(true);
     if (onClear) onClear();
     if (onSign) onSign(null);
+    if (onSave) onSave(null);
   };
 
   return (

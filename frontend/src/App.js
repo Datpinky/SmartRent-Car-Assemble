@@ -1,9 +1,9 @@
 import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import ChatWidget from './components/common/ChatWidget';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import RoleRoute from './components/common/RoleRoute';
+import RootRedirect from './components/common/RootRedirect';
 import Footer from './components/Footer/Footer';
 import Navbar from './components/Navbar/Navbar';
 import CarDetail from './components/pages/CarDetail/CarDetail';
@@ -12,7 +12,6 @@ import Login from './components/pages/Login/Login';
 import PartnerRegister from './components/pages/PartnerRegister/PartnerRegister';
 import ShowroomPublic from './components/pages/ShowroomPublic/ShowroomPublic';
 import { AuthProvider } from './contexts/AuthContext';
-import { ChatWidgetProvider } from './contexts/ChatWidgetContext';
 import DashboardLayout from './layouts/DashboardLayout';
 import AdminDashboard from './pages/admin/AdminDashboard/AdminDashboard';
 import AdminProfile from './pages/admin/AdminProfile/AdminProfile';
@@ -135,52 +134,51 @@ const PublicSite = () => (
 
 const App = () => (
   <AuthProvider>
-    <ChatWidgetProvider>
-      <Router>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/partner/register" element={<PartnerRegister />} />
+    <Router>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/partner/register" element={<PartnerRegister />} />
 
-          {ADMIN_DASHBOARD_ROUTES.map((route) => (
-            <Route
-              key={route.path}
-              path={route.path}
-              element={<DashboardPage roles={['admin']}>{route.component}</DashboardPage>}
-            />
-          ))}
-          {ADMIN_REDIRECT_ROUTES.map((route) => (
-            <Route key={route.path} path={route.path} element={<Navigate to={route.to} replace />} />
-          ))}
+        <Route path="/" element={<RootRedirect />} />
 
-          {SHOWROOM_DASHBOARD_ROUTES.map((route) => (
-            <Route
-              key={route.path}
-              path={route.path}
-              element={<DashboardPage roles={['showroom']}>{route.component}</DashboardPage>}
-            />
-          ))}
+        {ADMIN_DASHBOARD_ROUTES.map((route) => (
+          <Route
+            key={route.path}
+            path={route.path}
+            element={<DashboardPage roles={['admin']}>{route.component}</DashboardPage>}
+          />
+        ))}
+        {ADMIN_REDIRECT_ROUTES.map((route) => (
+          <Route key={route.path} path={route.path} element={<Navigate to={route.to} replace />} />
+        ))}
 
-          {RENTER_DASHBOARD_ROUTES.map((route) => (
-            <Route key={route.path} path={route.path} element={<RenterPage>{route.component}</RenterPage>} />
-          ))}
-          {RENTER_ONLY_ROUTES.map((route) => (
-            <Route key={route.path} path={route.path} element={<RenterOnlyPage>{route.component}</RenterOnlyPage>} />
-          ))}
+        {SHOWROOM_DASHBOARD_ROUTES.map((route) => (
+          <Route
+            key={route.path}
+            path={route.path}
+            element={<DashboardPage roles={['showroom']}>{route.component}</DashboardPage>}
+          />
+        ))}
 
-          <Route path="/*" element={<PublicSite />} />
-        </Routes>
-        <ChatWidget />
-        <ToastContainer
-          position="top-right"
-          autoClose={4000}
-          hideProgressBar={false}
-          newestOnTop
-          closeOnClick
-          pauseOnHover
-          draggable
-        />
-      </Router>
-    </ChatWidgetProvider>
+        {RENTER_DASHBOARD_ROUTES.map((route) => (
+          <Route key={route.path} path={route.path} element={<RenterPage>{route.component}</RenterPage>} />
+        ))}
+        {RENTER_ONLY_ROUTES.map((route) => (
+          <Route key={route.path} path={route.path} element={<RenterOnlyPage>{route.component}</RenterOnlyPage>} />
+        ))}
+
+        <Route path="/*" element={<PublicSite />} />
+      </Routes>
+      <ToastContainer
+        position="top-right"
+        autoClose={4000}
+        hideProgressBar={false}
+        newestOnTop
+        closeOnClick
+        pauseOnHover
+        draggable
+      />
+    </Router>
   </AuthProvider>
 );
 
