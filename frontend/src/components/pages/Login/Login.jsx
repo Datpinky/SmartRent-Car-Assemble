@@ -7,7 +7,7 @@ import { PasswordStrengthInput, PasswordToggleInput, passwordMeetsPolicy } from 
 
 const ROLE_REDIRECTS = {
   admin: '/admin/dashboard',
-  showroom: '/showroom/dashboard',
+  showroom: '/showroom/vehicles',
   renter: '/renter/dashboard',
 };
 

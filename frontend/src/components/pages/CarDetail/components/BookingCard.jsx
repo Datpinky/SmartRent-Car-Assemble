@@ -16,7 +16,7 @@ import GplxRequirementBanner from './GplxRequirementBanner';
 
 const ROLE_DEFAULT_PATHS = {
   admin: '/admin/dashboard',
-  showroom: '/showroom/dashboard',
+  showroom: '/showroom/vehicles',
   renter: '/renter/profile',
 };
 

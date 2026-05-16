@@ -4,8 +4,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import RoleRoute from './components/common/RoleRoute';
 import RootRedirect from './components/common/RootRedirect';
-import Footer from './components/Footer/Footer';
-import Navbar from './components/Navbar/Navbar';
+import PublicShell from './components/common/PublicShell';
 import CarDetail from './components/pages/CarDetail/CarDetail';
 import Home from './components/pages/Home/Home';
 import Login from './components/pages/Login/Login';
@@ -34,14 +33,12 @@ import Profile from './pages/renter/Profile/Profile';
 import RenterDashboard from './pages/renter/RenterDashboard/RenterDashboard';
 import RetryPayment from './pages/renter/RetryPayment/RetryPayment';
 import ReturnInspectionHistory from './pages/renter/ReturnInspectionHistory/ReturnInspectionHistory';
-import SOSReport from './pages/renter/SOSReport/SOSReport';
 import Transactions from './pages/renter/Transactions/Transactions';
 import AIInspection from './pages/showroom/AIInspection/AIInspection';
 import BookingManagement from './pages/showroom/BookingManagement/BookingManagement';
 import ContractManagement from './pages/showroom/ContractManagement/ContractManagement';
 import CustomerManagement from './pages/showroom/CustomerManagement/CustomerManagement';
 import RevenueReports from './pages/showroom/RevenueReports/RevenueReports';
-import ShowroomDashboard from './pages/showroom/ShowroomDashboard/ShowroomDashboard';
 import ShowroomProfile from './pages/showroom/ShowroomProfile/ShowroomProfile';
 import ShowroomWithdrawals from './pages/showroom/ShowroomWithdrawals/ShowroomWithdrawals';
 import VehicleManagement from './pages/showroom/VehicleManagement/VehicleManagement';
@@ -84,7 +81,6 @@ const ADMIN_REDIRECT_ROUTES = [
 ];
 
 const SHOWROOM_DASHBOARD_ROUTES = [
-  { path: '/showroom/dashboard', component: <ShowroomDashboard /> },
   { path: '/showroom/vehicles', component: <VehicleManagement /> },
   { path: '/showroom/bookings', component: <BookingManagement /> },
   { path: '/showroom/contracts', component: <ContractManagement /> },
@@ -108,7 +104,6 @@ const RENTER_DASHBOARD_ROUTES = [
   { path: '/renter/contracts', component: <MyContracts /> },
   { path: '/renter/checkout/:carId', component: <Checkout /> },
   { path: '/renter/checkout', component: <Checkout /> },
-  { path: '/renter/sos', component: <SOSReport /> },
 ];
 
 const RENTER_ONLY_ROUTES = [
@@ -117,19 +112,15 @@ const RENTER_ONLY_ROUTES = [
 ];
 
 const PublicSite = () => (
-  <div className="flex min-h-screen flex-col">
-    <Navbar />
-    <div className="flex-1">
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/xe/:id" element={<CarDetail />} />
-        <Route path="/showrooms/:userId" element={<ShowroomPublic />} />
-        <Route path="/map" element={<MapPage />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </div>
-    <Footer />
-  </div>
+  <PublicShell>
+    <Routes>
+      <Route path="/" element={<Home />} />
+      <Route path="/xe/:id" element={<CarDetail />} />
+      <Route path="/showrooms/:userId" element={<ShowroomPublic />} />
+      <Route path="/map" element={<MapPage />} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  </PublicShell>
 );
 
 const App = () => (

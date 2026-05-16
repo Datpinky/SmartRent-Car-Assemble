@@ -465,54 +465,6 @@
   .checkout-btn-back {
     @apply bg-white text-gray-700 border-[1.5px] border-gray-200 rounded-[9px] px-[18px] py-[11px] text-[0.88rem] font-semibold cursor-pointer mt-5 transition-all hover:border-gray-400;
   }
-
-  /* SOS Report */
-  .sos-page {
-    @apply flex flex-col w-full max-w-[900px] mx-auto px-4 box-border;
-  }
-  .sos-header {
-    @apply flex items-center gap-4 rounded-2xl px-6 py-5 mb-5 text-white;
-    background: linear-gradient(135deg, #7f1d1d, #dc2626);
-  }
-  .sos-header-icon {
-    @apply w-[52px] h-[52px] rounded-full bg-white/20 flex items-center justify-center text-[1.4rem] shrink-0 animate-[pulse-ring_1.5s_ease_infinite];
-  }
-  .sos-title {
-    @apply text-[1.1rem] font-extrabold m-0 mb-1;
-  }
-  .sos-sub {
-    @apply text-[0.83rem] opacity-80 m-0;
-  }
-  .sos-phone {
-    @apply text-white font-bold no-underline;
-  }
-  .hotline-grid {
-    @apply grid grid-cols-2 gap-2.5 max-[480px]:grid-cols-1;
-  }
-  .hotline-card {
-    @apply flex flex-col items-center p-3.5 rounded-xl border-[1.5px] no-underline transition-transform hover:-translate-y-0.5;
-  }
-  .hotline-icon {
-    @apply w-10 h-10 rounded-full flex items-center justify-center text-[1.1rem] mb-1.5;
-  }
-  .hotline-label {
-    @apply text-[0.78rem] text-gray-700 font-semibold;
-  }
-  .hotline-number {
-    @apply text-[1.1rem] font-extrabold my-0.5;
-  }
-  .hotline-desc {
-    @apply text-[0.68rem] text-gray-400;
-  }
-  .sos-form-card {
-    @apply bg-white rounded-[14px] p-[22px] border border-[#f0f0f0];
-  }
-  .sos-success {
-    @apply flex flex-col items-center py-10 px-6 gap-3 text-center bg-white rounded-2xl border border-[#f0f0f0];
-  }
-  .sos-success-icon {
-    @apply w-20 h-20 rounded-full bg-primary-light flex items-center justify-center text-[2.5rem] text-emerald-600;
-  }
 }
 
 /* Keep keyframe animations that can't be expressed as Tailwind utilities */
@@ -551,17 +503,6 @@
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes pulse-ring {
-  0% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(2.5);
-    opacity: 0;
   }
 }
 

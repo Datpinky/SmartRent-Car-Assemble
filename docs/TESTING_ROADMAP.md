@@ -107,7 +107,7 @@ Thực hiện trước mỗi lần build demo.
 | TC-SMOKE-004 | Auth | Có ACC-OWNER-01 | Login owner | Nhận token hợp lệ |
 | TC-SMOKE-005 | Auth | Có ACC-RENTER-01 | Login renter | Nhận token hợp lệ |
 | TC-SMOKE-006 | Routing | Token admin | Mở `/admin/dashboard` | Render bình thường |
-| TC-SMOKE-007 | Routing | Token showroom | Mở `/showroom/dashboard` | Render bình thường |
+| TC-SMOKE-007 | Routing | Token showroom | Mở `/showroom/vehicles` | Render bình thường |
 | TC-SMOKE-008 | Routing | Token owner | Mở `/owner/dashboard` | Render bình thường |
 | TC-SMOKE-009 | Routing | Token renter | Mở `/renter/dashboard` | Render bình thường |
 | TC-SMOKE-010 | Vehicles | Có dữ liệu xe | Mở danh sách xe công khai | Có item hiển thị |

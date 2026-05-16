@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 
 const ROLE_DASHBOARD_PATHS = {
   admin: '/admin/dashboard',
-  showroom: '/showroom/dashboard',
+  showroom: '/showroom/vehicles',
   renter: '/renter/profile',
 };
 
@@ -177,16 +177,6 @@ const Navbar = () => {
                     }}
                   >
                     Chuyến đi của tôi
-                  </button>
-                  <button
-                    type="button"
-                    className="block w-full px-5 py-3 text-[0.9rem] font-medium text-gray-700 hover:bg-gray-100 text-left"
-                    onClick={() => {
-                      navigate('/renter/sos');
-                      setMenuOpen(false);
-                    }}
-                  >
-                    Hỗ trợ khẩn cấp
                   </button>
                 </>
               )}

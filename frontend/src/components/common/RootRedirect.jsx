@@ -1,25 +1,32 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import DashboardLayout from '../../layouts/DashboardLayout';
 import Home from '../pages/Home/Home';
+import PublicShell from './PublicShell';
 
 const RootRedirect = () => {
   const { user, loading } = useAuth();
 
   if (loading) return null;
 
-  // Not logged in -> show public home
-  if (!user) return <Home />;
+  // Not logged in -> show public home (cùng Navbar/Footer như các trang công khai khác)
+  if (!user) {
+    return (
+      <PublicShell>
+        <Home />
+      </PublicShell>
+    );
+  }
 
   // Logged in -> redirect based on role
   if (user.role === 'admin') return <Navigate to="/admin/dashboard" replace />;
-  if (user.role === 'showroom') return <Navigate to="/showroom/dashboard" replace />;
+  if (user.role === 'showroom') return <Navigate to="/showroom/vehicles" replace />;
 
-  // Default (renter) -> show public home wrapped in dashboard layout (with header)
-  if (user && user.role === 'renter') return <DashboardLayout>{<Home />}</DashboardLayout>;
-
-  // Fallback: public home
-  return <Home />;
+  // Default (renter or unknown) -> show public home
+  return (
+    <PublicShell>
+      <Home />
+    </PublicShell>
+  );
 };
 
 export default RootRedirect;

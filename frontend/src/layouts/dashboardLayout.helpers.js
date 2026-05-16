@@ -1,5 +1,4 @@
 import {
-  AlertTriangle,
   ArrowLeftRight,
   Bot,
   CalendarDays,
@@ -24,7 +23,6 @@ export const MENUS = {
     { label: 'Yêu cầu rút tiền', path: '/admin/withdrawals', icon: CreditCard },
   ],
   showroom: [
-    { label: 'Tổng quan', path: '/showroom/dashboard', icon: LayoutDashboard },
     {
       label: 'Quản lý',
       icon: Car,
@@ -55,7 +53,6 @@ export const MENUS = {
     { label: 'Kiểm tra AI trả xe', path: '/renter/return-inspections', icon: Bot },
     { label: 'Hợp đồng của tôi', path: '/renter/contracts', icon: FileText },
     { label: 'Lịch sử giao dịch', path: '/renter/transactions', icon: ArrowLeftRight },
-    { label: 'Hỗ trợ khẩn cấp', path: '/renter/sos', icon: AlertTriangle },
   ],
 };
 
