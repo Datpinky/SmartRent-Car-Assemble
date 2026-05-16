@@ -307,7 +307,9 @@ const RevenueReports = () => {
                       <span className="code-badge">{v.plateNumber || '—'}</span>
                     </td>
                     <td>{v.type || v.category || '—'}</td>
-                    <td style={{ textAlign: 'center', fontWeight: 700 }}>{tripsMap.get(resolveId(v)) ?? v.trips ?? 0}</td>
+                    <td style={{ textAlign: 'center', fontWeight: 700 }}>
+                      {tripsMap.get(resolveId(v)) ?? v.trips ?? 0}
+                    </td>
                     <td style={{ fontWeight: 700, color: '#00b14f' }}>{formatVnd(v.price || 0)}</td>
                   </tr>
                 ))}
