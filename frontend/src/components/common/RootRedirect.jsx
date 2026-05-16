@@ -1,5 +1,6 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import DashboardLayout from '../../layouts/DashboardLayout';
 import Home from '../pages/Home/Home';
 
 const RootRedirect = () => {
@@ -14,7 +15,10 @@ const RootRedirect = () => {
   if (user.role === 'admin') return <Navigate to="/admin/dashboard" replace />;
   if (user.role === 'showroom') return <Navigate to="/showroom/dashboard" replace />;
 
-  // Default (renter or unknown) -> show public home
+  // Default (renter) -> show public home wrapped in dashboard layout (with header)
+  if (user && user.role === 'renter') return <DashboardLayout>{<Home />}</DashboardLayout>;
+
+  // Fallback: public home
   return <Home />;
 };
 
