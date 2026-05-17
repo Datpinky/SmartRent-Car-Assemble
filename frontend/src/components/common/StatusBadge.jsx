@@ -22,6 +22,8 @@ const STATUS_CONFIG = {
   renting: { label: 'Đang thuê', bg: '#dbeafe', color: '#2563eb' },
   waiting: { label: 'Đang chờ', bg: '#fef3c7', color: '#d97706' },
   signed: { label: 'Đã ký', bg: '#d1fae5', color: '#059669' },
+  pending_signature: { label: 'Chờ ký', bg: '#fef3c7', color: '#d97706' },
+  voided: { label: 'Vô hiệu', bg: '#f3f4f6', color: '#6b7280' },
   expired: { label: 'Hết hạn', bg: '#f3f4f6', color: '#6b7280' },
   draft: { label: 'Nháp', bg: '#f3f4f6', color: '#6b7280' },
   confirmed: { label: 'Đã duyệt', bg: '#d1fae5', color: '#059669' },

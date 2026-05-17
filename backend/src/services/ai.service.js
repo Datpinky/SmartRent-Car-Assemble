@@ -41,6 +41,24 @@ const GALLERY_DAMAGE_RESPONSE_SCHEMA = {
             enum: ['low', 'medium', 'high'],
           },
           needs_manual_review: { type: SchemaType.BOOLEAN },
+          regions: {
+            type: SchemaType.ARRAY,
+            items: {
+              type: SchemaType.OBJECT,
+              properties: {
+                image_group: {
+                  type: SchemaType.STRING,
+                  format: 'enum',
+                  enum: ['before', 'after'],
+                },
+                image_index: { type: SchemaType.NUMBER },
+                x: { type: SchemaType.NUMBER },
+                y: { type: SchemaType.NUMBER },
+                width: { type: SchemaType.NUMBER },
+                height: { type: SchemaType.NUMBER },
+              },
+            },
+          },
         },
         required: [
           'area',
@@ -135,7 +153,29 @@ class AiService {
     return ['low', 'medium', 'high'].includes(normalized) ? normalized : 'low';
   }
 
+  _normalizeRegion(r) {
+    const group = this._toString(r?.image_group, '').toLowerCase() === 'before' ? 'before' : 'after';
+    const idx = Number.isFinite(Number(r?.image_index)) ? Math.max(0, Math.floor(Number(r.image_index))) : 0;
+    const clamp = (n) => {
+      const x = Number(n);
+      if (!Number.isFinite(x)) return 0;
+      return Math.min(1, Math.max(0, x));
+    };
+    return {
+      image_group: group,
+      image_index: idx,
+      x: clamp(r?.x),
+      y: clamp(r?.y),
+      width: clamp(r?.width),
+      height: clamp(r?.height),
+    };
+  }
+
   _normalizeGalleryObservation(obs) {
+    const rawRegions = Array.isArray(obs?.regions) ? obs.regions : [];
+    const regions = rawRegions
+      .map((x) => this._normalizeRegion(x))
+      .filter((reg) => reg.width > 0 && reg.height > 0);
     return {
       area: this._toString(obs?.area, 'Khong xac dinh'),
       description: this._toString(obs?.description, ''),
@@ -144,6 +184,7 @@ class AiService {
       likely_new_damage: this._toBoolean(obs?.likely_new_damage),
       confidence: this._normalizeConfidence(obs?.confidence),
       needs_manual_review: this._toBoolean(obs?.needs_manual_review),
+      regions,
     };
   }
 
@@ -315,10 +356,12 @@ class AiService {
       `Ban nhan ${images.length} anh cua mot chiec xe. Anh co the chup tu nhieu goc, khoang cach va khu vuc khac nhau.`,
       'Hay phan tich tinh trang hien tai cua xe, phat hien hu hong, tray xuoc, bien dang hoac diem dang luu y.',
       'Khong co nhom anh TRUOC nen khong duoc khang dinh chac chan hu hong moi. Neu can doi chieu thuc te, dat needs_manual_review = true.',
+      'Neu co vung nghi van, co the them regions trong observation (toa do normalized 0..1); neu khong chac thi de regions = [].',
       '',
       'Tra ve DUY NHAT 1 JSON object hop le, khong markdown, khong code fence, khong text ngoai JSON.',
       'Neu khong thay hu hong hoac diem dang luu y, van phai giu du key va de observations = [].',
       'disclaimer phai nhac ro day chi la danh gia ho tro.',
+      'Neu co vung nghi van ro rang, co the ghi regions trong tung observation (image_group: before|after + image_index + toa do normalized 0..1); neu khong chac thi de regions = [].',
     ].join('\n');
 
     const content = [{ text: prompt }];
@@ -386,7 +429,9 @@ class AiService {
       '2. Chi ket luan hu hong moi khi co bang chung hop ly giua BEFORE va AFTER.',
       '3. Neu AFTER co dau hieu hu hong nhung BEFORE thieu goc tuong ung, dat likely_new_damage = false va needs_manual_review = true.',
       '4. Khong coi khac biet do anh sang, bong, phan chieu, bui ban, goc chup, crop anh hoac anh mo la hu hong moi neu khong du bang chung.',
-      '5. Moi observation phai ghi area, description, evidence, severity_level, likely_new_damage, confidence, needs_manual_review.',
+      '5. Moi observation co the kem regions (optional): danh sach vung nghi van tren anh BEFORE hoac AFTER.',
+      '   image_index la chi so 0-based theo thu tu anh trong nhom before hoac after.',
+      '   Toa do x,y,width,height la normalized 0..1 theo kich thuoc anh. Neu khong chac chan thi de regions = [].',
       '',
       'Tra ve DUY NHAT 1 JSON object hop le, khong markdown, khong code fence, khong text ngoai JSON.',
       'Neu khong thay hu hong moi ro rang va khong co diem nao can review thu cong, van phai giu du key va de observations = [].',

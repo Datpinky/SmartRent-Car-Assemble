@@ -117,7 +117,7 @@ const ShowroomWithdrawals = () => {
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div className="flex min-w-0 max-w-full flex-col gap-6">
       <div>
         <h1 style={{ fontSize: '1.35rem', fontWeight: 900, color: '#111827' }}>Quản lý rút tiền</h1>
         <p style={{ fontSize: '0.85rem', color: '#6b7280', marginTop: 4 }}>
@@ -125,7 +125,13 @@ const ShowroomWithdrawals = () => {
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14 }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))',
+          gap: 14,
+        }}
+      >
         {BALANCE_CARDS.map(({ label, value, accent, tint, Icon }) => (
           <div
             key={label}
@@ -175,7 +181,13 @@ const ShowroomWithdrawals = () => {
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 20 }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
+          gap: 20,
+        }}
+      >
         {/* Withdrawal form */}
         <div
           style={{

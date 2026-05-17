@@ -408,12 +408,17 @@ class ContractService {
 
   /**
    * Danh sách hợp đồng của showroom.
+   * Gồm bản ghi theo showroom_user_id HOẶC booking thuộc showroom_id (đồng bộ khi snapshot lệch / legacy).
    */
   async listByShowroom(showroomId, { page = 1, limit = 10 } = {}) {
     const skip = (page - 1) * limit;
+    const bookingIds = await Booking.find({ showroom_id: showroomId }).distinct('_id');
+    const filter = {
+      $or: [{ showroom_user_id: showroomId }, { booking_id: { $in: bookingIds } }],
+    };
     const [data, total] = await Promise.all([
-      RentalContractRecord.find({ showroom_user_id: showroomId }).sort({ createdAt: -1 }).skip(skip).limit(limit),
-      RentalContractRecord.countDocuments({ showroom_user_id: showroomId }),
+      RentalContractRecord.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      RentalContractRecord.countDocuments(filter),
     ]);
     return { data, total, page, limit };
   }

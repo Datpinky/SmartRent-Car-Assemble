@@ -16,6 +16,7 @@ import { ACCEPTED_IMAGE_INPUT_ACCEPT, isAcceptedImageFile } from '../../utils/ac
  *   preview     - show image thumbnails (default true)
  *   autoUpload  - immediately upload to backend on file select (default true)
  *                 Set to false to stay in local-only mode (File objects only)
+ *   clearAfterUpload - if true, clear internal previews after a successful onUpload (lets user add more batches)
  */
 const FileUpload = ({
   label,
@@ -27,6 +28,7 @@ const FileUpload = ({
   hint,
   preview = true,
   autoUpload = true,
+  clearAfterUpload = false,
 }) => {
   const inputId = useId();
   const [files, setFiles] = useState([]);
@@ -75,6 +77,15 @@ const FileUpload = ({
       );
 
       if (onUpload) onUpload(cloudUrls);
+
+      if (clearAfterUpload) {
+        setFiles((prev) => {
+          prev.forEach((f) => {
+            if (f.url && String(f.url).startsWith('blob:')) URL.revokeObjectURL(f.url);
+          });
+          return [];
+        });
+      }
     } catch (err) {
       setUploadError(err.message || 'Upload thất bại. Vui lòng thử lại.');
       if (onFiles) onFiles(updated.map((f) => f.file));

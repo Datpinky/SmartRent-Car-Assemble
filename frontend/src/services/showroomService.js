@@ -1,17 +1,47 @@
 import apiClient from './apiClient';
 import { mapVehicle } from './vehicleService';
 
-export const showroomService = {
-  async getPublicProfile(userId) {
-    const vehicles = await this.getPublicVehicles(userId, { page: 1, limit: 1 });
-    return vehicles.showroom || {
+function mapPublicShowroomFromUser(listedBy, userId) {
+  if (!listedBy || typeof listedBy !== 'object') {
+    return {
       _id: userId,
       id: userId,
       name: 'Showroom',
+      business_name: '',
       email: '',
       phone: '',
       address: '',
+      public_address: '',
+      logo_url: '',
+      showroom_representative_name: '',
+      opening_hours: '',
+      showroom_description: '',
+      policy_text: '',
     };
+  }
+  const id = listedBy._id || userId;
+  const displayName = listedBy.business_name || listedBy.name || 'Showroom';
+  return {
+    _id: id,
+    id,
+    name: displayName,
+    business_name: listedBy.business_name || '',
+    email: listedBy.email || '',
+    phone: listedBy.phone || '',
+    address: listedBy.address || '',
+    public_address: listedBy.public_address || '',
+    logo_url: listedBy.logo_url || '',
+    showroom_representative_name: listedBy.showroom_representative_name || '',
+    opening_hours: listedBy.opening_hours || '',
+    showroom_description: listedBy.showroom_description || '',
+    policy_text: listedBy.policy_text || '',
+  };
+}
+
+export const showroomService = {
+  async getPublicProfile(userId) {
+    const payload = await this.getPublicVehicles(userId, { page: 1, limit: 1 });
+    return payload.showroom;
   },
 
   async getPublicVehicles(userId, { page = 1, limit = 12 } = {}) {
@@ -21,24 +51,8 @@ export const showroomService = {
       limit,
     });
     const rawVehicles = Array.isArray(response.data?.data) ? response.data.data : [];
-    const firstLister = rawVehicles.find((vehicle) => vehicle.added_by && typeof vehicle.added_by === 'object')?.added_by;
-    const showroom = firstLister
-      ? {
-        _id: firstLister._id || userId,
-        id: firstLister._id || userId,
-        name: firstLister.business_name || firstLister.name || 'Showroom',
-        email: firstLister.email || '',
-        phone: firstLister.phone || '',
-        address: firstLister.address || '',
-      }
-      : {
-        _id: userId,
-        id: userId,
-        name: 'Showroom',
-        email: '',
-        phone: '',
-        address: '',
-      };
+    const firstWithOwner = rawVehicles.find((vehicle) => vehicle.added_by && typeof vehicle.added_by === 'object');
+    const showroom = mapPublicShowroomFromUser(firstWithOwner?.added_by, userId);
 
     return {
       data: rawVehicles.map(mapVehicle),

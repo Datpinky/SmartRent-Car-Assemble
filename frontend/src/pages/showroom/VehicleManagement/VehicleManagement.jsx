@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { FaEdit, FaPlus, FaRoute, FaSpinner, FaStar, FaTrash } from 'react-icons/fa';
+import { FaEdit, FaPlus, FaRoute, FaSpinner, FaStar, FaTimes, FaTrash } from 'react-icons/fa';
 import { MdDirectionsCar, MdEventSeat, MdLocalGasStation } from 'react-icons/md';
 import { toast } from 'react-toastify';
 import DataTable from '../../../components/common/DataTable';
@@ -8,7 +8,14 @@ import Modal from '../../../components/common/Modal';
 import StatusBadge from '../../../components/common/StatusBadge';
 import { useAuth } from '../../../contexts/AuthContext';
 import vehicleService from '../../../services/vehicleService';
+import bookingService from '../../../services/bookingService';
 import { formatVndPerDay } from '../../../utils/currencyFormat';
+
+const resolveVehicleIdFromBooking = (vehicleRef) => {
+  if (!vehicleRef) return '';
+  if (typeof vehicleRef === 'string') return vehicleRef;
+  return String(vehicleRef._id || vehicleRef.id || '');
+};
 
 const FUEL_OPTS = ['Xăng', 'Dầu', 'Điện', 'Hybrid'];
 const CAT_OPTS = ['Sedan', 'SUV', 'MPV', 'Hatchback', 'Bán tải'];
@@ -43,8 +50,30 @@ const VehicleManagement = () => {
     setLoadError('');
     try {
       const filters = user?._id ? { added_by: user._id } : {};
-      const { data } = await vehicleService.getList(filters);
-      setVehicles(data);
+      const [{ data }, bookingList] = await Promise.all([
+        vehicleService.getList(filters),
+        bookingService.getCurrentRoleBookings().catch(() => []),
+      ]);
+
+      const tripByVehicle = {};
+      for (const b of Array.isArray(bookingList) ? bookingList : []) {
+        const st = String(b?.status || b?.booking_status || '').toLowerCase();
+        if (st.includes('cancel')) continue;
+        const vid = resolveVehicleIdFromBooking(b?.vehicle_id);
+        if (!vid) continue;
+        tripByVehicle[vid] = (tripByVehicle[vid] || 0) + 1;
+      }
+
+      setVehicles(
+        (data || []).map((v) => {
+          const id = String(v._id || v.id || '');
+          const fromBookings = tripByVehicle[id];
+          return {
+            ...v,
+            trips: fromBookings !== undefined ? fromBookings : v.trips || 0,
+          };
+        }),
+      );
     } catch (err) {
       setLoadError(err?.response?.data?.message || err?.message || 'Không thể tải danh sách xe.');
     } finally {
@@ -104,13 +133,12 @@ const VehicleManagement = () => {
         company_owned: true,
       };
       if (editId) {
-        const updated = await vehicleService.update(editId, payload);
-        setVehicles((prev) => prev.map((v) => ((v._id || v.id) === editId ? updated : v)));
+        await vehicleService.update(editId, payload);
       } else {
-        const created = await vehicleService.create(payload);
-        setVehicles((prev) => [...prev, created]);
+        await vehicleService.create(payload);
       }
       closeModal();
+      await fetchVehicles();
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Lưu thất bại');
     }
@@ -272,7 +300,8 @@ const VehicleManagement = () => {
           <h1 className="page-title">Quản lý xe</h1>
           <p className="page-subtitle">
             Quản lý toàn bộ xe trong showroom
-            {vehicles.length > 0 ? ` (${vehicles.length} xe)` : ''}
+            {vehicles.length > 0 ? ` (${vehicles.length} xe)` : ''}. Cột{' '}
+            <strong>Chuyến</strong> đồng bộ từ đơn đặt xe (đếm các đơn chưa hủy), không phụ thuộc trường tĩnh trên xe.
           </p>
         </div>
         <button className="btn-primary" onClick={openAdd}>
@@ -414,12 +443,89 @@ const VehicleManagement = () => {
             </div>
           ))}
         </div>
-        <div style={{ marginTop: 14 }}>
+        <div style={{ marginTop: 16 }}>
+          <div
+            style={{
+              fontSize: '0.8rem',
+              fontWeight: 600,
+              color: '#374151',
+              marginBottom: 8,
+            }}
+          >
+            Ảnh xe hiện có ({(form.images || []).length})
+          </div>
+          {(form.images || []).length === 0 ? (
+            <p style={{ fontSize: '0.8rem', color: '#9ca3af', margin: '0 0 8px' }}>Chưa có ảnh — thêm ảnh bên dưới.</p>
+          ) : (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(88px, 1fr))',
+                gap: 10,
+                marginBottom: 12,
+              }}
+            >
+              {(form.images || []).map((url, idx) => (
+                <div
+                  key={`${url}-${idx}`}
+                  style={{
+                    position: 'relative',
+                    borderRadius: 10,
+                    overflow: 'hidden',
+                    border: '1px solid #e5e7eb',
+                    aspectRatio: '1',
+                  }}
+                >
+                  <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <button
+                    type="button"
+                    title="Gỡ ảnh khỏi xe"
+                    aria-label="Gỡ ảnh"
+                    onClick={() =>
+                      setForm((f) => ({
+                        ...f,
+                        images: (f.images || []).filter((_, i) => i !== idx),
+                      }))
+                    }
+                    style={{
+                      position: 'absolute',
+                      top: 4,
+                      right: 4,
+                      width: 26,
+                      height: 26,
+                      borderRadius: 8,
+                      border: 'none',
+                      background: 'rgba(0,0,0,0.55)',
+                      color: '#fff',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: 0,
+                    }}
+                  >
+                    <FaTimes aria-hidden="true" size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <FileUpload
-            label="Hình ảnh xe"
+            key={editId || 'vehicle-new'}
+            label="Thêm ảnh mới"
             multiple
-            hint="JPG, PNG – tối đa 5MB mỗi ảnh"
-            onUpload={(urls) => setForm((f) => ({ ...f, images: urls }))}
+            maxFiles={12}
+            clearAfterUpload
+            hint="Mỗi lần chọn tối đa 12 ảnh; ảnh đã upload được nối vào danh sách trên. Xóa ảnh cũ bằng nút × trước khi Lưu."
+            onUpload={(urls) =>
+              setForm((f) => {
+                const cur = [...(f.images || [])];
+                for (const u of urls) {
+                  if (u && !cur.includes(u)) cur.push(u);
+                }
+                return { ...f, images: cur };
+              })
+            }
           />
         </div>
       </Modal>

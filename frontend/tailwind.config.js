@@ -30,6 +30,15 @@ module.exports = {
       maxWidth: {
         container: '1280px',
       },
+      keyframes: {
+        'caret-blink': {
+          '0%, 70%, 100%': { opacity: '1' },
+          '20%, 50%': { opacity: '0' },
+        },
+      },
+      animation: {
+        'caret-blink': 'caret-blink 1s step-end infinite',
+      },
     },
   },
   plugins: [],

@@ -64,6 +64,14 @@ const userSchema = new mongoose.Schema(
     /** Thông tin showroom */
     business_name: { type: String, default: '' },
     tax_code: { type: String, default: '' },
+    /** Địa chỉ nhận xe công khai (showroom); bắt buộc khi lưu hồ sơ showroom */
+    public_address: { type: String, trim: true, default: '' },
+    showroom_representative_name: { type: String, trim: true, default: '' },
+    opening_hours: { type: String, trim: true, default: '' },
+    showroom_license_public: { type: String, trim: true, default: '' },
+    policy_text: { type: String, default: '' },
+    logo_url: { type: String, trim: true, default: '' },
+    showroom_description: { type: String, default: '' },
   },
   { timestamps: true },
 );

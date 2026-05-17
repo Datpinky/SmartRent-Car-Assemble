@@ -149,6 +149,9 @@ const toLegacyVehicleShape = (vehicle) => {
     _id: vehicle._id || vehicle.id,
     id: vehicle.id || vehicle._id,
     vehicle_name: vehicle.name,
+    name: vehicle.name,
+    vehicle_brand: vehicle.brand,
+    vehicle_model: vehicle.model,
     vehicle_images_paths: vehicle.raw?.vehicle_image_path || vehicle.raw?.vehicle_images_paths || vehicle.images || [],
     images: vehicle.images || [],
     address: vehicle.address || '',
@@ -227,10 +230,11 @@ const buildBookingFallback = (booking) => {
 
 const enrichBooking = (booking, vehicleMap = {}, paymentStateMap = {}) => {
   const vehicleId = resolveId(booking?.vehicle_id);
+  const vidKey = vehicleId ? String(vehicleId) : '';
   const showroomId = resolveId(booking?.showroom_id);
   const bookingId = resolveId(booking);
 
-  const vehicle = vehicleMap[vehicleId] || null;
+  const vehicle = vidKey ? vehicleMap[vidKey] ?? vehicleMap[vehicleId] : null;
   const showroomFromVehicle = deriveShowroomFromVehicle(vehicle);
   const fallbackShowroom =
     booking?.showroom_id && typeof booking.showroom_id === 'object'

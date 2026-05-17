@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FaCamera, FaCheckCircle, FaHistory } from 'react-icons/fa';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 import bookingService from '../../../services/bookingService';
 import inspectionService from '../../../services/inspectionService';
@@ -19,14 +20,16 @@ const resolveId = (value) => {
 };
 
 const AIInspection = () => {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const queryBookingId = (searchParams.get('bookingId') || '').trim();
+
   const { user } = useAuth();
   const isShowroom = user?.role === 'showroom';
-  const isRenter = user?.role === 'renter';
   const inspectionType = 'return';
   const [tab, setTab] = useState('new');
   const [step, setStep] = useState(1);
 
-  // Vehicles + bookings
   const [vehicles, setVehicles] = useState([]);
   const [loadingVehicles, setLoadingVehicles] = useState(true);
   const [selectedVehicle, setSelectedVehicle] = useState(null);
@@ -35,78 +38,69 @@ const AIInspection = () => {
   const [selectedBookingId, setSelectedBookingId] = useState('');
   const [pickupImagesUrls, setPickupImagesUrls] = useState([]);
   const [returnImagesUrls, setReturnImagesUrls] = useState([]);
+  const [returnReviewBooking, setReturnReviewBooking] = useState(null);
+  const [returnReviewRenter, setReturnReviewRenter] = useState(null);
 
-  // Analysis state
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState('');
   const [analysisResult, setAnalysisResult] = useState(null);
   const [saveNote, setSaveNote] = useState('');
   const [analyzed, setAnalyzed] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
-  // History
   const [historyRows, setHistoryRows] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [expandedRow, setExpandedRow] = useState(null);
 
-  // ── Data fetching ──
+  const [hydratedQuery, setHydratedQuery] = useState(false);
+
+  const selectedBooking = useMemo(() => {
+    if (returnReviewBooking && resolveId(returnReviewBooking) === String(selectedBookingId)) {
+      return returnReviewBooking;
+    }
+    return bookings.find((b) => resolveId(b) === selectedBookingId) || null;
+  }, [bookings, selectedBookingId, returnReviewBooking]);
+
+  const isWaitingReturnReview = selectedBooking?.status === 'waiting_return_confirmation';
+  const isCompletedBooking = selectedBooking?.status === 'completed';
+
   const fetchVehicles = useCallback(async () => {
-    if (!user?._id) {
+    if (!user?._id || !isShowroom) {
       setVehicles([]);
       setLoadingVehicles(false);
       return;
     }
     setLoadingVehicles(true);
     try {
-      // For showroom: fetch vehicles they added. For renter: fetch from their active/recent bookings
-      let fetchedVehicles = [];
-      if (isShowroom) {
-        const { data } = await vehicleService.getList({ added_by: user._id, limit: 80, page: 1 });
-        fetchedVehicles = Array.isArray(data) ? data : [];
-      } else if (isRenter) {
-        // Get unique vehicles from renter's bookings in return phase
-        const bookings = await bookingService.getCurrentRoleBookingsDetailed();
-        const returnPhaseBookings = (bookings || []).filter((b) =>
-          ['in_use', 'waiting_return_confirmation', 'completed'].includes(b.status),
-        );
-        fetchedVehicles = returnPhaseBookings
-          .filter((b, i, arr) => arr.findIndex((x) => resolveId(x.vehicle_id) === resolveId(b.vehicle_id)) === i)
-          .map((b) => b.vehicle_id)
-          .filter(Boolean);
-      }
-      setVehicles(fetchedVehicles);
+      const { data } = await vehicleService.getList({ added_by: user._id, limit: 80, page: 1 });
+      setVehicles(Array.isArray(data) ? data : []);
     } catch {
       setVehicles([]);
     } finally {
       setLoadingVehicles(false);
     }
-  }, [user?._id, isRenter, isShowroom]);
+  }, [user?._id, isShowroom]);
 
   useEffect(() => {
     fetchVehicles();
   }, [fetchVehicles]);
 
-  const fetchBookingsForVehicle = useCallback(
-    async (vehicleId) => {
-      setLoadingBookings(true);
+  const fetchBookingsForVehicle = useCallback(async (vehicleId) => {
+    setLoadingBookings(true);
+    setBookings([]);
+    try {
+      const all = await bookingService.getCurrentRoleBookingsDetailed();
+      const allowedStatuses = ['waiting_handover', 'handed_over', 'in_use', 'waiting_return_confirmation', 'completed'];
+      const filtered = (all || []).filter(
+        (b) => resolveId(b.vehicle_id) === String(vehicleId) && allowedStatuses.includes(b.status),
+      );
+      setBookings(filtered);
+    } catch {
       setBookings([]);
-      try {
-        const all = await bookingService.getCurrentRoleBookingsDetailed();
-        // Filter by vehicle AND by inspection phase
-        const allowedStatuses = isRenter
-          ? ['in_use', 'waiting_return_confirmation', 'completed'] // Return phase for renter
-          : ['waiting_handover', 'handed_over', 'in_use', 'completed']; // Pickup + completed (for trace back) for showroom
-        const filtered = (all || []).filter(
-          (b) => resolveId(b.vehicle_id) === String(vehicleId) && allowedStatuses.includes(b.status),
-        );
-        setBookings(filtered);
-      } catch {
-        setBookings([]);
-      } finally {
-        setLoadingBookings(false);
-      }
-    },
-    [isRenter],
-  );
+    } finally {
+      setLoadingBookings(false);
+    }
+  }, []);
 
   const fetchHistory = useCallback(async () => {
     setLoadingHistory(true);
@@ -124,18 +118,74 @@ const AIInspection = () => {
     if (tab === 'history') fetchHistory();
   }, [tab, fetchHistory]);
 
-  // ?? Callbacks ??
   const normalizeUrlList = (value) =>
     (Array.isArray(value) ? value : [])
       .map((url) => (typeof url === 'string' ? url.trim() : ''))
       .filter(Boolean)
       .slice(0, 6);
 
+  useEffect(() => {
+    if (!isShowroom || !queryBookingId) {
+      setHydratedQuery(true);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await inspectionService.getReturnReview(queryBookingId);
+        if (cancelled || !data) return;
+
+        const v = data.vehicle;
+        setReturnReviewBooking(data.booking);
+        setReturnReviewRenter(data.renter || null);
+        setSelectedVehicle(v || null);
+        setSelectedBookingId(queryBookingId);
+        setPickupImagesUrls(normalizeUrlList(data.pickup_images));
+        setReturnImagesUrls(normalizeUrlList(data.return_images));
+
+        const draft = data.latest_draft_run;
+        if (data.booking?.status === 'completed' && data.latest_official?.ai_payload) {
+          setAnalysisResult(data.latest_official.ai_payload);
+          setAnalyzed(true);
+          setStep(3);
+        } else if (draft?.status === 'completed' && draft.ai_payload) {
+          setAnalysisResult(draft.ai_payload);
+          setAnalyzed(true);
+          setStep(3);
+        } else {
+          setAnalysisResult(null);
+          setAnalyzed(false);
+          setStep(2);
+        }
+        setSaveNote('');
+        setAnalysisError('');
+
+        if (data.booking?.status === 'completed') {
+          setSaveNote('Đơn đặt xe đã hoàn tất. Bạn vẫn có thể xem lịch sử chạy AI trên server nếu có.');
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setAnalysisError(e?.response?.data?.message || e?.message || 'Không tải được dữ liệu kiểm tra trả xe.');
+          setStep(1);
+        }
+      } finally {
+        if (!cancelled) setHydratedQuery(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isShowroom, queryBookingId]);
+
   const handleSelectVehicle = (v) => {
     setSelectedVehicle(v);
     setSelectedBookingId('');
     setPickupImagesUrls([]);
     setReturnImagesUrls([]);
+    setReturnReviewBooking(null);
+    setReturnReviewRenter(null);
     fetchBookingsForVehicle(String(v._id || v.id));
   };
 
@@ -143,34 +193,50 @@ const AIInspection = () => {
     setSelectedBookingId(bookingId);
     setPickupImagesUrls([]);
     setReturnImagesUrls([]);
+    setReturnReviewBooking(null);
+    setReturnReviewRenter(null);
     if (!bookingId) return;
 
     try {
       const booking = await bookingService.getBookingById(bookingId);
+      const renterFromBooking =
+        booking?.user_id && typeof booking.user_id === 'object' ? booking.user_id : null;
       const pickupImages = normalizeUrlList(booking?.pickup_images);
       let returnImages = [];
 
-      try {
-        const workflow = getRentalWorkflow(bookingId);
-        returnImages = normalizeUrlList(workflow?.returnImages);
-      } catch (err) {
-        console.warn('Failed to load return images from localStorage:', err);
-      }
-
-      try {
-        const { items } = await inspectionService.list({
-          booking_id: bookingId,
-          inspection_type: 'return',
-          limit: 20,
-        });
-        const latestWithReturnImages = (items || []).find(
-          (inspection) => Array.isArray(inspection.return_images) && inspection.return_images.length > 0,
-        );
-        if (latestWithReturnImages) {
-          returnImages = normalizeUrlList(latestWithReturnImages.return_images);
+      if (booking?.status === 'waiting_return_confirmation') {
+        try {
+          const review = await inspectionService.getReturnReview(bookingId);
+          setReturnReviewBooking(review?.booking || booking);
+          setReturnReviewRenter(review?.renter || renterFromBooking);
+          returnImages = normalizeUrlList(review?.return_images);
+        } catch {
+          setReturnReviewBooking(booking);
+          setReturnReviewRenter(renterFromBooking);
+          try {
+            const { items } = await inspectionService.list({
+              booking_id: bookingId,
+              inspection_type: 'return',
+              limit: 10,
+            });
+            const latestWithReturnImages = (items || []).find(
+              (inspection) => Array.isArray(inspection.return_images) && inspection.return_images.length > 0,
+            );
+            if (latestWithReturnImages) {
+              returnImages = normalizeUrlList(latestWithReturnImages.return_images);
+            }
+          } catch {
+            /* ignore */
+          }
         }
-      } catch (err) {
-        console.warn('Failed to load return inspection gallery:', err);
+      } else {
+        setReturnReviewRenter(renterFromBooking);
+        try {
+          const workflow = getRentalWorkflow(bookingId);
+          returnImages = normalizeUrlList(workflow?.returnImages);
+        } catch {
+          /* ignore */
+        }
       }
 
       setPickupImagesUrls(pickupImages);
@@ -190,14 +256,51 @@ const AIInspection = () => {
     setBookings([]);
     setPickupImagesUrls([]);
     setReturnImagesUrls([]);
+    setReturnReviewBooking(null);
+    setReturnReviewRenter(null);
     setAnalysisResult(null);
     setAnalysisError('');
     setSaveNote('');
+    if (queryBookingId) {
+      navigate('/showroom/ai-inspection', { replace: true });
+    }
+  };
+
+  const runServerReturnAnalyze = async () => {
+    if (!selectedBookingId) return;
+    setAnalyzing(true);
+    setAnalysisError('');
+    setSaveNote('');
+    try {
+      const data = await inspectionService.analyzeReturnReview(selectedBookingId);
+      setAnalysisResult(data);
+      setAnalyzed(true);
+      setStep(3);
+      setSaveNote('Đã lưu kết quả lần chạy AI (chưa công bố cho khách).');
+    } catch (err) {
+      setAnalysisError(err?.response?.data?.message || err.message || 'Phân tích thất bại.');
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   const handleAnalyze = async (galleryImages) => {
+    if (selectedBooking?.status === 'waiting_return_confirmation') {
+      if (!returnImagesUrls.length) {
+        setAnalysisError('Chưa có ảnh trả xe từ khách thuê.');
+        return;
+      }
+      await runServerReturnAnalyze();
+      return;
+    }
+
+    if (isCompletedBooking) {
+      setAnalysisError('Đơn đã hoàn tất — không thể chạy phân tích trả xe.');
+      return;
+    }
+
     if (!Array.isArray(galleryImages) || galleryImages.length === 0) {
-      setAnalysisError('Cần ít nhất một ảnh trả xe để phân tích.');
+      setAnalysisError('Cần ít nhất một ảnh để phân tích.');
       return;
     }
     if (!selectedVehicle) {
@@ -260,7 +363,7 @@ const AIInspection = () => {
       if (filesToUpload.length > 0) {
         try {
           uploadedUrls = await uploadService.uploadImages(filesToUpload);
-        } catch (err) {
+        } catch {
           setSaveNote('Không tải được ảnh lên lưu trữ.');
         }
       }
@@ -273,18 +376,18 @@ const AIInspection = () => {
       const vehicleName =
         selectedVehicle.vehicle_name ||
         [selectedVehicle.vehicle_brand, selectedVehicle.vehicle_model].filter(Boolean).join(' ');
-      const selectedBooking = bookings.find((b) => resolveId(b) === selectedBookingId);
-      const bCode = selectedBooking ? bookingCodeShort(selectedBooking._id || selectedBooking.id) : '';
+      const selBooking = bookings.find((b) => resolveId(b) === selectedBookingId);
+      const bCode = selBooking ? bookingCodeShort(selBooking._id || selBooking.id) : '';
 
       try {
         await inspectionService.create({
           vehicle_id: resolveId(selectedVehicle),
           booking_id: selectedBookingId || undefined,
           inspection_type: inspectionType,
-          inspected_by_role: isRenter ? 'renter' : 'showroom',
+          inspected_by_role: 'showroom',
           inspected_by_id: user._id,
           vehicle_name: vehicleName,
-          vehicle_plate: selectedVehicle.vehicle_plate_number || selectedBooking?.vehicle_plate || '',
+          vehicle_plate: selectedVehicle.vehicle_plate_number || selBooking?.vehicle_plate || '',
           booking_code: bCode,
           pickup_images: pickupImagesUrls.filter(Boolean).slice(0, 6),
           return_images: returnImageRecord,
@@ -299,11 +402,11 @@ const AIInspection = () => {
           disclaimer: data?.disclaimer || '',
           comparison_mode: beforeImages.length > 0 ? 'gallery' : 'current_only',
         });
-        setSaveNote((s) => (s ? s + ' ' : '') + 'Đã lưu báo cáo kiểm tra.');
+        setSaveNote((s) => (s ? `${s} ` : '') + 'Đã lưu báo cáo kiểm tra.');
         fetchHistory();
       } catch (saveErr) {
         setSaveNote((s) =>
-          ((s ? s + ' ' : '') + 'Phân tích xong nhưng không lưu được: ' + (saveErr.message || 'lỗi server')).trim(),
+          ((s ? `${s} ` : '') + 'Phân tích xong nhưng không lưu được: ' + (saveErr.message || 'lỗi server')).trim(),
         );
       }
 
@@ -316,23 +419,61 @@ const AIInspection = () => {
     }
   };
 
+  const handleConfirmPublished = async () => {
+    if (!selectedBookingId || !isWaitingReturnReview) return;
+    setConfirming(true);
+    setAnalysisError('');
+    try {
+      await inspectionService.confirmReturnReview(selectedBookingId, { manual: false });
+      navigate('/showroom/bookings');
+    } catch (err) {
+      setAnalysisError(err?.response?.data?.message || err.message || 'Không thể xác nhận.');
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const handleConfirmManual = async () => {
+    if (!selectedBookingId || !isWaitingReturnReview) return;
+    const ok = window.confirm(
+      'Xác nhận hoàn tất trả xe thủ công (không công bố kết quả AI cho khách)? Booking sẽ chuyển sang hoàn thành.',
+    );
+    if (!ok) return;
+    setConfirming(true);
+    setAnalysisError('');
+    try {
+      await inspectionService.confirmReturnReview(selectedBookingId, { manual: true });
+      navigate('/showroom/bookings');
+    } catch (err) {
+      setAnalysisError(err?.response?.data?.message || err.message || 'Không thể xác nhận.');
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const step1Done = Boolean(queryBookingId && hydratedQuery && selectedBookingId && step >= 2);
+
+  if (!isShowroom) {
+    return (
+      <div className="max-w-[900px] mx-auto p-6 text-center text-gray-600">
+        Trang này chỉ dành cho showroom.
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-[900px] mx-auto">
+    <div className="mx-auto w-full min-w-0 max-w-[900px]">
       <div className="page-header mb-5">
         <div>
-          <h1 className="page-title">
-            {isRenter ? 'Kiểm tra AI — Xe trả về (Kiểm tra hướng)' : 'Kiểm tra AI — Xe bàn giao'}
-          </h1>
+          <h1 className="page-title">Kiểm tra AI — Showroom</h1>
           <p className="page-subtitle">
-            {isRenter
-              ? 'Tải ảnh hướng và nhận ảnh để phát hiện hư hỏng và tình trạng'
-              : 'Upload ảnh xe trước khi bàn giao cho khách thuê. Ảnh này sẽ dùng để so sánh khi xe trả về.'}
+            So sánh ảnh bàn giao (BEFORE) và ảnh trả xe (AFTER). Chỉ showroom được chạy AI; kết quả chỉ hiển thị cho
+            khách sau khi bạn xác nhận.
           </p>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 mb-5">
+      <div className="mb-5 flex max-w-full flex-wrap gap-2">
         {[
           { key: 'new', icon: <FaCamera aria-hidden />, label: 'Kiểm tra mới' },
           { key: 'history', icon: <FaHistory aria-hidden />, label: 'Lịch sử kiểm tra' },
@@ -341,7 +482,7 @@ const AIInspection = () => {
             key={key}
             type="button"
             onClick={() => setTab(key)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold text-sm border-2 cursor-pointer transition-colors ${
+            className={`flex min-w-0 shrink-0 items-center gap-1.5 rounded-lg border-2 px-4 py-2 text-sm font-semibold cursor-pointer transition-colors ${
               tab === key
                 ? 'border-green-500 bg-green-500 text-white'
                 : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
@@ -352,21 +493,19 @@ const AIInspection = () => {
         ))}
       </div>
 
-      {/* ── New inspection tab ── */}
       {tab === 'new' && (
         <div>
-          {/* Step indicator */}
-          <div className="flex items-center mb-6 bg-white rounded-xl px-5 py-3.5 border border-gray-200">
+          <div className="mb-6 flex max-w-full min-w-0 items-center overflow-x-auto rounded-xl border border-gray-200 bg-white px-3 py-3.5 sm:px-5 [scrollbar-width:thin]">
             {[
               { n: 1, label: 'Chọn xe & đơn đặt xe' },
-              { n: 2, label: 'Tải ảnh trả xe' },
+              { n: 2, label: 'Kiểm tra ảnh trả xe' },
               { n: 3, label: 'Kết quả AI' },
             ].map(({ n, label }, i) => {
-              const done = step > n;
-              const active = step >= n;
+              const done = queryBookingId ? step > n || (n === 1 && step1Done) : step > n;
+              const active = queryBookingId ? step >= n || (n === 1 && step >= 2) : step >= n;
               return (
                 <React.Fragment key={n}>
-                  <div className="flex items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2">
                     <div
                       className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${
                         done
@@ -379,18 +518,22 @@ const AIInspection = () => {
                       {done ? <FaCheckCircle className="text-[0.9rem]" /> : n}
                     </div>
                     <span
-                      className={`text-[0.82rem] whitespace-nowrap ${active ? 'font-bold text-gray-900' : 'text-gray-400'}`}
+                      className={`max-w-[9rem] text-[0.82rem] sm:max-w-none sm:whitespace-nowrap ${active ? 'font-bold text-gray-900' : 'text-gray-400'}`}
                     >
                       {label}
                     </span>
                   </div>
-                  {i < 2 && <div className={`flex-1 h-0.5 mx-2.5 ${step > n + 1 ? 'bg-green-500' : 'bg-gray-200'}`} />}
+                  {i < 2 && (
+                    <div
+                      className={`mx-2 h-0.5 min-w-[24px] shrink-0 sm:mx-2.5 sm:min-w-[40px] ${step > n + 1 ? 'bg-green-500' : 'bg-gray-200'}`}
+                    />
+                  )}
                 </React.Fragment>
               );
             })}
           </div>
 
-          {step === 1 && (
+          {step === 1 && !(queryBookingId && hydratedQuery && step >= 2) && (
             <VehicleSelector
               vehicles={vehicles}
               loadingVehicles={loadingVehicles}
@@ -405,30 +548,87 @@ const AIInspection = () => {
           )}
 
           {step === 2 && (
-            <ImageUploadStep
-              selectedVehicle={selectedVehicle}
-              selectedBookingId={selectedBookingId}
-              bookings={bookings}
-              pickupImagesUrls={pickupImagesUrls}
-              initialImages={returnImagesUrls}
-              analyzing={analyzing}
-              analysisError={analysisError}
-              isShowroom={isShowroom}
-              onBack={() => {
-                setStep(1);
-                setAnalysisError('');
-              }}
-              onAnalyze={handleAnalyze}
-            />
+            <>
+              {(returnReviewRenter || selectedBookingId) && (
+                <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[0.85rem] text-slate-800">
+                  <div className="font-bold text-slate-900 mb-1">Thông tin đơn & khách thuê</div>
+                  {selectedBookingId && (
+                    <div>
+                      Mã booking:{' '}
+                      <span className="font-mono font-semibold">
+                        BK{String(selectedBookingId).slice(-6).toUpperCase()}
+                      </span>
+                    </div>
+                  )}
+                  {(returnReviewRenter?.name || returnReviewRenter?.email || returnReviewRenter?.full_name) && (
+                    <div>
+                      Khách thuê:{' '}
+                      <strong>{returnReviewRenter?.name || returnReviewRenter?.full_name || '—'}</strong>
+                      {returnReviewRenter?.email ? (
+                        <span className="text-slate-600"> ({returnReviewRenter.email})</span>
+                      ) : null}
+                    </div>
+                  )}
+                  {selectedVehicle && (
+                    <div>
+                      Xe:{' '}
+                      <strong>
+                        {selectedVehicle.vehicle_name ||
+                          [selectedVehicle.vehicle_brand, selectedVehicle.vehicle_model].filter(Boolean).join(' ') ||
+                          '—'}
+                      </strong>
+                    </div>
+                  )}
+                </div>
+              )}
+              <ImageUploadStep
+                selectedVehicle={selectedVehicle}
+                selectedBookingId={selectedBookingId}
+                bookings={bookings}
+                pickupImagesUrls={pickupImagesUrls}
+                initialImages={returnImagesUrls}
+                analyzing={analyzing}
+                analysisError={analysisError}
+                isShowroom
+                lockReturnUploads={isWaitingReturnReview}
+                onBack={() => {
+                  if (queryBookingId) {
+                    navigate('/showroom/bookings');
+                    return;
+                  }
+                  setStep(1);
+                  setAnalysisError('');
+                }}
+                onAnalyze={handleAnalyze}
+              />
+            </>
           )}
 
           {step === 3 && analyzed && analysisResult && (
-            <AnalysisResult analysisResult={analysisResult} saveNote={saveNote} onReset={resetFlow} />
+            <AnalysisResult
+              mode={isWaitingReturnReview && !isCompletedBooking ? 'showroom-return' : 'default'}
+              analysisResult={analysisResult}
+              saveNote={saveNote}
+              pickupImageUrls={pickupImagesUrls}
+              afterImageUrls={returnImagesUrls}
+              analyzing={analyzing}
+              confirming={confirming}
+              onReanalyze={isWaitingReturnReview && !isCompletedBooking ? runServerReturnAnalyze : undefined}
+              onConfirm={isWaitingReturnReview && !isCompletedBooking ? handleConfirmPublished : undefined}
+              onManualConfirm={isWaitingReturnReview && !isCompletedBooking ? handleConfirmManual : undefined}
+              onReset={
+                isWaitingReturnReview && !isCompletedBooking
+                  ? () => {
+                      setStep(2);
+                      setAnalyzed(false);
+                    }
+                  : resetFlow
+              }
+            />
           )}
         </div>
       )}
 
-      {/* ── History tab ── */}
       {tab === 'history' && (
         <InspectionHistory
           historyRows={historyRows}

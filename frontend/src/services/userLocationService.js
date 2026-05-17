@@ -1,7 +1,10 @@
 import apiClient from './apiClient';
 
 const toNumberOrNull = (value) => {
-  const nextValue = Number(value);
+  if (value === undefined || value === null || value === '') return null;
+  const normalized = typeof value === 'string' ? value.trim() : value;
+  if (normalized === '') return null;
+  const nextValue = Number(normalized);
   return Number.isFinite(nextValue) ? nextValue : null;
 };
 

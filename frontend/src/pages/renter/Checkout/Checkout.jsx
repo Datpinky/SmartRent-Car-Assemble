@@ -31,9 +31,11 @@ import {
   formatCoordinates,
   formatDateTimeVi,
   hasCoordinates,
+  hasNonZeroCoordinates,
   normalizeIncomingRentalWindow,
   parseCoordinateInput,
   parseLocalDateTime,
+  toFiniteCoordinate,
   toLocalInputValue,
 } from './checkout.helpers';
 import DateTimeField from './components/DateTimeField';
@@ -166,8 +168,10 @@ const Checkout = () => {
     const addedByRaw = vehicle?.addedBy;
     const addedByObject = addedByRaw && typeof addedByRaw === 'object' ? addedByRaw : null;
     const showroomId = typeof addedByRaw === 'string' ? addedByRaw : addedByObject?._id || addedByObject?.id || '';
+    const showroomPickupText = (u) =>
+      String(u?.public_address || u?.address || u?.pickupAddress || '').trim();
     const baseAddress = String(
-      (addedByObject && (addedByObject.address || addedByObject.pickupAddress)) ||
+      (addedByObject && showroomPickupText(addedByObject)) ||
         vehicle?.pickupAddress ||
         vehicle?.address ||
         vehicle?.location ||
@@ -175,13 +179,13 @@ const Checkout = () => {
     ).trim();
 
     const applyResolvedLocation = (source, fallbackAddress = '') => {
-      const latitude = Number(source?.latitude ?? source?.lat);
-      const longitude = Number(source?.longitude ?? source?.lng);
+      const latitude = toFiniteCoordinate(source?.latitude ?? source?.lat);
+      const longitude = toFiniteCoordinate(source?.longitude ?? source?.lng);
       const address = String(
         fallbackAddress || source?.address || source?.location || source?.pickupAddress || '',
       ).trim();
       const resolved =
-        address && Number.isFinite(latitude) && Number.isFinite(longitude)
+        address && hasNonZeroCoordinates(latitude, longitude)
           ? {
               address,
               latitude,
@@ -212,7 +216,12 @@ const Checkout = () => {
           const profile = await resolveShowroomProfile(showroomId);
           if (cancelled) return;
           fallbackAddress = String(
-            profile?.address || profile?.userLocation?.address || fallbackAddress || vehicle?.showroom || '',
+            profile?.public_address ||
+              profile?.address ||
+              profile?.userLocation?.address ||
+              fallbackAddress ||
+              vehicle?.showroom ||
+              '',
           ).trim();
 
           if (
@@ -230,21 +239,23 @@ const Checkout = () => {
         }
 
         const geocodeKey = `${showroomId || 'vehicle'}:${finalAddress.toLowerCase()}`;
-        if (showroomGeocodeKeyRef.current !== geocodeKey) {
-          showroomGeocodeKeyRef.current = geocodeKey;
-          const results = await mapService.directForwardGeocode(finalAddress, { limit: 1 });
-          if (cancelled) return;
-          const best = results?.[0];
+        if (showroomGeocodeKeyRef.current === geocodeKey) {
+          return;
+        }
+        showroomGeocodeKeyRef.current = geocodeKey;
+        const results = await mapService.directForwardGeocode(finalAddress, { limit: 1 });
+        if (cancelled) return;
+        const best = results?.[0];
 
-          if (best) {
-            setResolvedShowroomLocation({
-              address: finalAddress,
-              latitude: best.lat,
-              longitude: best.lng,
-              plusCode: best.plusCode || '',
-            });
-            return;
-          }
+        if (best) {
+          setResolvedShowroomLocation({
+            address: finalAddress,
+            latitude: best.lat,
+            longitude: best.lng,
+            plusCode: best.plusCode || '',
+          });
+          setShowroomLocationError('');
+          return;
         }
 
         setResolvedShowroomLocation({
@@ -278,69 +289,6 @@ const Checkout = () => {
     return () => {
       cancelled = true;
     };
-
-    const addedBy = vehicle?.addedBy && typeof vehicle.addedBy === 'object' ? vehicle.addedBy : null;
-    const fallbackAddress = String(
-      (addedBy && (addedBy.address || addedBy.pickupAddress)) ||
-        vehicle?.showroom ||
-        vehicle?.pickupAddress ||
-        vehicle?.address ||
-        vehicle?.location ||
-        '',
-    ).trim();
-
-    // Try to use direct coordinates on addedBy if available
-    const directLat = Number(addedBy?.latitude ?? addedBy?.lat ?? addedBy?.pickup_latitude ?? null);
-    const directLng = Number(addedBy?.longitude ?? addedBy?.lng ?? addedBy?.pickup_longitude ?? null);
-    if (fallbackAddress && Number.isFinite(directLat) && Number.isFinite(directLng)) {
-      setResolvedShowroomLocation({
-        address: fallbackAddress,
-        latitude: directLat,
-        longitude: directLng,
-        plusCode: addedBy?.plusCode || addedBy?.plus_code || '',
-      });
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    if (!fallbackAddress) {
-      setResolvedShowroomLocation(null);
-      setResolvingShowroomLocation(false);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    setResolvingShowroomLocation(true);
-    setShowroomLocationError('');
-    mapService
-      .directForwardGeocode(fallbackAddress, { limit: 1 })
-      .then((results) => {
-        if (cancelled) return;
-        const best = results?.[0];
-        if (!best) {
-          setResolvedShowroomLocation(null);
-          setShowroomLocationError('Không tìm thấy vị trí showroom.');
-          return;
-        }
-        setResolvedShowroomLocation({
-          address: fallbackAddress,
-          latitude: best.lat,
-          longitude: best.lng,
-          plusCode: best.plusCode || '',
-        });
-      })
-      .catch(() => {
-        if (!cancelled) setShowroomLocationError('Không thể tải vị trí showroom.');
-      })
-      .finally(() => {
-        if (!cancelled) setResolvingShowroomLocation(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
   }, [pickupMethod, vehicle]);
 
   useEffect(() => {
@@ -359,11 +307,11 @@ const Checkout = () => {
   const normalizeVehicleLocation = useCallback((source, fallbackAddress = '') => {
     if (!source) return null;
 
-    const latitude = Number(source.latitude ?? source.lat);
-    const longitude = Number(source.longitude ?? source.lng);
+    const latitude = toFiniteCoordinate(source.latitude ?? source.lat);
+    const longitude = toFiniteCoordinate(source.longitude ?? source.lng);
     const address = String(source.address || source.location || source.pickupAddress || fallbackAddress || '').trim();
 
-    if (!address || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    if (!address || !hasNonZeroCoordinates(latitude, longitude)) {
       return null;
     }
 
@@ -841,13 +789,16 @@ const Checkout = () => {
   };
   const renterPreview = readStoredRenter();
   const addedBy = vehicle?.addedBy && typeof vehicle.addedBy === 'object' ? vehicle.addedBy : null;
+  const showroomAddressFallback = String(
+    addedBy?.public_address || addedBy?.address || addedBy?.pickupAddress || '',
+  ).trim();
   const showroomPreview = {
     name: addedBy?.business_name || addedBy?.name || vehicle?.showroom || vehicle?.listerProfile?.displayName || '',
     email: addedBy?.email || '',
     phone: addedBy?.phone || '',
     address:
       resolvedShowroomLocation?.address ||
-      addedBy?.address ||
+      showroomAddressFallback ||
       vehicle?.pickupAddress ||
       vehicle?.address ||
       vehicle?.location ||
@@ -1031,22 +982,20 @@ const Checkout = () => {
                         <FaSpinner className="animate-spin" /> Đang tải vị trí showroom...
                       </div>
                     ) : resolvedShowroomLocation ? (
-                      hasCoordinates(resolvedShowroomLocation.latitude, resolvedShowroomLocation.longitude) ? (
-                        <div className="mt-3 overflow-hidden rounded-xl">
+                      <div className="space-y-2">
+                        <div className="mt-1 overflow-hidden rounded-xl">
                           <CarLocationMap
                             locationText={resolvedShowroomLocation.address}
                             lat={resolvedShowroomLocation.latitude}
                             lng={resolvedShowroomLocation.longitude}
-                            openMapLabel="Mở trong map"
+                            openMapLabel="Mở trong Maps"
                             mapHeight={220}
                           />
                         </div>
-                      ) : (
-                        <div className="space-y-2 text-[0.8rem]">
-                          <p className="text-gray-700">{resolvedShowroomLocation.address}</p>
-                          {showroomLocationError && <p className="text-amber-700">{showroomLocationError}</p>}
-                        </div>
-                      )
+                        {showroomLocationError ? (
+                          <p className="text-[0.75rem] text-amber-700">{showroomLocationError}</p>
+                        ) : null}
+                      </div>
                     ) : showroomLocationError ? (
                       resolvedVehicleLocation ? (
                         <div className="mt-3 overflow-hidden rounded-xl">
@@ -1054,7 +1003,7 @@ const Checkout = () => {
                             locationText={resolvedVehicleLocation.address}
                             lat={resolvedVehicleLocation.latitude}
                             lng={resolvedVehicleLocation.longitude}
-                            openMapLabel="Mở trong map"
+                            openMapLabel="Mở trong Maps"
                             mapHeight={220}
                           />
                         </div>
@@ -1139,7 +1088,7 @@ const Checkout = () => {
                           locationText={deliveryLocation.address || deliveryAddress}
                           lat={deliveryLocation.latitude}
                           lng={deliveryLocation.longitude}
-                          openMapLabel="Mở trong map"
+                          openMapLabel="Mở trong Maps"
                           mapHeight={220}
                         />
                       </div>

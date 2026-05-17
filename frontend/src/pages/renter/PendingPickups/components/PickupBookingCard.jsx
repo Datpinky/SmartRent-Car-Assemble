@@ -1,3 +1,4 @@
+import HandoverOtpInput from '../../../../components/renter/HandoverOtpInput';
 import { FaCalendarAlt, FaClock, FaEnvelope, FaMapMarkerAlt, FaSpinner } from 'react-icons/fa';
 import { MdDirectionsCar } from 'react-icons/md';
 import StatusBadge from '../../../../components/common/StatusBadge';
@@ -78,11 +79,13 @@ const PickupBookingCard = ({
 
         {booking.status === 'handed_over' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input type="text" inputMode="numeric" maxLength={6} placeholder="Nhập mã OTP"
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <HandoverOtpInput
+                size="compact"
                 value={otpInputs[booking.id] || ''}
-                onChange={(e) => setOtpInputs((prev) => ({ ...prev, [booking.id]: e.target.value.replace(/\D/g, '') }))}
-                style={{ width: 110, padding: '6px 10px', borderRadius: 8, border: '1.5px solid #00b14f', fontSize: '0.85rem', fontFamily: 'monospace', letterSpacing: '0.15em', outline: 'none' }} />
+                onValueChange={(v) => setOtpInputs((prev) => ({ ...prev, [booking.id]: v }))}
+                disabled={otpLoading === booking.id}
+              />
               <button type="button" className="btn-primary" style={{ fontSize: '0.75rem', padding: '6px 12px', whiteSpace: 'nowrap' }}
                 disabled={otpLoading === booking.id} onClick={() => handleVerifyOtp(booking.id)}>
                 {otpLoading === booking.id ? <FaSpinner className="animate-spin" /> : 'Xác nhận'}

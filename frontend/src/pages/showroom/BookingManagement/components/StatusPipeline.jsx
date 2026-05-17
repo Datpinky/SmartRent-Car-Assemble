@@ -15,6 +15,7 @@ const StatusPipeline = ({ countsByStatus }) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 0, minWidth: 820 }}>
       {FILTER_TABS.map((tab, index) => {
         const count = tab.statuses.reduce((sum, s) => sum + (countsByStatus[s] || 0), 0);
+
         return (
           <Fragment key={tab.key}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1 }}>

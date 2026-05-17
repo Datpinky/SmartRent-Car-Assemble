@@ -78,6 +78,19 @@ function sameId(a, b) {
   return String(a) === String(b);
 }
 
+/** Chỉ renter (role user), showroom của booking, hoặc admin được xem payload hợp đồng. */
+function assertUserCanViewContractBooking(booking, reqUser) {
+  if (!reqUser || reqUser.userId == null) throwError('Unauthorized', 401);
+  const uid = String(reqUser.userId);
+  const role = reqUser.role;
+  const renterId = String(booking.user_id?._id || booking.user_id || '');
+  const showroomId = String(booking.showroom_id?._id || booking.showroom_id || '');
+  if (role === 'admin') return;
+  if (role === 'user' && renterId === uid) return;
+  if (role === 'showroom' && showroomId === uid) return;
+  throwError('Bạn không có quyền xem hợp đồng booking này', 403);
+}
+
 /** Dữ liệu cứng minh họa khi DB không có CMND/CCCD — chỉ phục vụ hiển thị mẫu */
 const DEMO_IDENTITY_DOCUMENT = {
   documentType: 'CCCD',
@@ -219,7 +232,11 @@ function rentalDurationDescription(start, end) {
 }
 
 class RentalContractService {
-  async buildContract(bookingId) {
+  /**
+   * @param {string} bookingId
+   * @param {{ userId: import('mongoose').Types.ObjectId | string, role: string }} reqUser — từ auth middleware
+   */
+  async buildContract(bookingId, reqUser) {
     if (!mongoose.isValidObjectId(bookingId)) {
       throwError('bookingId không hợp lệ', 400);
     }
@@ -235,28 +252,53 @@ class RentalContractService {
       throwError('Booking đã hủy, không phát hành hợp đồng', 400);
     }
 
-    const successfulPayment = await PaymentModel.findOne({
+    assertUserCanViewContractBooking(booking, reqUser);
+
+    const successfulPaymentDoc = await PaymentModel.findOne({
       booking_id: booking._id,
       payment_status: 'successful',
     }).sort({ paid_at: -1, createdAt: -1 });
 
-    // Fetch saved signatures from RentalContractRecord (if exists)
-    let contractRecord = await RentalContractRecord.findOne({ booking_id: booking._id }).select(
-      'renter_signature showroom_signature renter_signed_at signed_at status',
-    );
+    let contractDoc = await RentalContractRecord.findOne({ booking_id: booking._id });
 
     // Backfill showroom_signature nếu chưa có (showroom set chữ ký sau khi hợp đồng tạo)
-    if (contractRecord && !contractRecord.showroom_signature) {
+    if (contractDoc && !contractDoc.showroom_signature) {
       const showroomUser = await UserModel.findById(booking.showroom_id._id || booking.showroom_id).select('signature');
       if (showroomUser?.signature) {
-        contractRecord.showroom_signature = showroomUser.signature;
-        await contractRecord.save();
+        contractDoc.showroom_signature = showroomUser.signature;
+        await contractDoc.save();
       }
     }
-    contractRecord = contractRecord?.toObject?.() ?? contractRecord;
 
-    if (!successfulPayment) {
-      throwError('Chỉ có thể xem hợp đồng sau khi thanh toán thành công. Vui lòng hoàn tất thanh toán.', 403);
+    const contractRecord = contractDoc?.toObject?.() ?? null;
+
+    let paymentDetails;
+    if (successfulPaymentDoc) {
+      paymentDetails = {
+        payment_method: successfulPaymentDoc.payment_method,
+        transaction_code: successfulPaymentDoc.transaction_code,
+        paid_at: successfulPaymentDoc.paid_at,
+        stripe_payment_intent_id: successfulPaymentDoc.stripe_payment_intent_id || null,
+        amount: successfulPaymentDoc.amount,
+        currency: successfulPaymentDoc.currency || 'vnd',
+      };
+    } else if (
+      contractDoc &&
+      ['pending_signature', 'signed'].includes(contractDoc.status)
+    ) {
+      paymentDetails = {
+        payment_method: contractDoc.payment_method || 'Stripe',
+        transaction_code: contractDoc.contract_number || '—',
+        paid_at: contractDoc.createdAt || new Date(),
+        stripe_payment_intent_id: null,
+        amount: contractDoc.total_price ?? booking.total_price,
+        currency: 'vnd',
+      };
+    } else {
+      throwError(
+        'Chỉ có thể xem hợp đồng sau khi thanh toán thành công hoặc khi đã có bản ghi hợp đồng trên hệ thống.',
+        403,
+      );
     }
 
     const vehicle = mapVehicleToArticle1(booking.vehicle_id);
@@ -281,12 +323,12 @@ class RentalContractService {
       amountInWords: null,
       amountInWordsNote: 'Có thể sinh bằng chữ ở client hoặc mở rộng service sau',
       payment: {
-        paymentMethod: successfulPayment.payment_method,
-        transactionCode: successfulPayment.transaction_code,
-        paidAt: successfulPayment.paid_at,
-        stripePaymentIntentId: successfulPayment.stripe_payment_intent_id || null,
-        amountPaid: successfulPayment.amount,
-        currency: successfulPayment.currency || 'vnd',
+        paymentMethod: paymentDetails.payment_method,
+        transactionCode: paymentDetails.transaction_code,
+        paidAt: paymentDetails.paid_at,
+        stripePaymentIntentId: paymentDetails.stripe_payment_intent_id,
+        amountPaid: paymentDetails.amount,
+        currency: paymentDetails.currency,
       },
     };
 
@@ -294,7 +336,7 @@ class RentalContractService {
       header: HEADER,
       contractMeta: {
         contractNumber: contractNumberFromBooking(booking),
-        signedDate: successfulPayment.paid_at || booking.updatedAt,
+        signedDate: paymentDetails.paid_at || booking.updatedAt,
         signedPlace: null,
         preamble: `Hôm nay, ngày … tháng … năm …, tại …, các bên ký kết hợp đồng theo dữ liệu hệ thống đặt xe mã booking: ${booking._id}.`,
       },
@@ -323,7 +365,7 @@ class RentalContractService {
         rentPriceCurrency: 'VNĐ',
         rentPricePer: costs.rentalUnit,
         amountInWords: costs.amountInWords,
-        paymentMethod: successfulPayment.payment_method,
+        paymentMethod: paymentDetails.payment_method,
         paymentDueNote: 'Thanh toán đã được ghi nhận qua hệ thống theo giao dịch thành công.',
         clauseCashHandling:
           'Việc giao và nhận tiền (nếu có phát sinh ngoài hệ thống) do hai bên tự thực hiện và chịu trách nhiệm trước pháp luật.',
@@ -355,14 +397,14 @@ class RentalContractService {
             party: 'BÊN CHO THUÊ (Bên A)',
             instruction: 'Ký và ghi rõ họ tên / đóng dấu (nếu có)',
             name: booking.showroom_id?.name || booking.showroom_id?.business_name || null,
-            signedAt: contractRecord?.signed_at || successfulPayment.paid_at || booking.updatedAt || null,
+            signedAt: contractRecord?.signed_at || paymentDetails.paid_at || booking.updatedAt || null,
             signatureImage: contractRecord?.showroom_signature || null,
           },
           {
             party: 'BÊN THUÊ (Bên B)',
             instruction: 'Ký và ghi rõ họ tên',
             name: booking.user_id?.name || null,
-            signedAt: contractRecord?.renter_signed_at || successfulPayment.paid_at || booking.updatedAt || null,
+            signedAt: contractRecord?.renter_signed_at || paymentDetails.paid_at || booking.updatedAt || null,
             signatureImage: contractRecord?.renter_signature || null,
           },
         ],

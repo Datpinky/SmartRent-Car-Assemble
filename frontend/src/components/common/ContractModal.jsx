@@ -16,12 +16,19 @@ export default function ContractModal({ isOpen, bookingId, onClose, onSigned }) 
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
-    if (!bookingId) return;
+    let id = '';
+    if (bookingId != null && bookingId !== '') {
+      if (typeof bookingId === 'string') id = bookingId.trim();
+      else if (typeof bookingId === 'object') {
+        id = String(bookingId._id || bookingId.$oid || bookingId.id || '');
+      } else id = String(bookingId);
+    }
+    if (!id) return;
     setLoading(true); setError(''); setBodyData(null); setSignContract(null);
     try {
       const [body, sign] = await Promise.allSettled([
-        getRentalContractByBookingId(bookingId),
-        contractService.getByBookingId(bookingId),
+        getRentalContractByBookingId(id),
+        contractService.getByBookingId(id),
       ]);
       if (body.status === 'fulfilled') setBodyData(body.value);
       if (sign.status === 'fulfilled') setSignContract(sign.value);
@@ -34,7 +41,15 @@ export default function ContractModal({ isOpen, bookingId, onClose, onSigned }) 
   }, [bookingId]);
 
   useEffect(() => {
-    if (isOpen && bookingId) { load(); }
+    const id =
+      typeof bookingId === 'string'
+        ? bookingId.trim()
+        : bookingId && typeof bookingId === 'object'
+          ? String(bookingId._id || bookingId.$oid || bookingId.id || '')
+          : bookingId != null
+            ? String(bookingId)
+            : '';
+    if (isOpen && id) { load(); }
     else if (!isOpen) { setBodyData(null); setSignContract(null); setError(''); }
   }, [isOpen, bookingId, load]);
 

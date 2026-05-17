@@ -46,7 +46,15 @@ export function mapInspectionToAiInspection(inspection) {
     return null;
   }
 
+  if (inspection.inspection_type === 'return' && inspection.inspected_by_role === 'renter' && !inspection.published_to_renter) {
+    return null;
+  }
+
   const result = normalizeInspectionAiResult(inspection);
+  if (result) {
+    if (typeof inspection.damage_detected === 'boolean') result.damage_detected = inspection.damage_detected;
+    if (inspection.severity) result.severity = inspection.severity;
+  }
   const pickupImages = Array.isArray(inspection.pickup_images) ? inspection.pickup_images.filter(Boolean) : [];
   const returnImageUrls = [
     ...(Array.isArray(inspection.return_images) ? inspection.return_images : []),
@@ -73,6 +81,9 @@ export function attachLatestAiInspectionToBookings(bookings = [], inspections = 
   inspections.forEach((inspection) => {
     const bookingId = resolveId(inspection?.booking_id);
     if (!bookingId || inspection?.inspection_type !== 'return') {
+      return;
+    }
+    if (!inspection.published_to_renter) {
       return;
     }
 
@@ -121,6 +132,21 @@ const inspectionService = {
 
   async getById(id) {
     const res = await apiClient.get(`/api/inspections/${id}`);
+    return res.data?.data ?? null;
+  },
+
+  async getReturnReview(bookingId) {
+    const res = await apiClient.get(`/api/inspections/return-review/${bookingId}`);
+    return res.data?.data ?? null;
+  },
+
+  async analyzeReturnReview(bookingId) {
+    const res = await apiClient.post(`/api/inspections/return-review/${bookingId}/analyze`, {});
+    return res.data?.data ?? null;
+  },
+
+  async confirmReturnReview(bookingId, body = {}) {
+    const res = await apiClient.post(`/api/inspections/return-review/${bookingId}/confirm`, body);
     return res.data?.data ?? null;
   },
 

@@ -212,13 +212,15 @@ const DashboardLayout = ({ children }) => {
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400">
                   SmartRent workspace
                 </p>
-                <h1 className="text-[1.05rem] font-semibold text-gray-900">{headerTitle}</h1>
+                <h1 className="min-w-0 max-w-[calc(100vw-8rem)] truncate text-[0.95rem] font-semibold text-gray-900 sm:max-w-none sm:text-[1.05rem]">
+                  {headerTitle}
+                </h1>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
               {user?.role === 'renter' && <NotificationBell />}
-              {user?.role == 'renter' && (
+              {user?.role === 'renter' && (
                 <Link
                   to="/"
                   className="hidden items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 no-underline transition hover:border-[#00b14f]/40 hover:text-[#00b14f] lg:inline-flex"
@@ -281,7 +283,7 @@ const DashboardLayout = ({ children }) => {
           </div>
         </header>
 
-        <main id="main-content" className="flex-1 p-6">
+        <main id="main-content" className="min-w-0 flex-1 p-3 sm:p-4 md:p-6">
           {children}
         </main>
       </div>

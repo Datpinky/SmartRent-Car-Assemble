@@ -2,7 +2,7 @@ import { FaCheckCircle, FaFileSignature, FaSpinner } from 'react-icons/fa';
 import SignaturePad from '../../../../components/common/SignaturePad';
 
 const SignatureTab = ({ currentSignature, newSignature, setNewSignature, sigPadKey, sigSaving, sigSaved, sigError, sigConfirming, setSigConfirming, onSave }) => (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 560 }}>
+  <div className="flex max-w-full min-w-0 flex-col" style={{ gap: 20 }}>
     <div>
       <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#111827', marginBottom: 4 }}>Chữ ký điện tử của Showroom</div>
       <p style={{ fontSize: '0.82rem', color: '#6b7280', marginBottom: 16, lineHeight: 1.6 }}>

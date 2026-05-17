@@ -29,6 +29,7 @@ import UserLocation from './UserLocation';
 import {
   TILE_URL,
   TILE_ATTRIBUTION,
+  TILE_SUBDOMAINS,
   DEFAULT_CENTER,
   DEFAULT_ZOOM,
   RADIUS_OPTIONS,
@@ -252,7 +253,7 @@ const MapView = ({ cars = [], height = '600px', embed = false }) => {
             zoomControl={true}
             scrollWheelZoom={!embed}
           >
-            <TileLayer url={TILE_URL} attribution={TILE_ATTRIBUTION} />
+            <TileLayer url={TILE_URL} attribution={TILE_ATTRIBUTION} {...(TILE_SUBDOMAINS ? { subdomains: TILE_SUBDOMAINS } : {})} />
 
             {embed && <FitMapToCars cars={cars} />}
 

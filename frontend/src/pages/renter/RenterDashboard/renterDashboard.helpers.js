@@ -17,6 +17,29 @@ export const PAYMENT_VISUALS = {
   declined: { label: 'Bị từ chối', bg: '#fee2e2', color: '#b91c1c' },
 };
 
+/** Lưới 2×5 — khớp luồng trạng thái đặt xe (tab lọc showroom / thiết kế cũ dashboard). */
+export const RENTER_STATUS_GRID_TABS = [
+  { key: 'pending', label: 'Chờ thanh toán', statuses: ['pending'] },
+  { key: 'waiting_payment', label: 'Đang thanh toán', statuses: ['waiting_payment'] },
+  { key: 'paid', label: 'Đã thanh toán', statuses: ['paid', 'confirmed'] },
+  { key: 'waiting_handover', label: 'Chờ bàn giao', statuses: ['waiting_handover'] },
+  { key: 'in_use', label: 'Đã bàn giao / Đang thuê', statuses: ['handed_over', 'in_use'] },
+  { key: 'waiting_return_confirmation', label: 'Chờ xác nhận trả', statuses: ['waiting_return_confirmation'] },
+  { key: 'completed', label: 'Hoàn thành', statuses: ['completed'] },
+  { key: 'cancelled', label: 'Đã hủy', statuses: ['cancelled', 'cancel_pending', 'cancel_failed'] },
+];
+
+export const countBookingsByStatusGrid = (items, tabs = RENTER_STATUS_GRID_TABS) => {
+  const list = Array.isArray(items) ? items : [];
+  const counts = Object.fromEntries(tabs.map((t) => [t.key, 0]));
+  for (const row of list) {
+    const st = String(row?.status ?? '');
+    const tab = tabs.find((t) => t.statuses.includes(st));
+    if (tab) counts[tab.key] += 1;
+  }
+  return counts;
+};
+
 export const SUMMARY_CARD_CONFIG = [
   {
     key: 'recordedAmount',

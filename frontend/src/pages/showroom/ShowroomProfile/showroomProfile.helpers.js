@@ -45,7 +45,7 @@ export const buildSavePayload = (form) => {
   const payload = {
     business_name: form.business_name,
     showroom_representative_name: form.showroom_representative_name,
-    public_address: form.public_address,
+    public_address: String(form.public_address || '').trim(),
     showroom_description: form.showroom_description,
     opening_hours: form.opening_hours,
     showroom_license_public: form.showroom_license_public,

@@ -1,11 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { FaChevronLeft, FaClock, FaMapMarkerAlt, FaPhone, FaStore } from 'react-icons/fa';
+import { FaBriefcase, FaChevronLeft, FaMapMarkerAlt, FaPhone } from 'react-icons/fa';
 import CarGrid from '../../CarGrid/CarGrid';
 import reviewService from '../../../services/reviewService';
 import showroomService from '../../../services/showroomService';
 
 const getShowroomName = (profile) => profile?.business_name || profile?.name || 'Showroom';
+
+const getShowroomAddress = (profile) =>
+  String(profile?.public_address || profile?.address || '').trim() || '';
 
 const getAvatarLabel = (value) => {
   const cleaned = String(value || '').trim();
@@ -18,22 +21,6 @@ const getAvatarLabel = (value) => {
     .map((part) => part[0])
     .join('')
     .toUpperCase();
-};
-
-const InfoChip = ({ icon, label, value }) => {
-  if (!value) {
-    return null;
-  }
-
-  return (
-    <div className="flex items-start gap-3 rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-sm">
-      <div className="mt-0.5 text-primary">{icon}</div>
-      <div>
-        <div className="text-[0.72rem] font-semibold uppercase tracking-wide text-gray-400">{label}</div>
-        <div className="mt-0.5 text-[0.9rem] text-gray-800">{value}</div>
-      </div>
-    </div>
-  );
 };
 
 const ShowroomPublic = () => {
@@ -88,6 +75,8 @@ const ShowroomPublic = () => {
   }, [userId]);
 
   const showroomName = useMemo(() => getShowroomName(profile), [profile]);
+  const showroomAddress = useMemo(() => getShowroomAddress(profile), [profile]);
+  const showroomPhone = useMemo(() => String(profile?.phone || '').trim(), [profile]);
   const vehicleCount = pagination.total || vehicles.length;
 
   return (
@@ -107,41 +96,46 @@ const ShowroomPublic = () => {
         </div>
       ) : (
         <>
-          <section className="rounded-3xl border border-gray-100 bg-gradient-to-br from-white via-sky-50 to-emerald-50 p-6 shadow-sm">
+          <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
             <div className="flex flex-wrap items-start gap-5">
               {profile?.logo_url ? (
                 <img
                   src={profile.logo_url}
                   alt={showroomName}
-                  className="h-20 w-20 rounded-2xl border border-white/70 object-cover shadow-sm"
+                  className="h-20 w-20 shrink-0 rounded-2xl border border-gray-100 object-cover"
                 />
               ) : (
-                <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-primary text-2xl font-bold text-white shadow-sm">
+                <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-primary text-2xl font-bold text-white">
                   {getAvatarLabel(showroomName)}
                 </div>
               )}
 
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-[0.76rem] font-semibold text-primary shadow-sm">
-                    <FaStore size={11} aria-hidden="true" /> Hồ sơ showroom
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[0.72rem] font-bold uppercase tracking-wide text-sky-700">
+                    <FaBriefcase size={11} aria-hidden />
+                    Hồ sơ showroom
                   </span>
-                  <span className="text-[0.78rem] font-medium text-gray-500">{vehicleCount} xe công khai</span>
+                  <span className="text-[0.8rem] font-semibold text-gray-500">
+                    {vehicleCount} xe công khai
+                  </span>
                 </div>
-                <h1 className="mt-3 text-3xl font-extrabold text-gray-900">{showroomName}</h1>
-                {profile?.showroom_representative_name && (
-                  <p className="mt-2 text-[0.95rem] text-gray-600">Người đại diện: {profile.showroom_representative_name}</p>
-                )}
-                {profile?.showroom_description && (
-                  <p className="mt-3 max-w-[900px] text-[0.92rem] leading-7 text-gray-600">{profile.showroom_description}</p>
-                )}
+                <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 sm:text-3xl">{showroomName}</h1>
+                <p className="mt-3 flex items-start gap-2 text-[0.95rem] leading-relaxed text-gray-700">
+                  <FaMapMarkerAlt className="mt-0.5 shrink-0 text-primary" aria-hidden />
+                  <span>{showroomAddress || 'Chưa có địa chỉ công khai'}</span>
+                </p>
+                <p className="mt-2 flex items-center gap-2 text-[0.95rem] text-gray-700">
+                  <FaPhone className="shrink-0 text-primary" size={14} aria-hidden />
+                  {showroomPhone ? (
+                    <a href={`tel:${showroomPhone.replace(/\s/g, '')}`} className="text-gray-800 no-underline hover:text-primary">
+                      {showroomPhone}
+                    </a>
+                  ) : (
+                    <span className="text-gray-500">Chưa cập nhật số điện thoại</span>
+                  )}
+                </p>
               </div>
-            </div>
-
-            <div className="mt-6 grid gap-3 md:grid-cols-3">
-              <InfoChip icon={<FaMapMarkerAlt size={14} />} label="Địa chỉ" value={profile?.public_address} />
-              <InfoChip icon={<FaClock size={14} />} label="Giờ mở cửa" value={profile?.opening_hours} />
-              <InfoChip icon={<FaPhone size={14} />} label="Liên hệ" value={profile?.phone} />
             </div>
 
             {profile?.policy_text && (

@@ -39,6 +39,12 @@ const ShowroomProfile = () => {
   useEffect(() => { hydrate(); }, [hydrate]);
 
   const handleSave = async () => {
+    const pub = String(form.public_address || '').trim();
+    if (pub.length < 10) {
+      setLoadError('Vui lòng nhập địa chỉ công khai (tối thiểu 10 ký tự) để khách thấy điểm nhận xe khi đặt.');
+      return;
+    }
+    setLoadError('');
     setSaving(true); setSaved(false);
     try {
       const updated = await authService.updateProfile(buildSavePayload(form));
@@ -96,7 +102,10 @@ const ShowroomProfile = () => {
         </div>
       ) : (
         <>
-          <div style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)', borderRadius: 16, padding: 24, color: '#fff', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 20 }}>
+          <div
+            className="max-w-full min-w-0 flex-col sm:flex-row"
+            style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)', borderRadius: 16, padding: 24, color: '#fff', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 20 }}
+          >
             {form.logo_url ? (
               <img src={form.logo_url} alt="" width={72} height={72} className="rounded-[18px] object-cover shrink-0 border-2 border-white/20" />
             ) : (
@@ -104,25 +113,29 @@ const ShowroomProfile = () => {
                 {initials}
               </div>
             )}
-            <div>
-              <div className="flex items-center gap-2" style={{ fontSize: '1.2rem', fontWeight: 800 }}>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 break-words" style={{ fontSize: '1.2rem', fontWeight: 800 }}>
                 {displayName} <FaMapMarkerAlt aria-hidden="true" className="shrink-0" style={{ fontSize: '0.9rem', opacity: 0.85 }} />
               </div>
-              <div style={{ fontSize: '0.85rem', opacity: 0.7, marginTop: 4 }}>{form.public_address || 'Chưa có địa chỉ công khai'}</div>
+              <div className="break-words" style={{ fontSize: '0.85rem', opacity: 0.7, marginTop: 4 }}>{form.public_address || 'Chưa có địa chỉ công khai'}</div>
               {statusLabel && <div className="mt-2 text-[0.8rem]"><span className="bg-primary px-2.5 py-0.5 rounded-full font-bold text-white">{statusLabel}</span></div>}
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 4, background: '#f3f4f6', borderRadius: 10, padding: 4, marginBottom: 20, width: 'fit-content' }}>
+          <div
+            className="max-w-full min-w-0"
+            style={{ display: 'flex', gap: 4, background: '#f3f4f6', borderRadius: 10, padding: 4, marginBottom: 20, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
+          >
             {TABS.map(([key, label]) => (
               <button type="button" key={key} onClick={() => setActiveTab(key)}
+                className="shrink-0"
                 style={{ padding: '7px 16px', borderRadius: 8, border: 'none', background: activeTab === key ? '#fff' : 'transparent', fontWeight: 600, fontSize: '0.82rem', color: activeTab === key ? '#111827' : '#6b7280', cursor: 'pointer', boxShadow: activeTab === key ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
                 {label}
               </button>
             ))}
           </div>
 
-          <div style={{ background: '#fff', borderRadius: 14, padding: 24, border: '1px solid #f0f0f0' }}>
+          <div className="max-w-full min-w-0" style={{ background: '#fff', borderRadius: 14, padding: 24, border: '1px solid #f0f0f0' }}>
             {activeTab === 'info' && <InfoTab form={form} setForm={setForm} />}
             {activeTab === 'policy' && <PolicyTab form={form} setForm={setForm} />}
             {activeTab === 'logo' && <LogoTab form={form} setForm={setForm} />}

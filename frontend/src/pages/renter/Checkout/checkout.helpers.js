@@ -75,14 +75,29 @@ export function normalizeIncomingRentalWindow(pickupValue, returnValue, minPicku
 
 export const formatCoordinates = (latitude, longitude) => `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
 
+export function toFiniteCoordinate(value) {
+  if (value === undefined || value === null || value === '') return NaN;
+  const normalized = typeof value === 'string' ? value.trim() : value;
+  if (normalized === '') return NaN;
+  const numeric = Number(normalized);
+  return Number.isFinite(numeric) ? numeric : NaN;
+}
+
+export function hasNonZeroCoordinates(latitude, longitude) {
+  const lat = toFiniteCoordinate(latitude);
+  const lng = toFiniteCoordinate(longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  return !(lat === 0 && lng === 0);
+}
+
 export function parseCoordinateInput(value) {
   const match = String(value || '').match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/);
   if (!match) return null;
-  const latitude = Number(match[1]);
-  const longitude = Number(match[2]);
+  const latitude = toFiniteCoordinate(match[1]);
+  const longitude = toFiniteCoordinate(match[2]);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
   return { latitude, longitude };
 }
 
 export const hasCoordinates = (location) =>
-  Number.isFinite(Number(location?.latitude)) && Number.isFinite(Number(location?.longitude));
+  hasNonZeroCoordinates(location?.latitude, location?.longitude);

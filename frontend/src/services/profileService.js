@@ -25,6 +25,14 @@ const persistStoredUser = (nextUser) => {
   );
 };
 
+const toNumberOrNull = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  const normalized = typeof value === 'string' ? value.trim() : value;
+  if (normalized === '') return null;
+  const nextValue = Number(normalized);
+  return Number.isFinite(nextValue) ? nextValue : null;
+};
+
 export const mapProfileUser = (user = {}) => ({
   id: user._id || user.id || '',
   _id: user._id || user.id || '',
@@ -37,6 +45,14 @@ export const mapProfileUser = (user = {}) => ({
   age: user.age ?? '',
   showroom_status: user.showroom_status || '',
   business_name: user.business_name || '',
+  public_address: user.public_address || '',
+  showroom_representative_name: user.showroom_representative_name || '',
+  opening_hours: user.opening_hours || '',
+  showroom_license_public: user.showroom_license_public || '',
+  policy_text: user.policy_text || '',
+  logo_url: user.logo_url || '',
+  showroom_description: user.showroom_description || '',
+  tax_code: user.tax_code || '',
   createdAt: user.createdAt || '',
   updatedAt: user.updatedAt || '',
   userLocation: user.userLocation || null,
@@ -146,9 +162,9 @@ export const profileService = {
       const longitude = payload.longitude ?? payload.userLocation?.longitude ?? payload.location?.longitude;
       const plusCode =
         payload.plus_code ?? payload.plusCode ?? payload.userLocation?.plusCode ?? payload.location?.plusCode;
-      const normalizedLatitude = Number(latitude);
-      const normalizedLongitude = Number(longitude);
-      const hasCoordinates = Number.isFinite(normalizedLatitude) && Number.isFinite(normalizedLongitude);
+      const normalizedLatitude = toNumberOrNull(latitude);
+      const normalizedLongitude = toNumberOrNull(longitude);
+      const hasCoordinates = normalizedLatitude != null && normalizedLongitude != null;
       const trimmedAddress = String(payload.address || '').trim();
 
       if (!trimmedAddress) {

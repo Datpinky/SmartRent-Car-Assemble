@@ -14,6 +14,7 @@ function ImageUploadStep({
   analyzing = false,
   analysisError = '',
   isShowroom = false,
+  lockReturnUploads = false,
   onBack = () => {},
   onAnalyze = () => {},
 }) {
@@ -70,6 +71,7 @@ function ImageUploadStep({
   };
 
   const handleRemoveImage = (index) => {
+    if (lockReturnUploads) return;
     if (isShowroom && images[index]?.type === 'url') {
       return;
     }
@@ -77,7 +79,7 @@ function ImageUploadStep({
     setPreviews((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const canAddMore = images.length < MAX_IMAGES;
+  const canAddMore = !lockReturnUploads && images.length < MAX_IMAGES;
 
   return (
     <div className="bg-white rounded-2xl p-5 border border-gray-200">
@@ -118,7 +120,7 @@ function ImageUploadStep({
       {pickupImagesUrls.filter(Boolean).length > 0 && (
         <div className="mb-5">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-semibold text-gray-700">Ảnh bàn giao của showroom</span>
+            <span className="text-sm font-semibold text-gray-700">Ảnh bàn giao từ showroom</span>
             <span className="text-xs text-blue-700 bg-blue-50 border border-blue-200 px-2 py-1 rounded-full">
               BEFORE ({pickupImagesUrls.filter(Boolean).length}/6)
             </span>
@@ -145,6 +147,13 @@ function ImageUploadStep({
         </div>
       )}
 
+      {lockReturnUploads && images.length > 0 && (
+        <div className="bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 mb-4 text-sm text-slate-700 flex gap-2">
+          <FaInfoCircle className="shrink-0 mt-0.5" />
+          <span>Ảnh trả xe do khách thuê gửi — showroom chỉ xem, không thêm/sửa ảnh tại màn hình này.</span>
+        </div>
+      )}
+
       {images.length === 0 ? (
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-3.5 py-2.5 mb-4 text-sm text-yellow-800 flex gap-2">
           <FaInfoCircle className="shrink-0 mt-0.5" />
@@ -166,13 +175,18 @@ function ImageUploadStep({
       <div className="mb-5">
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm font-semibold text-gray-700">
-            Hình ảnh ({images.length}/{MAX_IMAGES})
+            {lockReturnUploads ? 'Ảnh khách upload khi trả xe' : 'Ảnh trả xe'}
           </span>
+          {lockReturnUploads && (
+            <span className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-full">
+              AFTER ({images.length}/6)
+            </span>
+          )}
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
           {previews.map((preview, idx) => {
-            const lockedExistingImage = isShowroom && images[idx]?.type === 'url';
+            const lockedExistingImage = lockReturnUploads || (isShowroom && images[idx]?.type === 'url');
             return (
               <div
                 key={idx}
@@ -183,7 +197,7 @@ function ImageUploadStep({
                 <img src={preview} alt={`Preview ${idx + 1}`} className="w-full h-full object-cover" />
                 {lockedExistingImage ? (
                   <div className="absolute left-2 top-2 rounded-full bg-cyan-100 text-cyan-700 px-2 py-1 text-[0.65rem] font-semibold">
-                    Ảnh renter
+                    {lockReturnUploads ? 'Ảnh khách' : 'Ảnh renter'}
                   </div>
                 ) : (
                   <button
@@ -234,15 +248,18 @@ function ImageUploadStep({
           onClick={() => onAnalyze(images)}
           disabled={analyzing || images.length === 0}
         >
-          {analyzing ? (
-            <>
-              <FaSpinner className="animate-spin inline mr-1.5" aria-hidden /> Đang phân tích AI...
-            </>
-          ) : (
-            <>
-              <FaRobot className="inline mr-1.5" aria-hidden /> Phân tích {images.length} ảnh
-            </>
-          )}
+              {analyzing
+              ? (
+                <>
+                  <FaSpinner className="animate-spin inline mr-1.5" aria-hidden /> Đang phân tích AI...
+                </>
+              )
+              : (
+                <>
+                  <FaRobot className="inline mr-1.5" aria-hidden />{' '}
+                  {lockReturnUploads ? 'Phân tích ảnh trả xe' : `Phân tích ${images.length} ảnh`}
+                </>
+              )}
         </button>
       </div>
 

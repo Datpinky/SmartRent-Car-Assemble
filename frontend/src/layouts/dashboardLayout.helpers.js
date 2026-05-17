@@ -9,7 +9,6 @@ import {
   LayoutDashboard,
   Store,
   TrendingUp,
-  User,
   Users,
 } from 'lucide-react';
 
@@ -35,7 +34,7 @@ export const MENUS = {
     },
     { label: 'Doanh thu', path: '/showroom/revenue', icon: TrendingUp },
     { label: 'Rút tiền', path: '/showroom/withdrawals', icon: CreditCard },
-    { label: 'Kiểm tra AI', path: '/showroom/ai-inspection', icon: Bot },
+    { label: 'Kiểm tra AI trả xe', path: '/showroom/ai-inspection', icon: Bot },
   ],
   renter: [
     { label: 'Tổng quan tài chính', path: '/renter/dashboard', icon: LayoutDashboard },
@@ -49,8 +48,7 @@ export const MENUS = {
         { label: 'Chuyến đi của tôi', path: '/renter/bookings', icon: CalendarDays },
       ],
     },
-    { label: 'Hồ sơ cá nhân', path: '/renter/profile', icon: User },
-    { label: 'Kiểm tra AI trả xe', path: '/renter/return-inspections', icon: Bot },
+    { label: 'Kết quả AI trả xe', path: '/renter/return-inspections', icon: Bot },
     { label: 'Hợp đồng của tôi', path: '/renter/contracts', icon: FileText },
     { label: 'Lịch sử giao dịch', path: '/renter/transactions', icon: ArrowLeftRight },
   ],
@@ -69,6 +67,7 @@ export const PROFILE_PATHS = {
 };
 
 export const FALLBACK_TITLES = [
+  { prefix: '/renter/profile', label: 'Hồ sơ cá nhân' },
   { prefix: '/renter/retry-payment', label: 'Thanh toán lại' },
   { prefix: '/renter/checkout', label: 'Thanh toán đặt xe' },
   { prefix: '/renter/transactions', label: 'Lịch sử giao dịch' },

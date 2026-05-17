@@ -193,7 +193,7 @@ export const vehicleService = {
     const raw = res.data?.data || {};
     const mapped = {};
     for (const [id, v] of Object.entries(raw)) {
-      mapped[id] = v ? mapVehicle(v) : null;
+      mapped[String(id)] = v ? mapVehicle(v) : null;
     }
     return mapped;
   },

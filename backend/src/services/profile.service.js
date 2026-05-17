@@ -32,7 +32,50 @@ class ProfileService {
   }
 
   async updateProfile(userId, data) {
-    return await UserModel.findByIdAndUpdate(userId, data, { new: true }).select('-password');
+    const allowed = [
+      'name',
+      'address',
+      'phone',
+      'age',
+      'business_name',
+      'tax_code',
+      'public_address',
+      'showroom_representative_name',
+      'opening_hours',
+      'showroom_license_public',
+      'policy_text',
+      'logo_url',
+      'showroom_description',
+    ];
+    const update = {};
+    for (const key of allowed) {
+      if (Object.prototype.hasOwnProperty.call(data, key)) {
+        update[key] = data[key];
+      }
+    }
+
+    const current = await UserModel.findById(userId);
+    if (!current) {
+      return null;
+    }
+
+    const merged = { ...current.toObject(), ...update };
+    if (merged.role === 'showroom') {
+      const addr = String(merged.public_address ?? '').trim();
+      if (addr.length < 10) {
+        const err = new Error(
+          'Showroom bắt buộc nhập địa chỉ công khai (tối thiểu 10 ký tự) để hiển thị điểm nhận xe cho khách.',
+        );
+        err.statusCode = 400;
+        throw err;
+      }
+    }
+
+    if (Object.keys(update).length === 0) {
+      return await UserModel.findById(userId).select('-password');
+    }
+
+    return await UserModel.findByIdAndUpdate(userId, update, { new: true }).select('-password');
   }
 
   async updateDriverLicense(userId, data) {

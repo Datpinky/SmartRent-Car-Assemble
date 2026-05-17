@@ -4,6 +4,7 @@ import { MdDirectionsCar } from 'react-icons/md';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import ContractModal from '../../../components/common/ContractModal';
 import Modal from '../../../components/common/Modal';
+import HandoverOtpInput from '../../../components/renter/HandoverOtpInput';
 import { RENTAL_CONTRACT_UI } from '../../../constants/rentalContractTemplate';
 import bookingService from '../../../services/bookingService';
 import { canRenterViewOfficialRentalContract } from '../../../utils/rentalContractEligibility';
@@ -291,37 +292,23 @@ const PendingPickups = () => {
                 >
                   Showroom đã bàn giao xe. Hãy yêu cầu showroom đọc mã OTP và nhập vào ô bên dưới để xác nhận nhận xe.
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={6}
-                    placeholder="Nhập mã OTP 6 số"
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <HandoverOtpInput
                     value={otpInputs[detailModal.id] || ''}
-                    onChange={(e) =>
-                      setOtpInputs((prev) => ({ ...prev, [detailModal.id]: e.target.value.replace(/\D/g, '') }))
-                    }
-                    style={{
-                      flex: 1,
-                      padding: '10px 14px',
-                      borderRadius: 10,
-                      border: '1.5px solid #00b14f',
-                      fontSize: '1.1rem',
-                      fontFamily: 'monospace',
-                      letterSpacing: '0.2em',
-                      outline: 'none',
-                      textAlign: 'center',
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    style={{ padding: '10px 20px', whiteSpace: 'nowrap' }}
+                    onValueChange={(v) => setOtpInputs((prev) => ({ ...prev, [detailModal.id]: v }))}
                     disabled={otpLoading === detailModal.id}
-                    onClick={() => handleVerifyOtp(detailModal.id)}
-                  >
-                    {otpLoading === detailModal.id ? <FaSpinner className="animate-spin" /> : 'Xác nhận nhận xe'}
-                  </button>
+                  />
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      style={{ padding: '10px 20px', whiteSpace: 'nowrap' }}
+                      disabled={otpLoading === detailModal.id}
+                      onClick={() => handleVerifyOtp(detailModal.id)}
+                    >
+                      {otpLoading === detailModal.id ? <FaSpinner className="animate-spin" /> : 'Xác nhận nhận xe'}
+                    </button>
+                  </div>
                 </div>
                 {otpErrors[detailModal.id] && (
                   <div

@@ -100,13 +100,13 @@ const RevenueReports = () => {
   };
 
   return (
-    <div>
+    <div className="min-w-0 max-w-full">
       <div className="page-header" style={{ marginBottom: 20 }}>
         <div>
           <h1 className="page-title">Doanh thu &amp; Báo cáo</h1>
           <p className="page-subtitle">Thống kê từ booking và xe showroom (dữ liệu thật từ API).</p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div className="flex flex-wrap items-center gap-2.5">
           <button type="button" className="btn-outline" onClick={exportCsv} title="Tải CSV theo dữ liệu đang hiển thị">
             <FaDownload aria-hidden="true" /> CSV
           </button>
@@ -144,14 +144,7 @@ const RevenueReports = () => {
         </div>
       )}
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-          gap: 14,
-          marginBottom: 20,
-        }}
-      >
+      <div className="stats-grid mb-5">
         {[
           {
             label: 'Tổng doanh thu (12 tháng gần đây)',
@@ -208,10 +201,10 @@ const RevenueReports = () => {
         ))}
       </div>
 
-      <div className="chart-card" style={{ marginBottom: 20 }}>
+      <div className="chart-card mb-5 min-w-0">
         <div className="chart-header">
           <div className="chart-title">Doanh thu – Chi phí – Lợi nhuận (triệu VND)</div>
-          <div style={{ display: 'flex', gap: 4, background: '#f3f4f6', borderRadius: 8, padding: 3 }}>
+          <div className="flex shrink-0 flex-wrap gap-1 rounded-lg bg-gray-100 p-0.5">
             {['month', 'quarter', 'year'].map((p) => (
               <button
                 key={p}
@@ -233,8 +226,9 @@ const RevenueReports = () => {
             ))}
           </div>
         </div>
-        <ResponsiveContainer width="100%" height={280}>
-          <AreaChart data={showroomRevenue} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+        <div className="h-[280px] w-full min-w-0">
+          <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={showroomRevenue} margin={{ top: 8, right: 6, left: -8, bottom: 12 }}>
             <defs>
               <linearGradient id="revGr" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#00b14f" stopOpacity={0.3} />
@@ -246,7 +240,14 @@ const RevenueReports = () => {
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+            <XAxis
+              dataKey="month"
+              tick={{ fontSize: 10, fill: '#9ca3af' }}
+              axisLine={false}
+              tickLine={false}
+              interval="preserveStartEnd"
+              minTickGap={12}
+            />
             <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
             <Tooltip formatter={(v, n) => [formatVnd(v * 1_000_000), n]} />
             <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '0.78rem' }} />
@@ -279,15 +280,16 @@ const RevenueReports = () => {
               dot={false}
             />
           </AreaChart>
-        </ResponsiveContainer>
+          </ResponsiveContainer>
+        </div>
       </div>
 
       <div className="chart-card" style={{ marginBottom: 20 }}>
         <div className="chart-header">
           <div className="chart-title">Xe showroom (theo số chuyến ghi trên xe)</div>
         </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="simple-table">
+        <div className="min-w-0 overflow-x-auto">
+          <table className="simple-table min-w-[560px] w-full">
             <thead>
               <tr>
                 <th>Tên xe</th>

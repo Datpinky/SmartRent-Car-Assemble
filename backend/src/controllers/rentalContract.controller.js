@@ -4,7 +4,7 @@ class RentalContractController {
   async getByBookingId(req, res, next) {
     try {
       const { bookingId } = req.params;
-      const data = await rentalContractService.buildContract(bookingId);
+      const data = await rentalContractService.buildContract(bookingId, req.user);
       return res.status(200).json({
         message: 'Lấy dữ liệu hợp đồng thuê xe thành công',
         data,

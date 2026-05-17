@@ -26,7 +26,8 @@ const ALLOWED_TRANSITIONS = {
     // Sau khi thanh toán: chốt bàn giao hoặc hủy (sẽ hoàn tiền)
     paid: ['waiting_handover', 'cancelled'],
     waiting_handover: ['handed_over'],
-    waiting_return_confirmation: ['completed', 'in_use'],
+    // Hoàn tất trả xe chỉ qua POST /inspections/return-review/:bookingId/confirm (AI hoặc thủ công)
+    waiting_return_confirmation: ['in_use'],
   },
   renter: {
     waiting_payment: ['cancelled'],
@@ -87,6 +88,20 @@ class BookingService {
     const vehicleOwner = vehicle.added_by.toString();
     if (showroom_id && vehicleOwner !== showroom_id.toString()) {
       throwError('Thông tin chủ xe không hợp lệ', 400);
+    }
+
+    const dTypeCheck = String(delivery_type || 'self');
+    if (dTypeCheck !== 'delivery') {
+      const ownerUser = await User.findById(vehicle.added_by).select('role public_address').lean();
+      if (ownerUser?.role === 'showroom') {
+        const pub = String(ownerUser.public_address || '').trim();
+        if (pub.length < 10) {
+          throwError(
+            'Showroom chưa cập nhật địa chỉ nhận xe công khai. Không thể đặt xe tự đến lấy lúc này.',
+            409,
+          );
+        }
+      }
     }
 
     // 5. Kiểm tra xung đột lịch đặt + tạo booking trong cùng 1 transaction (tránh double-booking)
@@ -199,7 +214,9 @@ class BookingService {
   }
 
   static async getBookingById(id) {
-    return Booking.findById(id).populate('vehicle_id', 'vehicle_name vehicle_brand vehicle_model vehicle_plate_number');
+    return Booking.findById(id)
+      .populate('vehicle_id', 'vehicle_name vehicle_brand vehicle_model vehicle_plate_number')
+      .populate('user_id', 'name email full_name');
   }
 
   static async updateBookingStatus(id, status, role, userId) {

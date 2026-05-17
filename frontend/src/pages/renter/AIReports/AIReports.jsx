@@ -179,8 +179,8 @@ const AIReports = () => {
         <div>
           <h1 className="page-title">Kết quả kiểm tra xe</h1>
           <p className="page-subtitle">
-            Báo cáo AI được lưu trên server theo từng booking sau khi bạn hoàn tất bước trả xe trong quy trình trả xe.
-            Ảnh trước thuê dùng cho so sánh là ảnh đối chiếu bạn đã upload khi nhận xe (hoặc ảnh showroom cung cấp trên hệ thống khi có).
+            Báo cáo AI sau khi trả xe, chỉ hiển thị khi showroom đã xác nhận kết quả. Ảnh BEFORE là ảnh bàn giao từ
+            showroom; ảnh AFTER là ảnh bạn đã gửi khi trả xe.
           </p>
         </div>
         <button className="btn-primary" onClick={() => navigate('/renter/bookings')}>
@@ -232,7 +232,8 @@ const AIReports = () => {
           </div>
           <div style={{ fontWeight: 800, color: '#111827', marginBottom: 6 }}>Chưa có báo cáo AI trên server</div>
           <div style={{ fontSize: '0.84rem', color: '#6b7280', lineHeight: 1.6, maxWidth: 580, margin: '0 auto 16px' }}>
-            Báo cáo được tạo khi bạn lưu bước trả xe trong quy trình trả xe (ảnh nhận + ảnh trả đã upload). Nếu phân tích thất bại, hãy thử lại từ modal quy trình.
+            Báo cáo chỉ có sau khi showroom xác nhận kết quả AI hoặc hoàn tất trả xe. Xem quy trình trả xe trong
+            &quot;Chuyến đi của tôi&quot; để gửi ảnh trả xe.
           </div>
           <button className="btn-primary" onClick={() => navigate('/renter/bookings')}>
             Mở quy trình trả xe

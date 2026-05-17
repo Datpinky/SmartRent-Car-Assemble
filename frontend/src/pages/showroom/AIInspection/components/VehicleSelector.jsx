@@ -33,7 +33,7 @@ function VehicleSelector({
       ) : vehicles.length === 0 ? (
         <div className="py-6 text-gray-400 text-sm text-center">Chưa có xe nào trong showroom.</div>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3 mb-6">
+        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
           {vehicles.map((v) => {
             const id = String(v._id || v.id);
             const name = getVehicleName(v);

@@ -8,6 +8,17 @@ import { formatVnd } from '../../../utils/currencyFormat';
 const fmt = (d) =>
   d ? new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—';
 
+/** Chuẩn hóa booking_id (string / ObjectId / object từ API) cho URL và validate backend. */
+function toBookingIdString(ref) {
+  if (ref == null || ref === '') return '';
+  if (typeof ref === 'string') return ref.trim();
+  if (typeof ref === 'object') {
+    if (ref.$oid != null) return String(ref.$oid);
+    return String(ref._id || ref.id || '');
+  }
+  return String(ref);
+}
+
 function mapContractRow(c) {
   return {
     raw: c,
@@ -178,7 +189,7 @@ const ContractManagement = () => {
       {/* Detail modal — full contract body + signature */}
       <ContractModal
         isOpen={!!viewModal}
-        bookingId={viewModal?.raw?.booking_id || ''}
+        bookingId={viewModal ? toBookingIdString(viewModal.raw?.booking_id) : ''}
         onClose={() => setViewModal(null)}
       />
     </div>

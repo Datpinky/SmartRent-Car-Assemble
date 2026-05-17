@@ -3,6 +3,31 @@ import { FaSearch, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 
 const PAGE_SIZE = 10;
 
+const parseWidthPx = (value) => {
+  if (value == null || value === '') return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const s = String(value).trim();
+  const n = parseInt(s.replace('px', ''), 10);
+  return Number.isFinite(n) ? n : null;
+};
+
+/** width: number (px), '120px', hoặc '28%' */
+const colWidthStyle = (col) => {
+  const style = {};
+  if (col?.width == null || col.width === '') return style;
+  const w = col.width;
+  if (typeof w === 'string') {
+    const t = w.trim();
+    if (t.endsWith('%')) {
+      style.width = t;
+      return style;
+    }
+  }
+  const px = parseWidthPx(w);
+  if (px != null) style.width = `${px}px`;
+  return style;
+};
+
 const DataTable = ({
   columns,
   data = [],
@@ -12,6 +37,10 @@ const DataTable = ({
   searchFields,
   actions,
   emptyText = 'Không có dữ liệu',
+  /** Class padding ngang cho th/td (vd. px-2). Không đổi py — khoảng dọc giữa các hàng giữ nguyên. */
+  cellXPadding = 'px-3.5',
+  /** 'auto' — cột theo nội dung + cuộn ngang trên mobile (mặc định showroom). 'fixed' — chia đều cột (dễ bóp chữ trên màn hẹp). */
+  tableLayout = 'auto',
 }) => {
   const searchId = useId();
   const [search, setSearch] = useState('');
@@ -56,12 +85,38 @@ const DataTable = ({
 
   const handleSearch = (e) => { setSearch(e.target.value); setPage(1); };
 
+  const headerStyle = (col) => colWidthStyle(col);
+
+  const cellStyle = (col) => {
+    const style = { ...colWidthStyle(col) };
+    if (col.align && col.align !== 'center' && col.align !== 'right') {
+      style.textAlign = col.align;
+    }
+    return style;
+  };
+
+  const renderCellContent = (col, row) => {
+    const inner = col.render ? col.render(row) : col.accessor ? row[col.accessor] : '';
+    if (col.align === 'center') {
+      return (
+        <div className="flex justify-center items-center w-full min-w-0">{inner}</div>
+      );
+    }
+    if (col.align === 'right') {
+      return <div className="flex justify-end items-center w-full min-w-0">{inner}</div>;
+    }
+    return inner;
+  };
+
+  const headerAlignClass = (col) =>
+    col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left';
+
   return (
     <div className="bg-white rounded-[14px] shadow-[0_1px_4px_rgba(0,0,0,0.07)] border border-[#f0f0f0] overflow-hidden">
       {(searchable || actions) && (
         <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100 gap-3 flex-wrap">
           {searchable && (
-            <div className="flex items-center gap-2 bg-gray-50 border-[1.5px] border-gray-200 rounded-lg px-3 py-[7px] min-w-[240px] flex-1 max-w-[360px] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10">
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border-[1.5px] border-gray-200 bg-gray-50 px-3 py-[7px] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 sm:max-w-[360px]">
               <label htmlFor={searchId} className="sr-only">{searchPlaceholder}</label>
               <FaSearch aria-hidden="true" className="text-gray-400 text-[0.8rem] shrink-0" />
               <input
@@ -77,16 +132,18 @@ const DataTable = ({
           {actions && <div className="flex gap-2 items-center">{actions}</div>}
         </div>
       )}
-      <div className="overflow-x-auto min-w-0">
-        <table className="w-full table-fixed border-collapse text-[0.85rem]">
+      <div className="-mx-0.5 min-w-0 overflow-x-auto px-0.5 [scrollbar-width:thin]">
+        <table
+          className={`min-w-[640px] w-full border-collapse text-[0.85rem] sm:min-w-0 ${tableLayout === 'fixed' ? 'table-fixed' : 'table-auto'}`}
+        >
           <thead>
             <tr className="bg-gray-50">
               {columns.map(col => (
                 <th
                   key={col.key}
                   scope="col"
-                  className={`px-3.5 py-[11px] text-left text-[0.75rem] font-semibold text-gray-500 uppercase tracking-[0.04em] whitespace-nowrap border-b border-[#f0f0f0] ${col.sortable ? 'cursor-pointer select-none hover:text-primary' : ''}`}
-                  style={col.width ? { width: col.width } : {}}
+                  className={`${cellXPadding} py-[11px] ${headerAlignClass(col)} text-[0.75rem] font-semibold text-gray-500 uppercase tracking-[0.04em] border-b border-[#f0f0f0] ${col.sortable ? 'cursor-pointer select-none hover:text-primary' : ''} ${!col.sortable ? 'whitespace-nowrap' : ''}`}
+                  style={headerStyle(col)}
                   aria-sort={
                     col.sortable
                       ? sortKey === (col.accessor || col.key)
@@ -95,19 +152,25 @@ const DataTable = ({
                       : undefined
                   }
                 >
-                  {col.sortable ? (
-                    <button
-                      type="button"
-                      onClick={() => handleSort(col.accessor || col.key)}
-                      aria-label={`Sắp xếp theo ${col.label}`}
-                      className="inline-flex items-center gap-1 uppercase tracking-[0.04em] font-semibold text-gray-500 hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded"
-                    >
-                      {col.label}
-                      {sortKey === (col.accessor || col.key) && (
-                        <span aria-hidden="true" className="text-primary">{sortDir === 'asc' ? '↑' : '↓'}</span>
-                      )}
-                    </button>
-                  ) : col.label}
+                  <span
+                    className={`block min-w-0 w-full break-words ${
+                      col.align === 'right' ? 'flex justify-end' : col.align === 'center' ? 'flex justify-center' : ''
+                    }`}
+                  >
+                    {col.sortable ? (
+                      <button
+                        type="button"
+                        onClick={() => handleSort(col.accessor || col.key)}
+                        aria-label={`Sắp xếp theo ${col.label}`}
+                        className="inline-flex items-center gap-1 uppercase tracking-[0.04em] font-semibold text-gray-500 hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded"
+                      >
+                        {col.label}
+                        {sortKey === (col.accessor || col.key) && (
+                          <span aria-hidden="true" className="text-primary">{sortDir === 'asc' ? '↑' : '↓'}</span>
+                        )}
+                      </button>
+                    ) : col.label}
+                  </span>
                 </th>
               ))}
             </tr>
@@ -124,10 +187,10 @@ const DataTable = ({
                 {columns.map(col => (
                   <td
                     key={col.key}
-                    className="px-3.5 py-[11px] text-gray-700 align-middle min-w-0 [overflow-wrap:anywhere] [word-break:break-word]"
-                    style={col.align ? { textAlign: col.align } : {}}
+                    className={`${cellXPadding} min-w-0 py-[11px] align-middle break-words text-gray-700`}
+                    style={cellStyle(col)}
                   >
-                    {col.render ? col.render(row) : (col.accessor ? row[col.accessor] : '')}
+                    {renderCellContent(col, row)}
                   </td>
                 ))}
               </tr>

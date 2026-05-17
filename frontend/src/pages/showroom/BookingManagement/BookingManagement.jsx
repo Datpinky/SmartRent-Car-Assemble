@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FaArrowRight, FaCheckCircle, FaEye, FaSpinner, FaTimes } from 'react-icons/fa';
 import DataTable from '../../../components/common/DataTable';
@@ -19,6 +20,7 @@ import OtpModal from './components/OtpModal';
 import StatusPipeline from './components/StatusPipeline';
 
 const BookingManagement = () => {
+  const navigate = useNavigate();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -49,6 +51,10 @@ const BookingManagement = () => {
   useEffect(() => {
     fetchBookings();
   }, [fetchBookings]);
+
+  const goToReturnAiInspection = (bookingId) => {
+    navigate(`/showroom/ai-inspection?bookingId=${encodeURIComponent(bookingId)}`);
+  };
 
   const _doUpdateStatus = async (bookingId, nextStatus) => {
     setUpdatingId(bookingId);
@@ -306,7 +312,7 @@ const BookingManagement = () => {
                 )}
               </button>
             )}
-            {primaryAction && (
+            {primaryAction && row.status !== 'waiting_return_confirmation' && (
               <button
                 type="button"
                 className="btn-icon"
@@ -327,6 +333,24 @@ const BookingManagement = () => {
                 ) : (
                   <FaArrowRight aria-hidden="true" />
                 )}
+              </button>
+            )}
+            {row.status === 'waiting_return_confirmation' && (
+              <button
+                type="button"
+                className="btn-icon"
+                style={{
+                  borderColor: '#2563eb',
+                  color: '#2563eb',
+                  fontSize: '0.72rem',
+                  whiteSpace: 'nowrap',
+                  padding: '5px 8px',
+                }}
+                onClick={() => goToReturnAiInspection(row.id)}
+                title="Kiểm tra AI trả xe"
+                aria-label="Kiểm tra AI trả xe"
+              >
+                <FaArrowRight aria-hidden="true" />
               </button>
             )}
           </div>
@@ -482,7 +506,20 @@ const BookingManagement = () => {
                   Hủy đơn đặt xe
                 </button>
               )}
-              {PRIMARY_ACTIONS[viewModal.status] && (
+              {viewModal.status === 'waiting_return_confirmation' && (
+                <button
+                  type="button"
+                  className="btn-primary"
+                  style={{ flex: 1 }}
+                  onClick={() => {
+                    goToReturnAiInspection(viewModal.id);
+                    setViewModal(null);
+                  }}
+                >
+                  Kiểm tra AI trả xe <FaCheckCircle aria-hidden="true" />
+                </button>
+              )}
+              {PRIMARY_ACTIONS[viewModal.status] && viewModal.status !== 'waiting_return_confirmation' && (
                 <button
                   type="button"
                   className="btn-primary"

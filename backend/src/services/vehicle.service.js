@@ -76,11 +76,42 @@ class VehicleService {
 
     const pagination = BaseService.parsePagination({ page, limit });
 
-    return BaseService.findPaginated(vehicleModel, filter, sort, pagination);
+    const ADDED_BY_PUBLIC_FIELDS =
+      'name email phone address business_name role public_address logo_url policy_text showroom_representative_name opening_hours showroom_description';
+
+    const [data, total] = await Promise.all([
+      vehicleModel
+        .find(filter)
+        .sort(sort)
+        .skip(pagination.skip)
+        .limit(pagination.limit)
+        .populate({
+          path: 'added_by',
+          select: ADDED_BY_PUBLIC_FIELDS,
+        })
+        .lean(),
+      vehicleModel.countDocuments(filter),
+    ]);
+
+    return {
+      data,
+      pagination: {
+        total,
+        page: pagination.page,
+        limit: pagination.limit,
+        totalPages: Math.ceil(total / pagination.limit) || 0,
+      },
+    };
   }
 
   async getVehicleById(vehicleId) {
-    return vehicleModel.findById(vehicleId);
+    return vehicleModel
+      .findById(vehicleId)
+      .populate({
+        path: 'added_by',
+        select:
+          'name email phone address business_name role public_address opening_hours tax_code',
+      });
   }
 
   async getVehiclesByIds(vehicleIds = []) {

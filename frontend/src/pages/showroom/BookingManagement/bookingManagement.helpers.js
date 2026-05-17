@@ -30,7 +30,6 @@ export const STATUS_LABELS = {
 export const PRIMARY_ACTIONS = {
   paid: { nextStatus: 'waiting_handover', label: 'Xác nhận & chốt bàn giao' },
   waiting_handover: { nextStatus: 'handed_over', label: 'Xác nhận đã bàn giao xe' },
-  waiting_return_confirmation: { nextStatus: 'completed', label: 'Xác nhận trả xe' },
 };
 
 export const CANCELLABLE_STATUSES = ['pending', 'waiting_payment'];
@@ -44,9 +43,7 @@ export const FILTER_TABS = [
   { key: 'in_use', label: 'Đã bàn giao / Đang thuê', statuses: ['handed_over', 'in_use'] },
   { key: 'waiting_return_confirmation', label: 'Chờ xác nhận trả', statuses: ['waiting_return_confirmation'] },
   { key: 'completed', label: 'Hoàn thành', statuses: ['completed'] },
-  { key: 'cancel_pending', label: 'Đang xử lý hủy/hoàn tiền', statuses: ['cancel_pending'] },
-  { key: 'cancel_failed', label: 'Hủy/hoàn tiền lỗi', statuses: ['cancel_failed'] },
-  { key: 'cancelled', label: 'Đã hủy', statuses: ['cancelled'] },
+  { key: 'cancelled', label: 'Đã hủy', statuses: ['cancelled', 'cancel_pending', 'cancel_failed'] },
 ];
 
 
@@ -57,5 +54,6 @@ export const fmtDate = (value) =>
 
 export const getVehicleName = (vehicle) =>
   vehicle?.vehicle_name ||
+  vehicle?.name ||
   [vehicle?.vehicle_brand || vehicle?.brand, vehicle?.vehicle_model || vehicle?.model].filter(Boolean).join(' ') ||
   '—';
