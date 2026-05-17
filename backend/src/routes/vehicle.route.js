@@ -13,6 +13,14 @@ router.get('/getVehicleById/:vehicleId', vehicleValidation.getVehicleById, valid
 
 router.post('/getVehiclesByIds', vehicleController.getVehiclesByIds);
 
+router.put(
+  '/updateVehicle/:vehicleId',
+  authMiddleware,
+  vehicleValidation.updateVehicle,
+  validate,
+  vehicleController.updateVehicle,
+);
+
 router.delete(
   '/deleteVehicleById/:vehicleId',
   vehicleValidation.deleteVehicleById,

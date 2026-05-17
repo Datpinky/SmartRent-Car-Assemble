@@ -9,6 +9,7 @@ import StatusBadge from '../../../components/common/StatusBadge';
 import { useAuth } from '../../../contexts/AuthContext';
 import vehicleService from '../../../services/vehicleService';
 import bookingService from '../../../services/bookingService';
+import reviewService from '../../../services/reviewService';
 import { formatVndPerDay } from '../../../utils/currencyFormat';
 
 const resolveVehicleIdFromBooking = (vehicleRef) => {
@@ -17,8 +18,25 @@ const resolveVehicleIdFromBooking = (vehicleRef) => {
   return String(vehicleRef._id || vehicleRef.id || '');
 };
 
+const RENTED_BOOKING_STATUSES = new Set(['waiting_handover', 'handed_over', 'in_use', 'waiting_return_confirmation']);
+
+const resolveOperationalStatus = (vehicleStatus, hasRentedBooking) => {
+  if (vehicleStatus === 'maintenance') return 'maintenance';
+  if (hasRentedBooking || vehicleStatus === 'rented' || vehicleStatus === 'waiting_handover') return 'rented';
+  return 'available';
+};
+
 const FUEL_OPTS = ['Xăng', 'Dầu', 'Điện', 'Hybrid'];
 const CAT_OPTS = ['Sedan', 'SUV', 'MPV', 'Hatchback', 'Bán tải'];
+
+const VEHICLE_STATUS_OPTS = [
+  { value: 'available', label: 'Sẵn sàng' },
+  { value: 'maintenance', label: 'Bảo dưỡng' },
+  { value: 'rented', label: 'Đang thuê' },
+];
+
+const getVehicleStatusLabel = (status) =>
+  status === 'available' ? 'Sẵn sàng' : status === 'maintenance' ? 'Bảo dưỡng' : status === 'rented' ? 'Đang thuê' : status;
 
 const initForm = {
   name: '',
@@ -31,6 +49,8 @@ const initForm = {
   transmission: 'Số tự động',
   engine_number: '',
   vin: '',
+  description: '',
+  status: 'available',
   images: [],
 };
 
@@ -56,24 +76,30 @@ const VehicleManagement = () => {
       ]);
 
       const tripByVehicle = {};
+      const rentedByVehicle = {};
       for (const b of Array.isArray(bookingList) ? bookingList : []) {
         const st = String(b?.status || b?.booking_status || '').toLowerCase();
         if (st.includes('cancel')) continue;
         const vid = resolveVehicleIdFromBooking(b?.vehicle_id);
         if (!vid) continue;
         tripByVehicle[vid] = (tripByVehicle[vid] || 0) + 1;
+        if (RENTED_BOOKING_STATUSES.has(st)) {
+          rentedByVehicle[vid] = true;
+        }
       }
 
-      setVehicles(
-        (data || []).map((v) => {
-          const id = String(v._id || v.id || '');
-          const fromBookings = tripByVehicle[id];
-          return {
-            ...v,
-            trips: fromBookings !== undefined ? fromBookings : v.trips || 0,
-          };
-        }),
-      );
+      const withTrips = (data || []).map((v) => {
+        const id = String(v._id || v.id || '');
+        const fromBookings = tripByVehicle[id];
+        const status = resolveOperationalStatus(v.status, Boolean(rentedByVehicle[id]));
+        return {
+          ...v,
+          status,
+          trips: fromBookings !== undefined ? fromBookings : v.trips || 0,
+        };
+      });
+      const withReviews = await reviewService.enrichVehiclesWithSummary(withTrips);
+      setVehicles(withReviews);
     } catch (err) {
       setLoadError(err?.response?.data?.message || err?.message || 'Không thể tải danh sách xe.');
     } finally {
@@ -102,6 +128,8 @@ const VehicleManagement = () => {
       transmission: v.transmission || 'Số tự động',
       engine_number: v.engineNumber || v.vehicle_engine_number || '',
       vin: v.vehicleIdentificationNumber || v.vehicle_identification_number || '',
+      description: v.description || '',
+      status: v.status || 'available',
       images: v.images || [],
     });
     setEditId(v._id || v.id);
@@ -129,6 +157,8 @@ const VehicleManagement = () => {
         transmission: form.transmission === 'Số sàn' ? 'manual' : 'automatic',
         vehicle_engine_number: form.engine_number,
         vehicle_identification_number: form.vin,
+        description: form.description,
+        status: form.status === 'rented' ? undefined : form.status,
         vehicle_images_paths: form.images,
         company_owned: true,
       };
@@ -242,8 +272,10 @@ const VehicleManagement = () => {
     {
       key: 'rating',
       label: 'Đánh giá',
-      render: (row) =>
-        row.rating > 0 ? (
+      render: (row) => {
+        const rating = Number(row.rating || 0);
+        const reviewCount = Number(row.reviewCount || 0);
+        return rating > 0 ? (
           <span
             style={{
               display: 'flex',
@@ -254,11 +286,12 @@ const VehicleManagement = () => {
               color: '#d97706',
             }}
           >
-            <FaStar size={12} /> {row.rating}
+            <FaStar size={12} /> {rating.toFixed(1)} {reviewCount > 0 ? `(${reviewCount})` : ''}
           </span>
         ) : (
           <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>—</span>
-        ),
+        );
+      },
     },
     {
       key: 'status',
@@ -313,7 +346,7 @@ const VehicleManagement = () => {
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           <span style={{ fontSize: '0.8rem', color: '#6b7280', marginRight: 4 }}>Trạng thái:</span>
-          {['all', 'available', 'active', 'maintenance'].map((s) => (
+          {['all', 'available', 'rented', 'maintenance'].map((s) => (
             <button
               key={s}
               onClick={() => setFilterStatus(s)}
@@ -329,7 +362,7 @@ const VehicleManagement = () => {
                 cursor: 'pointer',
               }}
             >
-              {s === 'all' ? 'Tất cả' : s === 'available' ? 'Sẵn sàng' : s === 'active' ? 'Đang thuê' : 'Bảo dưỡng'}
+              {s === 'all' ? 'Tất cả' : s === 'available' ? 'Sẵn sàng' : s === 'rented' ? 'Đang thuê' : 'Bảo dưỡng'}
             </button>
           ))}
         </div>
@@ -442,6 +475,74 @@ const VehicleManagement = () => {
               </select>
             </div>
           ))}
+          <div>
+            <label
+              style={{
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                color: '#374151',
+                display: 'block',
+                marginBottom: 4,
+              }}
+            >
+              Trạng thái vận hành
+            </label>
+            <select
+              value={form.status}
+              disabled={form.status === 'rented'}
+              onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+              style={{
+                width: '100%',
+                border: '1.5px solid #e5e7eb',
+                borderRadius: 9,
+                padding: '8px 12px',
+                fontSize: '0.85rem',
+                outline: 'none',
+                background: form.status === 'rented' ? '#f9fafb' : '#fff',
+                boxSizing: 'border-box',
+              }}
+            >
+              {VEHICLE_STATUS_OPTS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {getVehicleStatusLabel(o.value)}
+                </option>
+              ))}
+            </select>
+            {form.status === 'rented' && (
+              <p style={{ margin: '6px 0 0', fontSize: '0.72rem', color: '#9a3412' }}>
+                Xe đang có booking đang thuê, trạng thái này được đồng bộ từ booking.
+              </p>
+            )}
+          </div>
+        </div>
+        <div style={{ marginTop: 14 }}>
+          <label
+            style={{
+              fontSize: '0.8rem',
+              fontWeight: 600,
+              color: '#374151',
+              display: 'block',
+              marginBottom: 4,
+            }}
+          >
+            Mô tả xe
+          </label>
+          <textarea
+            rows={4}
+            value={form.description}
+            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+            placeholder="Mô tả tình trạng, tiện nghi, lưu ý khi thuê xe..."
+            style={{
+              width: '100%',
+              border: '1.5px solid #e5e7eb',
+              borderRadius: 9,
+              padding: '9px 12px',
+              fontSize: '0.85rem',
+              outline: 'none',
+              resize: 'vertical',
+              boxSizing: 'border-box',
+            }}
+          />
         </div>
         <div style={{ marginTop: 16 }}>
           <div

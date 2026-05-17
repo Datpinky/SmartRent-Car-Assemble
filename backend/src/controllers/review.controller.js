@@ -43,6 +43,17 @@ class ReviewController {
             next(error);
         }
     }
+
+    async getMyReviewsByVehicleId(req, res, next) {
+        try {
+            const userId = req.user.userId;
+            const vehicleId = req.body.vehicle_id;
+            const data = await reviewService.getMyReviewsByVehicleId(vehicleId, userId);
+            return res.status(200).json({ message: "Reviews received successfully", data });
+        } catch (error) {
+            next(error);
+        }
+    }
 }
 
 module.exports = new ReviewController();

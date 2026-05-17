@@ -2,6 +2,11 @@ const { body } = require("express-validator");
 
 class ReviewValidation {
     createReview = [
+        body("booking_id")
+            .notEmpty()
+            .withMessage("booking_id là bắt buộc")
+            .isMongoId()
+            .withMessage("booking_id phải là MongoId hợp lệ"),
         body("vehicle_id")
             .notEmpty()
             .withMessage("vehicle_id là bắt buộc")

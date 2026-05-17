@@ -1,4 +1,5 @@
 const STATUS_CONFIG = {
+  rented: { label: 'Đang thuê', bg: '#dbeafe', color: '#2563eb' },
   pending: { label: 'Chờ thanh toán', bg: '#fef3c7', color: '#d97706' },
   approved: { label: 'Đã duyệt', bg: '#d1fae5', color: '#059669' },
   rejected: { label: 'Từ chối', bg: '#fee2e2', color: '#dc2626' },

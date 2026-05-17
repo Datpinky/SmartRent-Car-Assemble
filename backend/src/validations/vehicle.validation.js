@@ -25,8 +25,36 @@ class VehicleValidation {
     body('vehicle_hire_charge_per_timing').optional().isIn(CHARGES),
 
     body('maximum_allowable_distance').optional().trim(),
+    body('description').optional().trim().isLength({ max: 3000 }).withMessage('description tối đa 3000 ký tự'),
     body('status').optional().isIn(STATUS),
 
+    body('company_owned').optional().isBoolean(),
+    body('active').optional().isBoolean(),
+  ];
+
+  updateVehicle = [
+    param('vehicleId')
+      .notEmpty()
+      .withMessage('vehicleId là bắt buộc')
+      .isMongoId()
+      .withMessage('vehicleId phải là MongoId hợp lệ'),
+    body('vehicle_type').optional().isIn(VEHICLE_TYPES),
+    body('vehicle_brand').optional().trim(),
+    body('vehicle_model').optional().trim(),
+    body('vehicle_engine_number').optional().trim(),
+    body('vehicle_identification_number').optional().trim(),
+    body('vehicle_plate_number').optional().trim(),
+    body('vehicle_images_paths').optional().isArray().withMessage('vehicle_images_paths bắt buộc array'),
+    body('vehicle_images_paths.*').optional().isURL().withMessage('vehicle_images_paths bắt buộc là url'),
+    body('vehicle_hire_rate_in_figures')
+      .optional()
+      .isFloat({ gt: 0 })
+      .withMessage('vehicle_hire_rate_in_figures phải là số lớn hơn 0'),
+    body('vehicle_hire_rate_currency').optional().isIn(CURRENCIES),
+    body('vehicle_hire_charge_per_timing').optional().isIn(CHARGES),
+    body('maximum_allowable_distance').optional().trim(),
+    body('description').optional().trim().isLength({ max: 3000 }).withMessage('description tối đa 3000 ký tự'),
+    body('status').optional().isIn(STATUS),
     body('company_owned').optional().isBoolean(),
     body('active').optional().isBoolean(),
   ];

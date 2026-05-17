@@ -53,6 +53,8 @@ function mapListerProfile(added) {
     listingSubtitle,
     businessName: added.business_name || '',
     name: added.name || '',
+    publicAddress: added.public_address || '',
+    address: added.address || '',
   };
 }
 
@@ -87,8 +89,14 @@ export function mapVehicle(v) {
   const rawImages = [...(v.vehicle_images_paths || []), ...(v.images || [])].filter(Boolean);
   const images = rawImages.map(sanitizeVehicleImageUrl).filter(Boolean);
 
+  const showroomAddress = String(
+    v.added_by && typeof v.added_by === 'object'
+      ? v.added_by.public_address || v.added_by.address || ''
+      : '',
+  ).trim();
   const pickup =
     v.pickup_address != null && String(v.pickup_address).trim() !== '' ? String(v.pickup_address).trim() : '';
+  const displayAddress = pickup || v.address || showroomAddress;
   const latRaw = v.pickup_latitude != null ? v.pickup_latitude : v.latitude;
   const lngRaw = v.pickup_longitude != null ? v.pickup_longitude : v.longitude;
   const lat = latRaw !== undefined && latRaw !== null && latRaw !== '' ? Number(latRaw) : null;
@@ -126,9 +134,9 @@ export function mapVehicle(v) {
     image: images[0] || '',
     images,
 
-    pickupAddress: pickup,
-    address: pickup || v.address || '',
-    location: pickup || v.location || v.address || '',
+    pickupAddress: displayAddress,
+    address: displayAddress,
+    location: displayAddress || v.location || '',
     latitude: Number.isFinite(lat) ? lat : null,
     longitude: Number.isFinite(lng) ? lng : null,
     lat: Number.isFinite(lat) ? lat : null,

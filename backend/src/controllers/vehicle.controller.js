@@ -44,6 +44,17 @@ class VeHicleController {
         }
     }
 
+    async updateVehicle(req, res, next) {
+        try {
+            const vehicleId = req.params.vehicleId;
+            const userId = req.user.userId;
+            const result = await vehicleService.updateVehicle(vehicleId, req.body, userId);
+            return res.status(200).json({ message: "Vehicle updated successfully", data: result });
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async deleteVehicleById(req, res, next) {
         try {
             const vehicleId = req.params.vehicleId;

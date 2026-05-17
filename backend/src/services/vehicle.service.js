@@ -1,9 +1,10 @@
 const vehicleModel = require('../models/vehicle.model');
 const BookingModel = require('../models/booking.model');
 const BaseService = require('./base.service');
+const throwError = require('../utils/throwError');
 
 /** Trường dùng để search theo tên (regex) */
-const SEARCH_FIELDS = ['vehicle_brand', 'vehicle_model', 'vehicle_name'];
+const SEARCH_FIELDS = ['vehicle_brand', 'vehicle_model', 'vehicle_name', 'brand', 'model', 'vehicle_plate_number'];
 
 /** Trạng thái booking khóa xe (xe không còn rảnh) */
 const BLOCKING_STATUSES = [
@@ -15,9 +16,36 @@ const BLOCKING_STATUSES = [
   'waiting_return_confirmation',
 ];
 
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 class VehicleService {
   async createVehicle(vehicle, userId) {
     return vehicleModel.create({ ...vehicle, added_by: userId });
+  }
+
+  async updateVehicle(vehicleId, payload, userId) {
+    const vehicle = await vehicleModel.findById(vehicleId);
+    if (!vehicle) throwError('Không tìm thấy xe', 404);
+    if (vehicle.added_by.toString() !== userId.toString()) {
+      throwError('Bạn không có quyền cập nhật xe này', 403);
+    }
+
+    const hasActiveBooking = await BookingModel.exists({
+      vehicle_id: vehicleId,
+      status: { $in: BLOCKING_STATUSES },
+    });
+
+    if (payload.status && payload.status !== vehicle.status && payload.status !== 'rented' && hasActiveBooking) {
+      throwError('Không thể đổi trạng thái xe khi đang có booking hoạt động', 409);
+    }
+
+    if (payload.status === 'rented') {
+      delete payload.status;
+    }
+
+    Object.assign(vehicle, payload);
+    await vehicle.save();
+    return vehicle;
   }
 
   async getListVehicles(body = {}) {
@@ -31,19 +59,28 @@ class VehicleService {
 
       if (words.length === 1) {
         // single word: any field contains it
-        const regex = new RegExp(words[0], 'i');
+        const regex = new RegExp(escapeRegex(words[0]), 'i');
         filter.$or = SEARCH_FIELDS.map((field) => ({ [field]: regex }));
       } else {
         // multi-word: every word must appear in at least one field
         // e.g. "Toyota Camry" → brand has "Toyota" AND model has "Camry"
         filter.$and = words.map((word) => ({
-          $or: SEARCH_FIELDS.map((field) => ({ [field]: new RegExp(word, 'i') })),
+          $or: SEARCH_FIELDS.map((field) => ({ [field]: new RegExp(escapeRegex(word), 'i') })),
         }));
       }
     }
 
     if (brand && String(brand).trim() && brand !== 'all') {
-      filter.vehicle_brand = new RegExp(String(brand).trim(), 'i');
+      const brandRegex = new RegExp(escapeRegex(String(brand).trim()), 'i');
+      const brandClause = { $or: [{ vehicle_brand: brandRegex }, { brand: brandRegex }] };
+      if (filter.$and) {
+        filter.$and.push(brandClause);
+      } else if (filter.$or) {
+        filter.$and = [{ $or: filter.$or }, brandClause];
+        delete filter.$or;
+      } else {
+        Object.assign(filter, brandClause);
+      }
     }
 
     if (vehicle_type) filter.vehicle_type = vehicle_type;

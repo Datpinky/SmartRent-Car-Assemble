@@ -19,6 +19,8 @@ router.post("/batch-summary", reviewController.getBatchSummary);
 router.use(authMiddleware);
 router.use(authorizeRoles("user"));
 
+router.post("/my-by-vehicle", reviewValidation.getReviewsByVehicleId, validate, reviewController.getMyReviewsByVehicleId);
+
 router.post("/create", reviewValidation.createReview, validate, reviewController.createReview);
 
 router.patch("/update", reviewValidation.updateReview, validate, reviewController.updateReview);

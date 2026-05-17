@@ -1,9 +1,4 @@
 const REVIEWABLE_BOOKING_STATUSES = new Set([
-  'paid',
-  'waiting_handover',
-  'handed_over',
-  'in_use',
-  'waiting_return_confirmation',
   'completed',
 ]);
 

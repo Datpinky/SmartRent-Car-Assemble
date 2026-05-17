@@ -1,13 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  FaCalendarAlt,
-  FaCar,
-  FaCheck,
-  FaChevronRight,
-  FaMapMarkerAlt,
-  FaSearch,
-  FaTimes,
-} from 'react-icons/fa';
+import { FaCalendarAlt, FaCar, FaMapMarkerAlt, FaSearch, FaTimes } from 'react-icons/fa';
 import { lockPageScroll, unlockPageScroll } from '../../utils/scrollLock';
 import {
   buildDefaultPickupDate,
@@ -15,23 +7,6 @@ import {
   buildDefaultReturnDate,
   isSameCalendarDate,
 } from '../../utils/rentalWindow';
-
-const CITIES = ['Hà Nội', 'Đà Nẵng', 'TP. Hồ Chí Minh'];
-
-const CITY_DISTRICTS = {
-  'Đà Nẵng': {
-    Quan: ['Quận Hải Châu', 'Quận Thanh Khê', 'Quận Sơn Trà', 'Quận Ngũ Hành Sơn', 'Quận Liên Chiểu', 'Quận Cẩm Lệ'],
-    Huyen: ['Huyện Hòa Vang'],
-  },
-  'TP. Hồ Chí Minh': {
-    Quan: ['Quận 1', 'Quận 3', 'Quận 4', 'Quận 5', 'Quận 6', 'Quận 7', 'Quận 8', 'Quận 10', 'Quận 11', 'Quận 12', 'Bình Thạnh', 'Gò Vấp', 'Tân Bình', 'Tân Phú', 'Phú Nhuận', 'Bình Tân'],
-    Huyen: ['Bình Chánh', 'Củ Chi', 'Hóc Môn', 'Nhà Bè', 'Cần Giờ'],
-  },
-  'Hà Nội': {
-    Quan: ['Ba Đình', 'Hoàn Kiếm', 'Hai Bà Trưng', 'Đống Đa', 'Cầu Giấy', 'Thanh Xuân', 'Hoàng Mai', 'Long Biên', 'Nam Từ Liêm', 'Bắc Từ Liêm', 'Tây Hồ', 'Hà Đông'],
-    Huyen: ['Đông Anh', 'Gia Lâm', 'Sóc Sơn', 'Thanh Trì', 'Hoài Đức'],
-  },
-};
 
 const parseDateTime = (value) => {
   if (!value) return null;
@@ -54,8 +29,7 @@ const formatDateTimeShort = (value) => {
 const SearchBar = ({ onSearch }) => {
   const initialRentalWindow = useMemo(() => buildDefaultRentalWindow(), []);
   const [showModal, setShowModal] = useState(false);
-  const [selectedCity, setSelectedCity] = useState(null);
-  const [selectedDistrict, setSelectedDistrict] = useState('');
+  const [locationQuery, setLocationQuery] = useState('');
   const [carName, setCarName] = useState('');
   const [pickupDate, setPickupDate] = useState(initialRentalWindow.pickupDate);
   const [returnDate, setReturnDate] = useState(initialRentalWindow.returnDate);
@@ -89,15 +63,7 @@ const SearchBar = ({ onSearch }) => {
     }
   }, [pickupDate, returnDate]);
 
-  const districts = selectedCity ? CITY_DISTRICTS[selectedCity] : null;
-
-  const locationLabel = useMemo(() => {
-    if (selectedCity && selectedDistrict) {
-      return `${selectedDistrict}, ${selectedCity}`;
-    }
-
-    return selectedCity || '';
-  }, [selectedCity, selectedDistrict]);
+  const locationLabel = useMemo(() => String(locationQuery || '').trim(), [locationQuery]);
 
   const rentalWindowLabel = useMemo(() => {
     const pickupLabel = formatDateTimeShort(pickupDate);
@@ -130,7 +96,7 @@ const SearchBar = ({ onSearch }) => {
 
     setSearchError('');
     onSearch?.({
-      location: locationLabel,
+      location: locationLabel || '',
       carName,
       pickupDate,
       returnDate,
@@ -139,8 +105,7 @@ const SearchBar = ({ onSearch }) => {
   };
 
   const handleReset = () => {
-    setSelectedCity(null);
-    setSelectedDistrict('');
+    setLocationQuery('');
     setCarName('');
     setPickupDate('');
     setReturnDate('');
@@ -228,7 +193,7 @@ const SearchBar = ({ onSearch }) => {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-5 py-4">
-              <span className="text-base font-bold text-gray-900">Tim xe</span>
+              <span className="text-base font-bold text-gray-900">Tìm xe</span>
               <button
                 type="button"
                 className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-500 transition-colors hover:bg-gray-200"
@@ -240,14 +205,22 @@ const SearchBar = ({ onSearch }) => {
 
             <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">
               <div>
-                <label className="mb-1.5 block text-[0.78rem] font-semibold uppercase tracking-wide text-gray-600">
+                <label
+                  className="mb-1.5 block text-[0.78rem] font-semibold uppercase tracking-wide text-gray-600"
+                  htmlFor="searchbar-location"
+                >
                   Địa điểm
                 </label>
                 <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5">
                   <FaMapMarkerAlt className="shrink-0 text-primary" />
-                  <span className={`text-[0.9rem] ${locationLabel ? 'font-medium text-gray-800' : 'text-gray-400'}`}>
-                    {locationLabel || 'Chọn thành phố hoặc quận huyện'}
-                  </span>
+                  <input
+                    id="searchbar-location"
+                    type="text"
+                    className="flex-1 border-none bg-transparent text-[0.9rem] text-gray-800 outline-none placeholder:text-gray-400"
+                    placeholder="Nhập thành phố, quận huyện..."
+                    value={locationQuery}
+                    onChange={(event) => setLocationQuery(event.target.value)}
+                  />
                 </div>
               </div>
 
@@ -260,7 +233,7 @@ const SearchBar = ({ onSearch }) => {
                   <input
                     type="text"
                     className="flex-1 border-none bg-transparent text-[0.88rem] text-gray-800 outline-none placeholder:text-gray-400"
-                    placeholder="Tim theo ten xe..."
+                    placeholder="Tìm theo tên xe..."
                     value={carName}
                     onChange={(event) => setCarName(event.target.value)}
                   />
@@ -305,82 +278,6 @@ const SearchBar = ({ onSearch }) => {
                 </div>
               )}
 
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-[0.75rem] font-bold uppercase tracking-wide text-gray-600">Chon thanh pho</span>
-                  {selectedCity && (
-                    <button
-                      type="button"
-                      className="text-[0.72rem] font-semibold text-primary hover:underline"
-                      onClick={() => {
-                        setSelectedCity(null);
-                        setSelectedDistrict('');
-                      }}
-                    >
-                      Bỏ chọn
-                    </button>
-                  )}
-                </div>
-
-                <div className="overflow-hidden rounded-2xl border border-gray-100">
-                  {CITIES.map((city) => {
-                    const isActive = selectedCity === city;
-                    return (
-                      <button
-                        key={city}
-                        type="button"
-                        className={`flex w-full items-center gap-3 border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 ${isActive ? 'bg-primary-light' : 'bg-white hover:bg-gray-50'}`}
-                        onClick={() => {
-                          setSelectedCity(city);
-                          setSelectedDistrict('');
-                        }}
-                      >
-                        <FaMapMarkerAlt className={isActive ? 'text-primary' : 'text-gray-400'} />
-                        <span className={`flex-1 text-[0.9rem] font-medium ${isActive ? 'text-primary' : 'text-gray-700'}`}>
-                          {city}
-                        </span>
-                        {isActive ? <FaCheck className="text-[0.8rem] text-primary" /> : <FaChevronRight className="text-[0.75rem] text-gray-300" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {districts && (
-                <div>
-                  <div className="mb-2 text-[0.75rem] font-bold uppercase tracking-wide text-gray-600">
-                    Quận / Huyện - {selectedCity}
-                  </div>
-
-                  <div className="max-h-[260px] overflow-y-auto rounded-2xl border border-gray-100">
-                    {Object.entries(districts).map(([group, items]) => (
-                      <div key={group}>
-                        <div className="border-b border-gray-100 px-4 py-2 text-[0.65rem] font-bold uppercase tracking-wider text-gray-400">
-                          {group}
-                        </div>
-                        {items.map((district) => {
-                          const isActive = selectedDistrict === district;
-                          return (
-                            <button
-                              key={district}
-                              type="button"
-                              className={`flex w-full items-center gap-3 border-b border-gray-100 px-4 py-2.5 text-left transition-colors last:border-b-0 ${isActive ? 'bg-primary-light' : 'bg-white hover:bg-gray-50'}`}
-                              onClick={() => setSelectedDistrict((current) => (current === district ? '' : district))}
-                            >
-                              <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${isActive ? 'border-primary' : 'border-gray-300'}`}>
-                                {isActive && <span className="block h-2 w-2 rounded-full bg-primary" />}
-                              </span>
-                              <span className={`text-[0.88rem] ${isActive ? 'font-semibold text-primary' : 'text-gray-700'}`}>
-                                {district}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
 
             <div className="flex shrink-0 flex-col gap-3 border-t border-gray-100 px-5 py-4">

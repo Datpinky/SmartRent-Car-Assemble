@@ -87,7 +87,7 @@ export const reviewService = {
       return {
         ...vehicle,
         rating: summary ? summary.rating : Number(vehicle.rating || 0),
-        reviewCount: summary ? summary.reviewCount : Number(vehicle.reviewCount ?? vehicle.trips ?? 0),
+        reviewCount: summary ? summary.reviewCount : Number(vehicle.reviewCount || 0),
       };
     });
   },

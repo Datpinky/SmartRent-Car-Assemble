@@ -21,6 +21,8 @@ const normalizeText = (value) =>
   String(value || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'd')
     .toLowerCase()
     .trim();
 
@@ -69,7 +71,17 @@ const applyFilters = (baseVehicles, filters, search, sortValue) => {
     const price = Number(vehicle.price || 0);
     const minPrice = toNumber(filters.priceMin);
     const maxPrice = toNumber(filters.priceMax);
-    const vehicleLocation = vehicle.address || vehicle.pickupAddress || vehicle.location || '';
+    const vehicleLocation = [
+      vehicle.address,
+      vehicle.pickupAddress,
+      vehicle.location,
+      vehicle.listerProfile?.publicAddress,
+      vehicle.listerProfile?.address,
+      vehicle.showroom,
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const vehicleNameText = [vehicle.name, vehicle.brand, vehicle.model, vehicle.plateNumber].filter(Boolean).join(' ');
 
     const matchSeats = filters.seats === 'all' || Number(vehicle.seats || 0) === Number(filters.seats);
     const matchModel = matchesExact(vehicle.transmission, filters.model);
@@ -79,7 +91,7 @@ const applyFilters = (baseVehicles, filters, search, sortValue) => {
     const matchPriceMin = minPrice == null || price >= minPrice;
     const matchPriceMax = maxPrice == null || price <= maxPrice;
     const matchLocation = matchesContains(vehicleLocation, search.location);
-    const matchCarName = matchesContains(vehicle.name, search.carName);
+    const matchCarName = matchesContains(vehicleNameText, search.carName);
 
     return (
       matchSeats &&
