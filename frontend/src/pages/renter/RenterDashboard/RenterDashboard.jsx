@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FaCalendarAlt, FaExchangeAlt, FaMoneyBillWave, FaReceipt, FaStar } from 'react-icons/fa';
+import { FaCalendarAlt, FaExchangeAlt, FaMoneyBillWave, FaReceipt } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import Modal from '../../../components/common/Modal';
+import VehicleTripReviewModal from '../../../components/common/VehicleTripReviewModal';
 import StatusBadge from '../../../components/common/StatusBadge';
 import bookingService from '../../../services/bookingService';
-import reviewService from '../../../services/reviewService';
 import { formatDateTime, formatMoney } from '../../../utils/renterBookingView';
 import {
   cardHint,
@@ -14,7 +13,6 @@ import {
   getMonthKey,
   getPaymentVisual,
   resolveFinanceItem,
-  resolveReviewBookingId,
   SUMMARY_CARD_CONFIG,
   timestampOf,
 } from './renterDashboard.helpers';
@@ -62,11 +60,6 @@ const RenterDashboard = () => {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState({ tone: '', text: '' });
   const [reviewModalItem, setReviewModalItem] = useState(null);
-  const [reviewEditingId, setReviewEditingId] = useState('');
-  const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '' });
-  const [reviewLoading, setReviewLoading] = useState(false);
-  const [reviewSubmitting, setReviewSubmitting] = useState(false);
-  const [reviewError, setReviewError] = useState('');
 
   useEffect(() => {
     let mounted = true;
@@ -135,63 +128,11 @@ const RenterDashboard = () => {
     [items],
   );
 
-  const closeReviewModal = () => {
-    setReviewModalItem(null);
-    setReviewEditingId('');
-    setReviewForm({ rating: 5, comment: '' });
-    setReviewLoading(false);
-    setReviewSubmitting(false);
-    setReviewError('');
-  };
+  const closeReviewModal = () => setReviewModalItem(null);
 
-  const openReviewModal = async (item) => {
+  const openReviewModal = (item) => {
     if (!item?.vehicleId || !item?.bookingId) return;
     setReviewModalItem(item);
-    setReviewEditingId('');
-    setReviewForm({ rating: 5, comment: '' });
-    setReviewError('');
-    setReviewLoading(true);
-    try {
-      const myReviews = await reviewService.getMineByVehicleId(item.vehicleId);
-      const existing = (myReviews || []).find((r) => String(resolveReviewBookingId(r)) === String(item.bookingId));
-      if (existing) {
-        setReviewEditingId(existing._id || '');
-        setReviewForm({ rating: Number(existing.rating) || 5, comment: existing.comment || '' });
-      }
-    } catch (err) {
-      setReviewError(err.message || 'Không thể tải dữ liệu đánh giá.');
-    } finally {
-      setReviewLoading(false);
-    }
-  };
-
-  const handleReviewSubmit = async (event) => {
-    event.preventDefault();
-    if (!reviewModalItem?.vehicleId || !reviewModalItem?.bookingId) return;
-    setReviewSubmitting(true);
-    setReviewError('');
-    try {
-      if (reviewEditingId) {
-        await reviewService.update({
-          review_id: reviewEditingId,
-          rating: reviewForm.rating,
-          comment: reviewForm.comment,
-        });
-      } else {
-        await reviewService.create({
-          booking_id: reviewModalItem.bookingId,
-          vehicle_id: reviewModalItem.vehicleId,
-          rating: reviewForm.rating,
-          comment: reviewForm.comment,
-        });
-      }
-      setNotice({ tone: 'success', text: reviewEditingId ? 'Đã cập nhật đánh giá.' : 'Đã gửi đánh giá.' });
-      closeReviewModal();
-    } catch (err) {
-      setReviewError(err.message || 'Không thể lưu đánh giá.');
-    } finally {
-      setReviewSubmitting(false);
-    }
   };
 
   return (
@@ -576,96 +517,14 @@ const RenterDashboard = () => {
         </div>
       </section>
 
-      {/* Review modal */}
-      <Modal isOpen={!!reviewModalItem} onClose={closeReviewModal} title="Đánh giá chuyến đi" width={520}>
-        {reviewModalItem && (
-          <form onSubmit={handleReviewSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, padding: '14px 16px' }}>
-              <div style={{ fontWeight: 800, color: '#111827', fontSize: '0.96rem' }}>
-                {reviewModalItem.vehicleName}
-              </div>
-              <div style={{ marginTop: 4, fontSize: '0.8rem', color: '#64748b' }}>
-                Booking: {reviewModalItem.bookingId}
-              </div>
-              <div style={{ marginTop: 8, fontSize: '0.8rem', color: '#334155', lineHeight: 1.6 }}>
-                Mỗi booking chỉ được gửi 1 đánh giá.
-              </div>
-            </div>
-            {reviewLoading ? (
-              <div style={{ padding: '12px 0', color: '#6b7280', fontSize: '0.84rem' }}>
-                Đang tải dữ liệu đánh giá hiện tại...
-              </div>
-            ) : (
-              <>
-                <div>
-                  <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#374151', marginBottom: 8 }}>
-                    Đánh giá
-                  </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button key={star} type="button" onClick={() => setReviewForm((f) => ({ ...f, rating: star }))}>
-                        <FaStar
-                          style={{ color: star <= reviewForm.rating ? '#f59e0b' : '#d1d5db', fontSize: '1.4rem' }}
-                        />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label
-                    style={{
-                      fontSize: '0.84rem',
-                      fontWeight: 700,
-                      color: '#374151',
-                      display: 'block',
-                      marginBottom: 6,
-                    }}
-                  >
-                    Nhận xét
-                  </label>
-                  <textarea
-                    value={reviewForm.comment}
-                    onChange={(e) => setReviewForm((f) => ({ ...f, comment: e.target.value }))}
-                    rows={4}
-                    placeholder="Chia sẻ trải nghiệm thuê xe của bạn..."
-                    style={{
-                      width: '100%',
-                      border: '1.5px solid #e5e7eb',
-                      borderRadius: 10,
-                      padding: '10px 12px',
-                      fontSize: '0.85rem',
-                      resize: 'vertical',
-                      boxSizing: 'border-box',
-                    }}
-                  />
-                </div>
-                {reviewError && (
-                  <div
-                    style={{
-                      background: '#fef2f2',
-                      border: '1px solid #fecaca',
-                      borderRadius: 10,
-                      padding: '10px 14px',
-                      fontSize: '0.82rem',
-                      color: '#b91c1c',
-                    }}
-                  >
-                    {reviewError}
-                  </div>
-                )}
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <button type="submit" className="btn-primary" disabled={reviewSubmitting} style={{ flex: 1 }}>
-                    {reviewSubmitting ? 'Đang lưu...' : reviewEditingId ? 'Cập nhật đánh giá' : 'Gửi đánh giá'}
-                  </button>
-                  <button type="button" className="btn-outline" onClick={closeReviewModal} disabled={reviewSubmitting}>
-                    Hủy
-                  </button>
-                </div>
-              </>
-            )}
-          </form>
-        )}
-      </Modal>
+      <VehicleTripReviewModal
+        isOpen={Boolean(reviewModalItem)}
+        onClose={closeReviewModal}
+        bookingId={reviewModalItem?.bookingId || ''}
+        vehicleId={reviewModalItem?.vehicleId || ''}
+        vehicleName={reviewModalItem?.vehicleName || ''}
+        onSuccess={({ message }) => setNotice({ tone: 'success', text: message })}
+      />
     </div>
   );
 };

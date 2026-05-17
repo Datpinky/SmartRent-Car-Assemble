@@ -27,7 +27,13 @@ const resolveOperationalStatus = (vehicleStatus, hasRentedBooking) => {
 };
 
 const FUEL_OPTS = ['Xăng', 'Dầu', 'Điện', 'Hybrid'];
-const CAT_OPTS = ['Sedan', 'SUV', 'MPV', 'Hatchback', 'Bán tải'];
+const CAT_OPTS = [
+  { value: 'Sedan', label: 'Sedan' },
+  { value: 'SUV', label: 'SUV' },
+  { value: 'Wagon', label: 'Wagon' },
+  { value: 'Truck', label: 'Bán tải' },
+  { value: 'others', label: 'Khác' },
+];
 
 const initForm = {
   name: '',
@@ -159,7 +165,7 @@ const VehicleManagement = () => {
       closeModal();
       await fetchVehicles();
     } catch (err) {
-      toast.error(err?.response?.data?.message || 'Lưu thất bại');
+      toast.error(err?.message || 'Lưu thất bại');
     }
   };
 
@@ -457,8 +463,8 @@ const VehicleManagement = () => {
                 }}
               >
                 {opts.map((o) => (
-                  <option key={o} value={o}>
-                    {o}
+                  <option key={o.value || o} value={o.value || o}>
+                    {o.label || o}
                   </option>
                 ))}
               </select>

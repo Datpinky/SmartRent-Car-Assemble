@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { FaArrowRight, FaDownload, FaImage, FaRobot } from 'react-icons/fa';
+import { FaArrowRight, FaDownload, FaImage, FaRobot, FaStar } from 'react-icons/fa';
 import AIInspectionReportView from '../../../components/common/AIInspectionReportView';
 import StatusBadge from '../../../components/common/StatusBadge';
+import VehicleTripReviewModal from '../../../components/common/VehicleTripReviewModal';
 import bookingService from '../../../services/bookingService';
 import inspectionService, { attachLatestAiInspectionToBookings } from '../../../services/inspectionService';
+import { canReviewBooking, resolveBookingVehicleId } from '../../../utils/bookingReviewEligibility';
 import { getAiInspectionSummaryMeta, mapServerAiInspectionToViewModel } from '../../../utils/aiInspectionReport';
 
 const formatDateTime = (value) => {
@@ -16,12 +18,17 @@ const formatDateTime = (value) => {
   return date.toLocaleString('vi-VN');
 };
 
+const sessionReviewOfferKey = (bookingId) => `smartrent-ai-report-review-offer-v1:${bookingId}`;
+
 const mapReportBooking = (booking) => {
   const inv = booking.ai_inspection || null;
   const report = mapServerAiInspectionToViewModel(inv);
+  const vehicleId = resolveBookingVehicleId(booking);
 
   return {
     id: booking._id,
+    vehicleId,
+    canReviewVehicle: Boolean(vehicleId) && canReviewBooking(booking),
     vehicleName: booking.vehicle?.name || booking.vehicle_id?.vehicle_name || 'Xe không tên',
     showroomName: booking.showroom?.name || booking.showroom_id?.name || 'SmartRent',
     startDate: booking.start_date,
@@ -53,6 +60,8 @@ const AIReports = () => {
   const [selectedBookingId, setSelectedBookingId] = useState(presetBookingId);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [reviewNotice, setReviewNotice] = useState('');
+  const [reviewTarget, setReviewTarget] = useState(null);
 
   useEffect(() => {
     let mounted = true;
@@ -120,6 +129,29 @@ const AIReports = () => {
     () => reports.find((report) => report.id === selectedBookingId) || null,
     [reports, selectedBookingId]
   );
+
+  useEffect(() => {
+    if (!selectedReport?.id || !selectedReport.canReviewVehicle || !selectedReport.vehicleId) {
+      return undefined;
+    }
+    const key = sessionReviewOfferKey(selectedReport.id);
+    if (typeof window !== 'undefined' && window.sessionStorage?.getItem(key)) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      try {
+        window.sessionStorage?.setItem(key, '1');
+      } catch {
+        // ignore quota / private mode
+      }
+      setReviewTarget({
+        bookingId: selectedReport.id,
+        vehicleId: selectedReport.vehicleId,
+        vehicleName: selectedReport.vehicleName,
+      });
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [selectedReport?.id, selectedReport?.canReviewVehicle, selectedReport?.vehicleId, selectedReport?.vehicleName]);
 
   const summary = useMemo(
     () => ({
@@ -207,6 +239,22 @@ const AIReports = () => {
       {error && (
         <div style={{ marginBottom: 16, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 12, padding: '12px 14px', fontSize: '0.84rem' }}>
           {error}
+        </div>
+      )}
+
+      {reviewNotice && (
+        <div
+          style={{
+            marginBottom: 16,
+            background: '#ecfdf5',
+            border: '1px solid #86efac',
+            color: '#166534',
+            borderRadius: 12,
+            padding: '12px 14px',
+            fontSize: '0.84rem',
+          }}
+        >
+          {reviewNotice}
         </div>
       )}
 
@@ -385,6 +433,57 @@ const AIReports = () => {
                     <div style={{ marginTop: 10, fontSize: '0.78rem', color: '#64748b', lineHeight: 1.65 }}>
                       Export JSON hoặc tải ảnh để lưu bản sao ngoài hệ thống. Nội dung phân tích chính nằm trên server.
                     </div>
+
+                    {selectedReport.canReviewVehicle && selectedReport.vehicleId ? (
+                      <div
+                        style={{
+                          marginTop: 16,
+                          background: 'linear-gradient(135deg, #fffbeb 0%, #fff7ed 100%)',
+                          border: '1px solid #fcd34d',
+                          borderRadius: 16,
+                          padding: '16px 18px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                          <FaStar style={{ color: '#d97706', fontSize: '1.1rem' }} />
+                          <strong style={{ color: '#92400e', fontSize: '0.92rem' }}>Đánh giá sau khi xem báo cáo</strong>
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: '#78350f', lineHeight: 1.65, marginBottom: 12 }}>
+                          Bạn đã có kết quả kiểm tra AI. Hãy đánh giá trải nghiệm thuê {selectedReport.vehicleName} để hỗ trợ
+                          người thuê khác (mỗi booking một lần).
+                        </div>
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          onClick={() =>
+                            setReviewTarget({
+                              bookingId: selectedReport.id,
+                              vehicleId: selectedReport.vehicleId,
+                              vehicleName: selectedReport.vehicleName,
+                            })
+                          }
+                          style={{ width: '100%', justifyContent: 'center' }}
+                        >
+                          Mở form đánh giá xe
+                        </button>
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          marginTop: 16,
+                          fontSize: '0.78rem',
+                          color: '#64748b',
+                          lineHeight: 1.65,
+                          background: '#f8fafc',
+                          border: '1px dashed #cbd5e1',
+                          borderRadius: 14,
+                          padding: '12px 14px',
+                        }}
+                      >
+                        Khi đơn chuyển sang trạng thái <strong>Hoàn thành</strong> và đủ điều kiện trên hệ thống, bạn có
+                        thể đánh giá xe ở đây hoặc từ trang tổng quan tài chính renter.
+                      </div>
+                    )}
                   </div>
                 }
               />
@@ -392,6 +491,19 @@ const AIReports = () => {
           </div>
         </div>
       )}
+
+      <VehicleTripReviewModal
+        isOpen={Boolean(reviewTarget)}
+        onClose={() => setReviewTarget(null)}
+        bookingId={reviewTarget?.bookingId || ''}
+        vehicleId={reviewTarget?.vehicleId || ''}
+        vehicleName={reviewTarget?.vehicleName || ''}
+        onSuccess={({ message }) => {
+          setReviewNotice(message);
+          setReviewTarget(null);
+          window.setTimeout(() => setReviewNotice(''), 6000);
+        }}
+      />
     </div>
   );
 };

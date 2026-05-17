@@ -2,6 +2,7 @@ import { ChevronDown, Home, LogOut, Menu, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import NotificationBell from '../components/common/NotificationBell';
+import RenterPostTripReviewBanner from '../components/renter/RenterPostTripReviewBanner';
 import { useAuth } from '../contexts/AuthContext';
 import NavGroup from './components/NavGroup';
 import NavItem from './components/NavItem';
@@ -286,6 +287,7 @@ const DashboardLayout = ({ children }) => {
         <main id="main-content" className="min-w-0 flex-1 p-3 sm:p-4 md:p-6">
           {children}
         </main>
+        {user?.role === 'renter' && <RenterPostTripReviewBanner />}
       </div>
     </div>
   );
