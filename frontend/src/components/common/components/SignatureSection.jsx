@@ -42,13 +42,13 @@ const SignatureSection = ({ contract, bodyData, onSigned }) => {
   return (
     <div className="mt-4 border-t border-gray-200 pt-4">
       <h4 className="text-sm font-extrabold text-gray-900 mb-4">{signaturesFromBody?.title || 'Chữ ký các bên'}</h4>
-      <div className="grid sm:grid-cols-2 gap-4 mb-3">
+      <div className="grid items-start sm:grid-cols-2 gap-4 mb-3">
         <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col gap-3 min-h-[200px]">
           <div>
             <p className="font-extrabold text-gray-800 text-[0.82rem]">{partyALabel}</p>
             <p className="text-[0.72rem] text-gray-500 mt-0.5">{partyAInstruction}</p>
           </div>
-          <div className="border-t border-gray-200 pt-3 flex-1 flex flex-col justify-end">
+          <div className="border-t border-gray-200 pt-3">
             {partyAName ? <SignedBadge name={partyAName} signedAt={partyASignedAt} signatureImage={partyAImage} /> : <div className="text-[0.72rem] text-gray-400 italic">Chưa có xác nhận từ showroom</div>}
           </div>
         </div>
@@ -57,7 +57,7 @@ const SignatureSection = ({ contract, bodyData, onSigned }) => {
             <p className="font-extrabold text-gray-800 text-[0.82rem]">{signerRow?.party || 'BÊN THUÊ (Bên B)'}</p>
             <p className="text-[0.72rem] text-gray-500 mt-0.5">{done ? 'Đã ký xác nhận điện tử.' : signerRow?.instruction || 'Ký và ghi rõ họ tên'}</p>
           </div>
-          <div className="border-t border-blue-100 pt-3 flex-1 flex flex-col justify-end">
+          <div className="border-t border-blue-100 pt-3">
             {done ? (
               <SignedBadge name={signedContract?.party_b_name || signerRow?.name || null} signedAt={signedContract?.renter_signed_at || signedContract?.signed_at || signerRow?.signedAt} signatureImage={signedContract?.renter_signature || signerRow?.signatureImage || null} />
             ) : (

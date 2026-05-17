@@ -154,6 +154,7 @@ const toLegacyVehicleShape = (vehicle) => {
     vehicle_model: vehicle.model,
     vehicle_images_paths: vehicle.raw?.vehicle_image_path || vehicle.raw?.vehicle_images_paths || vehicle.images || [],
     images: vehicle.images || [],
+    image: vehicle.image || vehicle.images?.[0] || '',
     address: vehicle.address || '',
     location: vehicle.address || vehicle.location || '',
   };
@@ -272,6 +273,22 @@ const enrichBooking = (booking, vehicleMap = {}, paymentStateMap = {}) => {
   });
 };
 
+/**
+ * Sau enrich: ẩn booking “mồ côi” khi xe đã bị xóa khỏi DB (populate null, không batch được xe).
+ */
+function enrichedBookingHasVehicleSnapshot(booking) {
+  if (!booking) return false;
+  if (booking.vehicle && typeof booking.vehicle === 'object') {
+    const v = booking.vehicle;
+    return Boolean(v.name || v.brand || v._id || v.id);
+  }
+  const vid = booking.vehicle_id;
+  if (vid && typeof vid === 'object') {
+    return Boolean(vid.vehicle_name || vid.name || vid.vehicle_brand || vid.vehicle_model);
+  }
+  return false;
+}
+
 const enrichBookingsSafely = async (bookings = []) => {
   if (!bookings.length) return [];
 
@@ -288,13 +305,15 @@ const enrichBookingsSafely = async (bookings = []) => {
     })(),
   ]);
 
-  return bookings.map((booking) => {
-    try {
-      return enrichBooking(booking, vehicleMap, paymentStateMap);
-    } catch {
-      return buildBookingFallback(booking);
-    }
-  });
+  return bookings
+    .map((booking) => {
+      try {
+        return enrichBooking(booking, vehicleMap, paymentStateMap);
+      } catch {
+        return buildBookingFallback(booking);
+      }
+    })
+    .filter(enrichedBookingHasVehicleSnapshot);
 };
 
 export const bookingService = {

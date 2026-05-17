@@ -19,6 +19,20 @@ import HandoverPhotoModal from './components/HandoverPhotoModal';
 import OtpModal from './components/OtpModal';
 import StatusPipeline from './components/StatusPipeline';
 
+const getVehicleImage = (vehicle) => {
+  const images = [
+    vehicle?.image,
+    vehicle?.thumbnail,
+    ...(Array.isArray(vehicle?.vehicle_images_paths) ? vehicle.vehicle_images_paths : []),
+    ...(Array.isArray(vehicle?.images) ? vehicle.images : []),
+    vehicle?.raw?.image,
+    vehicle?.raw?.thumbnail,
+    ...(Array.isArray(vehicle?.raw?.vehicle_images_paths) ? vehicle.raw.vehicle_images_paths : []),
+    ...(Array.isArray(vehicle?.raw?.images) ? vehicle.raw.images : []),
+  ].filter(Boolean);
+  return images[0] || '';
+};
+
 const BookingManagement = () => {
   const navigate = useNavigate();
   const [bookings, setBookings] = useState([]);
@@ -190,13 +204,14 @@ const BookingManagement = () => {
     () =>
       bookings.map((booking) => {
         const renter = booking.user_id || {};
-        const vehicle = booking.vehicle_id || {};
+        const vehicle = booking.vehicle || booking.vehicle_id || {};
         return {
           ...booking,
           id: booking._id || booking.id,
           renterName: renter.name || renter.full_name || renter.email || '—',
           renterEmail: renter.email || '—',
           vehicleName: getVehicleName(vehicle),
+          vehicleImage: getVehicleImage(vehicle),
           startDateLabel: fmtDate(booking.start_date),
           endDateLabel: fmtDate(booking.end_date),
           totalLabel: Number(booking.total_price || 0).toLocaleString('vi-VN'),
@@ -452,14 +467,61 @@ const BookingManagement = () => {
                 borderRadius: 12,
                 padding: 16,
                 display: 'flex',
+                gap: 14,
                 justifyContent: 'space-between',
                 alignItems: 'center',
               }}
             >
-              <div>
-                <span className="code-badge">{`BK${String(viewModal.id).slice(-6).toUpperCase()}`}</span>
-                <div style={{ fontWeight: 700, fontSize: '1rem', color: '#111827', marginTop: 6 }}>
-                  {viewModal.vehicleName}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                <div
+                  style={{
+                    width: 72,
+                    height: 56,
+                    borderRadius: 12,
+                    background: '#e5e7eb',
+                    overflow: 'hidden',
+                    flexShrink: 0,
+                    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.08)',
+                  }}
+                >
+                  {viewModal.vehicleImage ? (
+                    <img
+                      src={viewModal.vehicleImage}
+                      alt={viewModal.vehicleName}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#6b7280',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                      }}
+                    >
+                      XE
+                    </div>
+                  )}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <span className="code-badge">{`BK${String(viewModal.id).slice(-6).toUpperCase()}`}</span>
+                  <div
+                    style={{
+                      fontWeight: 700,
+                      fontSize: '1rem',
+                      color: '#111827',
+                      marginTop: 6,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {viewModal.vehicleName}
+                  </div>
                 </div>
               </div>
               <StatusBadge
@@ -492,7 +554,7 @@ const BookingManagement = () => {
                 </span>
               </div>
             ))}
-            <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>
+            <div style={{ display: 'flex', gap: 10, paddingTop: 4, justifyContent: 'center' }}>
               {CANCELLABLE_STATUSES.includes(viewModal.status) && (
                 <button
                   type="button"
@@ -510,7 +572,7 @@ const BookingManagement = () => {
                 <button
                   type="button"
                   className="btn-primary"
-                  style={{ flex: 1 }}
+                  style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
                   onClick={() => {
                     goToReturnAiInspection(viewModal.id);
                     setViewModal(null);
@@ -523,7 +585,7 @@ const BookingManagement = () => {
                 <button
                   type="button"
                   className="btn-primary"
-                  style={{ flex: 1 }}
+                  style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
                   onClick={() => {
                     updateStatus(viewModal.id, PRIMARY_ACTIONS[viewModal.status].nextStatus);
                     setViewModal(null);
@@ -535,8 +597,14 @@ const BookingManagement = () => {
               {viewModal.status === 'handed_over' && (
                 <button
                   type="button"
-                  className="btn-outline"
-                  style={{ flex: 1 }}
+                  className="btn-secondary"
+                  style={{
+                    flex: 1,
+                    minHeight: 44,
+                    fontWeight: 600,
+                    border: '1.5px solid #cbd5e1',
+                    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
+                  }}
                   onClick={() => showOtpForBooking(viewModal._id || viewModal.id)}
                   disabled={otpLoading}
                 >

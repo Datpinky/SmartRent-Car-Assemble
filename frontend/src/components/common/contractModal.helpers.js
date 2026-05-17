@@ -23,9 +23,12 @@ export const PartyBlock = ({ title, contact }) => {
       {contact?.email && <p><span className="text-gray-500">Email:</span> {contact.email}</p>}
       {contact?.phone && <p><span className="text-gray-500">Điện thoại:</span> {contact.phone}</p>}
       {contact?.address && <p><span className="text-gray-500">Địa chỉ:</span> {contact.address}</p>}
-      {contact?.identityDocument && (
+      {contact?.identityDocument &&
+        (contact.identityDocument.idNumber || contact.identityDocument.documentType) && (
         <p className="mt-2 text-gray-500 text-[0.72rem]">
-          Giấy tờ: {contact.identityDocument.documentType} {contact.identityDocument.idNumber}
+          Giấy tờ: {[contact.identityDocument.documentType, contact.identityDocument.idNumber]
+            .filter(Boolean)
+            .join(' ')}
           {contact.identityDocument.note ? ` — ${contact.identityDocument.note}` : ''}
         </p>
       )}

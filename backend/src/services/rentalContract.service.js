@@ -91,15 +91,6 @@ function assertUserCanViewContractBooking(booking, reqUser) {
   throwError('Bạn không có quyền xem hợp đồng booking này', 403);
 }
 
-/** Dữ liệu cứng minh họa khi DB không có CMND/CCCD — chỉ phục vụ hiển thị mẫu */
-const DEMO_IDENTITY_DOCUMENT = {
-  documentType: 'CCCD',
-  idNumber: '079088012345',
-  issuedBy: 'Cục Cảnh sát Quản lý hành chính về trật tự xã hội',
-  issuedDate: '15/06/2018',
-  note: 'Ví dụ hiển thị — thay bằng thông tin thật khi đồng bộ hồ sơ người dùng.',
-};
-
 /** Mẫu đại diện Nam/Nữ theo form hợp đồng (Bên A — showroom) */
 const DEMO_REPRESENTATIVES_TEMPLATE_LESSOR = {
   male: {
@@ -149,14 +140,15 @@ function coalesce(...vals) {
   return null;
 }
 
+/** Chỉ trả về object khi user có loại/số giấy tờ thật; không dùng dữ liệu mẫu. */
 function fillIdentityDocument(overrides = {}) {
-  return {
-    documentType: coalesce(overrides.documentType, DEMO_IDENTITY_DOCUMENT.documentType),
-    idNumber: coalesce(overrides.idNumber, overrides.cmnd, overrides.cccd, DEMO_IDENTITY_DOCUMENT.idNumber),
-    issuedBy: coalesce(overrides.issuedBy, DEMO_IDENTITY_DOCUMENT.issuedBy),
-    issuedDate: coalesce(overrides.issuedDate, DEMO_IDENTITY_DOCUMENT.issuedDate),
-    note: coalesce(overrides.note, DEMO_IDENTITY_DOCUMENT.note),
-  };
+  const documentType = coalesce(overrides.documentType);
+  const idNumber = coalesce(overrides.idNumber, overrides.cmnd, overrides.cccd);
+  const issuedBy = coalesce(overrides.issuedBy);
+  const issuedDate = coalesce(overrides.issuedDate);
+  const note = coalesce(overrides.note);
+  if (!documentType && !idNumber) return null;
+  return { documentType, idNumber, issuedBy, issuedDate, note };
 }
 
 function mapUserToPartyContact(user) {
@@ -229,6 +221,30 @@ function rentalDurationDescription(start, end) {
     days,
     description: `${days} ngày (ước tính theo khoảng thời gian đặt xe trong hệ thống)`,
   };
+}
+
+/** Ngày/tháng/năm theo lịch (UTC offset máy chủ — đủ cho preamble hợp đồng hệ thống). */
+function vietnameseCalendarParts(dateInput) {
+  const raw = dateInput != null ? new Date(dateInput) : new Date();
+  if (Number.isNaN(raw.getTime())) {
+    const now = new Date();
+    return { day: now.getDate(), month: now.getMonth() + 1, year: now.getFullYear() };
+  }
+  return { day: raw.getDate(), month: raw.getMonth() + 1, year: raw.getFullYear() };
+}
+
+function resolveContractSigningPlace(showroomUser, partyAAddressSnapshot) {
+  const snap = typeof partyAAddressSnapshot === 'string' ? partyAAddressSnapshot.trim() : '';
+  if (snap.length) return snap;
+  if (!showroomUser) return 'theo địa chỉ giao dịch điện tử trên hệ thống SmartRent';
+  const u = showroomUser.toObject ? showroomUser.toObject() : showroomUser;
+  const addr = coalesce(u.public_address, u.address);
+  if (typeof addr === 'string' && addr.trim().length) return addr.trim();
+  const name = coalesce(u.business_name, u.name);
+  const city = coalesce(u.city, u.province);
+  if (name && city) return `${name} (${city})`;
+  if (name) return String(name);
+  return 'theo địa chỉ giao dịch điện tử trên hệ thống SmartRent';
 }
 
 class RentalContractService {
@@ -332,13 +348,25 @@ class RentalContractService {
       },
     };
 
+    const signedAtRaw =
+      contractRecord?.signed_at ||
+      contractRecord?.renter_signed_at ||
+      paymentDetails.paid_at ||
+      booking.updatedAt ||
+      new Date();
+    const { day: signDay, month: signMonth, year: signYear } = vietnameseCalendarParts(signedAtRaw);
+    const signedPlace = resolveContractSigningPlace(
+      booking.showroom_id,
+      contractRecord?.party_a_address,
+    );
+
     const payload = {
       header: HEADER,
       contractMeta: {
         contractNumber: contractNumberFromBooking(booking),
-        signedDate: paymentDetails.paid_at || booking.updatedAt,
-        signedPlace: null,
-        preamble: `Hôm nay, ngày … tháng … năm …, tại …, các bên ký kết hợp đồng theo dữ liệu hệ thống đặt xe mã booking: ${booking._id}.`,
+        signedDate: signedAtRaw,
+        signedPlace,
+        preamble: `Hôm nay, ngày ${signDay} tháng ${signMonth} năm ${signYear}, tại ${signedPlace}, các bên ký kết hợp đồng theo dữ liệu hệ thống đặt xe mã booking: ${booking._id}.`,
       },
       partyA,
       partyB,

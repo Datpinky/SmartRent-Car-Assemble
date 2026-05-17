@@ -11,6 +11,7 @@ import {
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import ContractModal from '../../../components/common/ContractModal';
 import bookingService from '../../../services/bookingService';
+import contractService from '../../../services/contractService';
 import paymentService from '../../../services/paymentService';
 
 const formatDate = (value) => {
@@ -104,9 +105,26 @@ const PaymentResult = () => {
           return;
         }
 
-        setBooking(data || null);
         // Sync result (from Stripe) takes priority over stale booking state
-        setStatus(syncedStatus || deriveResultStatus(data, fallbackStatus));
+        const nextStatus = syncedStatus || deriveResultStatus(data, fallbackStatus);
+
+        let isContractSigned = false;
+        if (nextStatus === 'success') {
+          try {
+            const contract = await contractService.getByBookingId(bookingId);
+            isContractSigned = contract?.status === 'signed' || Boolean(contract?.renter_signature);
+          } catch {
+            isContractSigned = false;
+          }
+        }
+
+        if (!mounted) {
+          return;
+        }
+
+        setBooking(data || null);
+        setContractSigned(isContractSigned);
+        setStatus(nextStatus);
       } catch (err) {
         if (!mounted) {
           return;
@@ -285,43 +303,47 @@ const PaymentResult = () => {
           ))}
         </div>
 
-        <div className="flex gap-2.5">
-          <button
-            onClick={() => navigate('/')}
-            className="flex-1 flex items-center justify-center gap-1.5 py-3 bg-white border-2 border-gray-200 rounded-xl text-gray-700 font-semibold cursor-pointer text-sm hover:bg-gray-50 transition-colors"
-          >
-            <FaHome /> Trang chủ
-          </button>
+        {(!isSuccess || contractSigned) && (
+          <>
+            <div className="flex gap-2.5">
+              <button
+                onClick={() => navigate('/')}
+                className="flex-1 flex items-center justify-center gap-1.5 py-3 bg-white border-2 border-gray-200 rounded-xl text-gray-700 font-semibold cursor-pointer text-sm hover:bg-gray-50 transition-colors"
+              >
+                <FaHome /> Trang chủ
+              </button>
 
-          {isSuccess ? (
-            <button
-              onClick={() => navigate('/renter/pending-pickups')}
-              className="flex-1 flex items-center justify-center gap-1.5 py-3 bg-[#00b14f] border-none rounded-xl text-white font-bold cursor-pointer text-sm hover:bg-[#009f45] transition-colors"
-            >
-              <FaList /> Chờ nhận xe
-            </button>
-          ) : isPending ? (
-            <button
-              onClick={() =>
-                navigate(canRetryPayment ? `/renter/retry-payment/${bookingId}` : '/renter/pending-pickups')
-              }
-              className="flex-1 flex items-center justify-center gap-1.5 py-3 bg-amber-600 border-none rounded-xl text-white font-bold cursor-pointer text-sm hover:bg-amber-700 transition-colors"
-            >
-              <FaMoneyBillWave /> Thanh toán lại
-            </button>
-          ) : (
-            <button
-              onClick={() => navigate(canRetryPayment ? `/renter/retry-payment/${bookingId}` : '/renter/transactions')}
-              className="flex-1 flex items-center justify-center gap-1.5 py-3 bg-[#00b14f] border-none rounded-xl text-white font-bold cursor-pointer text-sm hover:bg-[#009f45] transition-colors"
-            >
-              Thanh toán lại
-            </button>
-          )}
-        </div>
+              {isSuccess ? (
+                <button
+                  onClick={() => navigate('/renter/pending-pickups')}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-3 bg-[#00b14f] border-none rounded-xl text-white font-bold cursor-pointer text-sm hover:bg-[#009f45] transition-colors"
+                >
+                  <FaList /> Chờ nhận xe
+                </button>
+              ) : isPending ? (
+                <button
+                  onClick={() =>
+                    navigate(canRetryPayment ? `/renter/retry-payment/${bookingId}` : '/renter/pending-pickups')
+                  }
+                  className="flex-1 flex items-center justify-center gap-1.5 py-3 bg-amber-600 border-none rounded-xl text-white font-bold cursor-pointer text-sm hover:bg-amber-700 transition-colors"
+                >
+                  <FaMoneyBillWave /> Thanh toán lại
+                </button>
+              ) : (
+                <button
+                  onClick={() => navigate(canRetryPayment ? `/renter/retry-payment/${bookingId}` : '/renter/transactions')}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-3 bg-[#00b14f] border-none rounded-xl text-white font-bold cursor-pointer text-sm hover:bg-[#009f45] transition-colors"
+                >
+                  Thanh toán lại
+                </button>
+              )}
+            </div>
 
-        <button className="renter-btn-soft w-full mt-2.5" onClick={() => navigate('/renter/transactions')}>
-          <FaMoneyBillWave /> Lịch sử giao dịch
-        </button>
+            <button className="renter-btn-soft w-full mt-2.5" onClick={() => navigate('/renter/transactions')}>
+              <FaMoneyBillWave /> Lịch sử giao dịch
+            </button>
+          </>
+        )}
       </div>
       <style>{`@keyframes popIn { from { transform: scale(0.5); opacity: 0 } to { transform: scale(1); opacity: 1 } }`}</style>
 

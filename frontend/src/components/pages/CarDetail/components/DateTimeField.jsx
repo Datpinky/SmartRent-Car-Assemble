@@ -81,7 +81,7 @@ function DateTimeField({ id, label, value, minValue, onChange, isDayDisabled, da
       <button
         id={id}
         type="button"
-        className="flex w-full items-center justify-between rounded-lg border-[1.5px] border-gray-200 px-3 py-2.5 text-left text-[0.85rem] text-gray-800 outline-none transition-colors focus:border-primary"
+        className="flex w-full items-center justify-between rounded-xl border-2 border-gray-400 bg-gray-100 px-3 py-2.5 text-left text-[0.85rem] font-semibold text-gray-900 shadow-sm outline-none transition-colors hover:border-gray-500 hover:bg-gray-50 focus:border-primary focus-visible:ring-2 focus-visible:ring-primary"
         onClick={() => setOpen((v) => !v)}
       >
         <span>{labelText()}</span>

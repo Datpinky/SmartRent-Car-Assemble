@@ -197,7 +197,7 @@ class BookingService {
         .skip(skip)
         .limit(lm)
         .populate('user_id', 'name email phone avatar')
-        .populate('vehicle_id', 'vehicle_name vehicle_brand vehicle_model images status')
+        .populate('vehicle_id', 'vehicle_name vehicle_brand vehicle_model vehicle_images_paths images status')
         .lean(),
       Booking.countDocuments(filter),
     ]);
@@ -215,7 +215,7 @@ class BookingService {
 
   static async getBookingById(id) {
     return Booking.findById(id)
-      .populate('vehicle_id', 'vehicle_name vehicle_brand vehicle_model vehicle_plate_number')
+      .populate('vehicle_id', 'vehicle_name vehicle_brand vehicle_model vehicle_plate_number vehicle_images_paths images')
       .populate('user_id', 'name email full_name');
   }
 

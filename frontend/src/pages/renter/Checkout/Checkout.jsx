@@ -157,7 +157,6 @@ const Checkout = () => {
     let cancelled = false;
 
     if (pickupMethod !== 'self') {
-      setResolvedShowroomLocation(null);
       setResolvingShowroomLocation(false);
       setShowroomLocationError('');
       return () => {
@@ -212,7 +211,7 @@ const Checkout = () => {
       try {
         let fallbackAddress = baseAddress;
 
-        if (showroomId) {
+        if (!fallbackAddress && showroomId) {
           const profile = await resolveShowroomProfile(showroomId);
           if (cancelled) return;
           fallbackAddress = String(
@@ -239,12 +238,12 @@ const Checkout = () => {
         }
 
         const geocodeKey = `${showroomId || 'vehicle'}:${finalAddress.toLowerCase()}`;
-        if (showroomGeocodeKeyRef.current === geocodeKey) {
+        if (showroomGeocodeKeyRef.current === geocodeKey && resolvedShowroomLocation) {
           return;
         }
-        showroomGeocodeKeyRef.current = geocodeKey;
         const results = await mapService.directForwardGeocode(finalAddress, { limit: 1 });
         if (cancelled) return;
+        showroomGeocodeKeyRef.current = geocodeKey;
         const best = results?.[0];
 
         if (best) {
@@ -335,7 +334,7 @@ const Checkout = () => {
     }
 
     const request = profileService
-      .getProfileById(showroomId, { fetchUserLocation: true })
+      .getProfileById(showroomId, { fetchUserLocation: false })
       .then((profile) => {
         const normalized = profile || null;
         showroomProfileCacheRef.current.set(showroomId, normalized);
@@ -501,6 +500,16 @@ const Checkout = () => {
   }, [pickupDate, returnDate]);
 
   const isBookedDay = useCallback((date) => bookingService.isDateBooked(date, bookedIntervals), [bookedIntervals]);
+
+  const doesReturnDateConflict = useCallback(
+    (date) =>
+      bookingService.getBookingConflicts({
+        pickupDate,
+        returnDate: date,
+        intervals: bookedIntervals,
+      }).length > 0,
+    [bookedIntervals, pickupDate],
+  );
 
   const selectedBookedConflicts = useMemo(
     () => bookingService.getBookingConflicts({ pickupDate, returnDate, intervals: bookedIntervals }),
@@ -907,11 +916,13 @@ const Checkout = () => {
                     value={returnDate}
                     minValue={pickupDate}
                     onChange={setReturnDate}
-                    isDayDisabled={(date) => isSameCalendarDate(date, pickupDate) || isBookedDay(date)}
+                    isDayDisabled={(date) =>
+                      isSameCalendarDate(date, pickupDate) || isBookedDay(date) || doesReturnDateConflict(date)
+                    }
                     dayClassName={(date) =>
                       isSameCalendarDate(date, pickupDate)
                         ? 'bg-orange-50 text-orange-600 font-extrabold'
-                        : isBookedDay(date)
+                        : isBookedDay(date) || doesReturnDateConflict(date)
                           ? 'bg-red-100 text-red-700 font-extrabold opacity-100 border border-red-200 line-through'
                           : ''
                     }
@@ -929,7 +940,8 @@ const Checkout = () => {
                 )}
                 {hasBookedDateSelection && (
                   <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[0.78rem] text-red-700">
-                    Khoảng thời gian này trùng lịch đã đặt của xe. Vui lòng chọn ngày không bị đánh dấu đỏ.
+                    Khoảng thời gian này đi qua ngày đã có lịch đặt của xe. Vui lòng chọn ngày trả trước ngày bị đánh
+                    dấu đỏ hoặc chọn lại ngày nhận xe.
                   </div>
                 )}
                 <div className="mb-8">

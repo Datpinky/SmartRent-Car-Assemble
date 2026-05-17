@@ -8,13 +8,14 @@ import bookingService from '../../../services/bookingService';
 import reviewService from '../../../services/reviewService';
 import { formatDateTime, formatMoney } from '../../../utils/renterBookingView';
 import {
-  countBookingsByStatusGrid,
+  cardHint,
+  cardValue,
   createRecentMonthBuckets,
   getMonthKey,
   getPaymentVisual,
   resolveFinanceItem,
   resolveReviewBookingId,
-  RENTER_STATUS_GRID_TABS,
+  SUMMARY_CARD_CONFIG,
   timestampOf,
 } from './renterDashboard.helpers';
 
@@ -89,7 +90,21 @@ const RenterDashboard = () => {
     };
   }, []);
 
-  const statusCounts = useMemo(() => countBookingsByStatusGrid(items), [items]);
+  const summary = useMemo(() => {
+    const recordedItems = items.filter((item) => item.paymentRecorded);
+    const refundItems = items.filter((item) => item.hasRefundActivity);
+    const pendingItems = items.filter((item) => item.pendingPayment);
+    return {
+      recordedAmount: recordedItems.reduce((s, i) => s + Number(i.amount || 0), 0),
+      refundTrackingAmount: refundItems.reduce((s, i) => s + Number(i.amount || 0), 0),
+      refundTrackingCount: refundItems.length,
+      pendingAmount: pendingItems.reduce((s, i) => s + Number(i.amount || 0), 0),
+      recordedCount: recordedItems.length,
+      refundPendingCount: items.filter((i) => i.refundPending).length,
+      refundCompletedCount: items.filter((i) => i.refundCompleted).length,
+      pendingCount: pendingItems.length,
+    };
+  }, [items]);
 
   const chartData = useMemo(() => {
     const monthBuckets = createRecentMonthBuckets(6);
@@ -211,56 +226,68 @@ const RenterDashboard = () => {
         </div>
       )}
 
-      {/* Lưới trạng thái đặt xe */}
-      <section>
-        <div style={{ fontSize: '1.02rem', fontWeight: 900, color: '#111827', marginBottom: 12 }}>Trạng thái đặt xe</div>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
-          {RENTER_STATUS_GRID_TABS.map((tab) => {
-            const n = loading ? null : statusCounts[tab.key] ?? 0;
-            const active = !loading && n > 0;
-            return (
-              <div
-                key={tab.key}
-                style={{
-                  background: '#f3f4f6',
-                  borderRadius: 14,
-                  padding: '14px 10px 12px',
-                  textAlign: 'center',
-                  border: '1px solid #e5e7eb',
-                  boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
-                }}
-              >
+      {/* Summary cards */}
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+        {SUMMARY_CARD_CONFIG.map((card) => {
+          const Icon = card.icon;
+          return (
+            <div
+              key={card.key}
+              style={{
+                background: '#ffffff',
+                borderRadius: 22,
+                border: '1px solid #edf2f7',
+                padding: 20,
+                boxShadow: '0 18px 45px rgba(15, 23, 42, 0.05)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <div>
+                  <div
+                    style={{
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      color: '#6b7280',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.08em',
+                    }}
+                  >
+                    {card.label}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: card.key === 'refundTrackingCount' ? '1.8rem' : '1.55rem',
+                      fontWeight: 900,
+                      color: '#111827',
+                      marginTop: 10,
+                    }}
+                  >
+                    {loading ? '...' : cardValue(card.key, summary)}
+                  </div>
+                </div>
                 <div
                   style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: '50%',
-                    background: active ? '#22c55e' : '#d1d5db',
-                    margin: '0 auto 10px',
-                  }}
-                  aria-hidden
-                />
-                <div
-                  style={{
-                    fontSize: '0.72rem',
-                    fontWeight: 700,
-                    color: '#6b7280',
-                    lineHeight: 1.35,
-                    minHeight: '2.7em',
+                    width: 48,
+                    height: 48,
+                    borderRadius: 16,
+                    background: card.tint,
+                    color: card.accent,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    fontSize: '1.1rem',
+                    flexShrink: 0,
                   }}
                 >
-                  {tab.label}
-                </div>
-                <div style={{ fontSize: '1.45rem', fontWeight: 900, color: '#111827', marginTop: 8, letterSpacing: '-0.02em' }}>
-                  {loading ? '…' : n}
+                  <Icon />
                 </div>
               </div>
-            );
-          })}
-        </div>
+              <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: 12, lineHeight: 1.55 }}>
+                {loading ? 'Đang tổng hợp dữ liệu...' : cardHint(card.key, summary)}
+              </div>
+            </div>
+          );
+        })}
       </section>
 
       {/* Chart */}

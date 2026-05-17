@@ -61,10 +61,37 @@ const OtpModal = ({ otpModal, onClose }) => {
           <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Mã có hiệu lực trong 24 giờ</div>
           {error && <div style={{ color: '#dc2626', fontSize: '0.82rem' }}>{error}</div>}
           <div style={{ display: 'flex', gap: 8, width: '100%' }}>
-            <button type="button" className="btn-outline" style={{ flex: 1 }} onClick={handleResend} disabled={loading}>
+            <button
+              type="button"
+              className="btn-outline"
+              style={{
+                flex: 1,
+                border: '2px solid #0284c7',
+                background: '#fff',
+                color: '#0369a1',
+                fontWeight: 800,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textAlign: 'center',
+              }}
+              onClick={handleResend}
+              disabled={loading}
+            >
               {loading ? 'Đang gửi...' : 'Xem lại mã'}
             </button>
-            <button type="button" className="btn-primary" style={{ flex: 1 }} onClick={onClose}>
+            <button
+              type="button"
+              className="btn-primary"
+              style={{
+                flex: 1,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textAlign: 'center',
+              }}
+              onClick={onClose}
+            >
               Xác nhận
             </button>
           </div>

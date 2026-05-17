@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FaEnvelope, FaSpinner, FaStore, FaTimesCircle } from 'react-icons/fa';
 import { MdDirectionsCar } from 'react-icons/md';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -46,16 +46,6 @@ const PendingShowroomProcessing = () => {
   useEffect(() => {
     loadBookings();
   }, []);
-
-  const summary = useMemo(
-    () => ({
-      total: bookings.length,
-      waitingHandover: bookings.filter((b) => b.status === 'waiting_handover').length,
-      paid: bookings.filter((b) => b.status === 'paid').length,
-      successfulPayments: bookings.filter((b) => b.paymentStatus === 'successful').length,
-    }),
-    [bookings],
-  );
 
   useEffect(() => {
     if (!highlightedBookingId || loading || bookings.length === 0) return;
@@ -150,20 +140,6 @@ const PendingShowroomProcessing = () => {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        {[
-          { label: 'Tổng đơn', val: summary.total, color: '#374151' },
-          { label: 'Đã thanh toán', val: summary.successfulPayments, color: '#059669' },
-          { label: 'Chờ showroom chốt bàn giao', val: summary.paid, color: '#d97706' },
-          { label: 'Chờ giao xe', val: summary.waitingHandover, color: '#2563eb' },
-        ].map((item) => (
-          <div key={item.label} style={{ ...cardInfoStyle, minWidth: 155, textAlign: 'center', padding: '14px 18px' }}>
-            <div style={{ fontWeight: 800, fontSize: '1.3rem', color: item.color }}>{item.val}</div>
-            <div style={{ fontSize: '0.72rem', color: '#9ca3af' }}>{item.label}</div>
-          </div>
-        ))}
-      </div>
-
       {loading ? (
         <div style={{ textAlign: 'center', padding: '60px 0', color: '#6b7280' }}>
           <FaSpinner className="animate-spin" style={{ fontSize: '1.4rem', marginBottom: 10 }} />
@@ -195,7 +171,6 @@ const PendingShowroomProcessing = () => {
               booking={booking}
               highlightedBookingId={highlightedBookingId}
               cancellingId={cancellingId}
-              setDetailModal={setDetailModal}
               setContractBookingId={setContractBookingId}
               handleCancelBooking={handleCancelBooking}
             />

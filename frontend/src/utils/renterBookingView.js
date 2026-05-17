@@ -34,7 +34,7 @@ const getLocationLabel = (note) => {
 };
 
 const getCoordinationMeta = (booking, flowState, paymentStatus) => {
-  const startLabel = flowState.hasStarted ? 'Da den gio nhan xe' : 'Chua den gio nhan xe';
+  const startLabel = flowState.hasStarted ? 'Đã đến giờ nhận xe' : 'Chưa đến giờ nhận xe';
 
   if (flowState.isAwaitingPayment) {
     const needsRetry = ['failed', 'declined'].includes(paymentStatus);

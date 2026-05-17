@@ -84,7 +84,7 @@ function DateTimeField({ id, label, value, minValue, onChange, isDayDisabled, da
         type="button"
         aria-haspopup="dialog"
         aria-expanded={open}
-        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white text-left hover:border-primary/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
+        className="w-full rounded-xl border-2 border-gray-400 bg-gray-100 px-3 py-2.5 text-left text-sm font-semibold text-gray-900 shadow-sm transition-colors hover:border-gray-500 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary"
         onClick={() => setOpen((v) => !v)}
       >
         {formatDateTimeInputLabel(value)}

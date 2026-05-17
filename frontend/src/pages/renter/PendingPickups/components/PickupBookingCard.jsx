@@ -3,7 +3,7 @@ import { FaCalendarAlt, FaClock, FaEnvelope, FaMapMarkerAlt, FaSpinner } from 'r
 import { MdDirectionsCar } from 'react-icons/md';
 import StatusBadge from '../../../../components/common/StatusBadge';
 import { RENTAL_CONTRACT_UI } from '../../../../constants/rentalContractTemplate';
-import { canRenterViewOfficialRentalContract } from '../../../../utils/rentalContractEligibility';
+import { canRenterViewRentalContractOnPendingPickupPage } from '../../../../utils/rentalContractEligibility';
 import { PAYMENT_LABELS, formatDateTime, formatMoney } from '../../../../utils/renterBookingView';
 import { waitingLabel } from '../pendingPickups.helpers';
 
@@ -70,7 +70,7 @@ const PickupBookingCard = ({
       </div>
 
       <div style={{ display: 'flex', gap: 6, marginTop: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-        {canRenterViewOfficialRentalContract(booking) && (
+        {canRenterViewRentalContractOnPendingPickupPage(booking) && (
           <button type="button" className="renter-btn-soft" style={{ fontSize: '0.75rem', padding: '6px 12px' }}
             onClick={(e) => { e.stopPropagation(); setContractBookingId(booking.id); }}>
             {RENTAL_CONTRACT_UI.officialButton}

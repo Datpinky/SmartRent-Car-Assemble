@@ -1,4 +1,4 @@
-import { FaCalendarAlt, FaClock, FaEnvelope, FaEye, FaMapMarkerAlt } from 'react-icons/fa';
+import { FaCalendarAlt, FaClock, FaEnvelope, FaMapMarkerAlt } from 'react-icons/fa';
 import { MdDirectionsCar } from 'react-icons/md';
 import StatusBadge from '../../../../components/common/StatusBadge';
 import { RENTAL_CONTRACT_UI } from '../../../../constants/rentalContractTemplate';
@@ -10,7 +10,6 @@ const ProcessingBookingCard = ({
   booking,
   highlightedBookingId,
   cancellingId,
-  setDetailModal,
   setContractBookingId,
   handleCancelBooking,
 }) => (
@@ -76,9 +75,6 @@ const ProcessingBookingCard = ({
       </div>
 
       <div style={{ display: 'flex', gap: 6, marginTop: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-        <button className="btn-icon" onClick={() => setDetailModal(booking)} title="Chi tiết">
-          <FaEye />
-        </button>
         {canRenterViewOfficialRentalContract(booking) && (
           <button
             type="button"

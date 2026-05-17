@@ -9,3 +9,12 @@ export function canRenterViewOfficialRentalContract(booking) {
   if (booking.isCancelled || booking.status === 'cancelled') return false;
   return booking.paymentStatus === 'successful';
 }
+
+/**
+ * Màn Chờ nhận xe: không hiện nút hợp đồng khi đơn vẫn ở bước showroom bàn giao (Chờ giao xe).
+ */
+export function canRenterViewRentalContractOnPendingPickupPage(booking) {
+  if (!canRenterViewOfficialRentalContract(booking)) return false;
+  if (booking.status === 'waiting_handover') return false;
+  return true;
+}

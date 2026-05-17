@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { FaEnvelope, FaSpinner } from 'react-icons/fa';
 import { MdDirectionsCar } from 'react-icons/md';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -7,7 +7,7 @@ import Modal from '../../../components/common/Modal';
 import HandoverOtpInput from '../../../components/renter/HandoverOtpInput';
 import { RENTAL_CONTRACT_UI } from '../../../constants/rentalContractTemplate';
 import bookingService from '../../../services/bookingService';
-import { canRenterViewOfficialRentalContract } from '../../../utils/rentalContractEligibility';
+import { canRenterViewRentalContractOnPendingPickupPage } from '../../../utils/rentalContractEligibility';
 import { PAYMENT_LABELS, formatDateTime, formatMoney, mapRenterBooking } from '../../../utils/renterBookingView';
 import PickupBookingCard from './components/PickupBookingCard';
 import { cardInfoStyle, waitingLabel } from './pendingPickups.helpers';
@@ -113,24 +113,13 @@ const PendingPickups = () => {
     });
   }, [bookings, fromNotification, highlightedBookingId, loading]);
 
-  const summary = useMemo(
-    () => ({
-      total: bookings.length,
-      needsRenterConfirm: bookings.filter((b) => b.status === 'handed_over').length,
-      waitingShowroom: bookings.filter((b) => b.status === 'waiting_handover').length,
-      contactable: bookings.filter((b) => Boolean(b.showroomEmail)).length,
-    }),
-    [bookings],
-  );
-
   return (
     <div className="pending-pickups">
       <div className="page-header" style={{ marginBottom: 20 }}>
         <div>
           <h1 className="page-title">Chờ nhận xe</h1>
           <p className="page-subtitle" style={{ marginTop: 6, maxWidth: 720 }}>
-            Theo dõi quá trình bàn giao xe. Khi showroom đã bàn giao, bạn sẽ cần xác nhận đã nhận xe để bắt đầu chuyến
-            đi.
+            Theo dõi quá trình bàn giao xe. Khi showroom đã bàn giao, bạn sẽ cần xác nhận đã nhận để bắt đầu chuyến đi.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -158,20 +147,6 @@ const PendingPickups = () => {
           {error}
         </div>
       )}
-
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        {[
-          { label: 'Tổng đơn', val: summary.total, color: '#374151' },
-          { label: 'Chờ showroom bàn giao', val: summary.waitingShowroom, color: '#d97706' },
-          { label: 'Cần bạn xác nhận nhận xe', val: summary.needsRenterConfirm, color: '#2563eb' },
-          { label: 'Có email showroom', val: summary.contactable, color: '#059669' },
-        ].map((item) => (
-          <div key={item.label} style={{ ...cardInfoStyle, minWidth: 150, textAlign: 'center', padding: '14px 18px' }}>
-            <div style={{ fontWeight: 800, fontSize: '1.3rem', color: item.color }}>{item.val}</div>
-            <div style={{ fontSize: '0.72rem', color: '#9ca3af' }}>{item.label}</div>
-          </div>
-        ))}
-      </div>
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: '60px 0', color: '#6b7280' }}>
@@ -343,7 +318,7 @@ const PendingPickups = () => {
                 {waitingLabel}
               </div>
             )}
-            {canRenterViewOfficialRentalContract(detailModal) && (
+            {canRenterViewRentalContractOnPendingPickupPage(detailModal) && (
               <button
                 type="button"
                 className="renter-btn-soft"

@@ -142,7 +142,17 @@ const HandoverPhotoModal = ({ handoverPhotoModal, handoverUploading, onConfirm, 
             <button
               type="button"
               className="btn-outline"
-              style={{ flex: 1 }}
+              style={{
+                flex: 1,
+                borderWidth: 2,
+                borderColor: '#0284c7',
+                color: '#0369a1',
+                fontWeight: 800,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textAlign: 'center',
+              }}
               onClick={() => handleConfirm(true)}
               disabled={handoverUploading}
             >
@@ -151,7 +161,13 @@ const HandoverPhotoModal = ({ handoverPhotoModal, handoverUploading, onConfirm, 
             <button
               type="button"
               className="btn-primary"
-              style={{ flex: 1 }}
+              style={{
+                flex: 1,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textAlign: 'center',
+              }}
               onClick={() => handleConfirm(false)}
               disabled={handoverUploading}
             >
