@@ -35,9 +35,7 @@ function AnalysisResult({
   mode = 'default',
   pickupImageUrls = [],
   afterImageUrls = [],
-  onReanalyze,
   onConfirm,
-  onManualConfirm,
   analyzing = false,
   confirming = false,
 }) {
@@ -164,23 +162,10 @@ function AnalysisResult({
       )}
 
       {isShowroomReturn && (
-        <div className="flex flex-col sm:flex-row gap-2.5 mt-4 flex-wrap">
-          <button type="button" className="btn-outline" onClick={onReanalyze} disabled={analyzing || confirming}>
-            {analyzing ? 'Đang chạy AI...' : 'Chạy lại AI'}
-          </button>
-          <button type="button" className="btn-primary" onClick={onConfirm} disabled={analyzing || confirming || !onConfirm}>
+        <div className="mt-4">
+          <button type="button" className="btn-primary w-full sm:w-auto" onClick={onConfirm} disabled={analyzing || confirming || !onConfirm}>
             {confirming ? 'Đang xác nhận...' : 'Xác nhận kết quả & hoàn tất trả xe'}
           </button>
-          {onManualConfirm && (
-            <button
-              type="button"
-              className="btn-outline text-amber-800 border-amber-300"
-              onClick={onManualConfirm}
-              disabled={analyzing || confirming}
-            >
-              Hoàn tất thủ công (không dùng AI)
-            </button>
-          )}
         </div>
       )}
 

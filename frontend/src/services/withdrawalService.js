@@ -4,7 +4,13 @@ const withdrawalService = {
   /** Showroom: xem số dư khả dụng */
   async getBalance() {
     const res = await apiClient.get('/api/withdrawals/my/balance');
-    return res.data?.data;
+    const raw = res.data?.data || {};
+    return {
+      available: Number(raw.available ?? 0),
+      total_earned: Number(raw.total_earned ?? raw.totalEarned ?? 0),
+      pending_withdrawal: Number(raw.pending_withdrawal ?? raw.totalPending ?? 0),
+      total_withdrawn: Number(raw.total_withdrawn ?? raw.totalWithdrawn ?? 0),
+    };
   },
 
   /** Showroom: tạo yêu cầu rút tiền */

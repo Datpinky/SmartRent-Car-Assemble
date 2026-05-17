@@ -39,7 +39,6 @@ import ContractManagement from './pages/showroom/ContractManagement/ContractMana
 import CustomerManagement from './pages/showroom/CustomerManagement/CustomerManagement';
 import RevenueReports from './pages/showroom/RevenueReports/RevenueReports';
 import ShowroomProfile from './pages/showroom/ShowroomProfile/ShowroomProfile';
-import ShowroomWithdrawals from './pages/showroom/ShowroomWithdrawals/ShowroomWithdrawals';
 import VehicleManagement from './pages/showroom/VehicleManagement/VehicleManagement';
 
 const DashboardPage = ({ children, roles }) => (
@@ -86,7 +85,6 @@ const SHOWROOM_DASHBOARD_ROUTES = [
   { path: '/showroom/customers', component: <CustomerManagement /> },
   { path: '/showroom/revenue', component: <RevenueReports /> },
   { path: '/showroom/ai-inspection', component: <AIInspection /> },
-  { path: '/showroom/withdrawals', component: <ShowroomWithdrawals /> },
   { path: '/showroom/profile', component: <ShowroomProfile /> },
 ];
 
@@ -155,6 +153,14 @@ const App = () => (
             <RenterPage>
               <Navigate to="/renter/bookings" replace />
             </RenterPage>
+          }
+        />
+        <Route
+          path="/showroom/withdrawals"
+          element={
+            <DashboardPage roles={['showroom']}>
+              <Navigate to="/showroom/revenue" replace />
+            </DashboardPage>
           }
         />
         {RENTER_DASHBOARD_ROUTES.map((route) => (

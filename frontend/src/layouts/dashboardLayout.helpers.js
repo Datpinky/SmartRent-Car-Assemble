@@ -33,7 +33,6 @@ export const MENUS = {
       ],
     },
     { label: 'Doanh thu', path: '/showroom/revenue', icon: TrendingUp },
-    { label: 'Rút tiền', path: '/showroom/withdrawals', icon: CreditCard },
     { label: 'Kiểm tra AI trả xe', path: '/showroom/ai-inspection', icon: Bot },
   ],
   renter: [

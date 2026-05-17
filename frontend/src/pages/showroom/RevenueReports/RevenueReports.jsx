@@ -4,6 +4,7 @@ import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, X
 import { useAuth } from '../../../contexts/AuthContext';
 import bookingService from '../../../services/bookingService';
 import vehicleService from '../../../services/vehicleService';
+import withdrawalService from '../../../services/withdrawalService';
 import { formatVnd } from '../../../utils/currencyFormat';
 import { buildShowroomMonthlyFromBookings, isRevenueBooking } from '../../../utils/dashboardFromApi';
 
@@ -22,6 +23,7 @@ const RevenueReports = () => {
   const [period, setPeriod] = useState('year');
   const [vehicles, setVehicles] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [balance, setBalance] = useState({ total_earned: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -32,13 +34,15 @@ const RevenueReports = () => {
       setError('');
       try {
         const vFilters = user?._id ? { added_by: user._id, limit: 100 } : {};
-        const [{ data: vData }, bItems] = await Promise.all([
+        const [{ data: vData }, bItems, balanceData] = await Promise.all([
           vehicleService.getList(vFilters),
-          bookingService.getCurrentRoleBookings(), // lọc đúng showroom
+          bookingService.getCurrentRoleBookings(),
+          withdrawalService.getBalance().catch(() => ({ total_earned: 0 })),
         ]);
         if (!cancelled) {
           setVehicles(vData || []);
           setBookings(Array.isArray(bItems) ? bItems : []);
+          setBalance(balanceData || { total_earned: 0 });
         }
       } catch (e) {
         if (!cancelled) {
@@ -64,11 +68,15 @@ const RevenueReports = () => {
     }));
   }, [bookings]);
 
-  const totalRevenue = showroomRevenue.reduce((s, m) => s + m.revenue, 0);
-  const totalProfit = showroomRevenue.reduce((s, m) => s + m.profit, 0);
+  const chartRevenueVnd = showroomRevenue.reduce((s, m) => s + m.revenue, 0) * 1_000_000;
+  const totalEarnedVnd = Number(balance.total_earned) || 0;
   const lastMonth = showroomRevenue[showroomRevenue.length - 1];
   const monthRevenueVnd = (lastMonth?.revenue || 0) * 1_000_000;
   const completedTrips = bookings.filter((b) => b.status === 'completed').length;
+  const paidBookings = bookings.filter(isRevenueBooking).length;
+  const activeTrips = bookings.filter((b) =>
+    ['in_use', 'waiting_return_confirmation', 'handed_over', 'waiting_handover'].includes(b.status),
+  ).length;
 
   const resolveId = (v) => {
     if (!v) return '';
@@ -103,8 +111,10 @@ const RevenueReports = () => {
     <div className="min-w-0 max-w-full">
       <div className="page-header" style={{ marginBottom: 20 }}>
         <div>
-          <h1 className="page-title">Doanh thu &amp; Báo cáo</h1>
-          <p className="page-subtitle">Thống kê từ booking và xe showroom (dữ liệu thật từ API).</p>
+          <h1 className="page-title">Doanh thu</h1>
+          <p className="page-subtitle">
+            Tổng thu từ giao dịch thanh toán thành công và thống kê theo booking, xe showroom.
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
           <button type="button" className="btn-outline" onClick={exportCsv} title="Tải CSV theo dữ liệu đang hiển thị">
@@ -147,24 +157,26 @@ const RevenueReports = () => {
       <div className="stats-grid mb-5">
         {[
           {
-            label: 'Tổng doanh thu (12 tháng gần đây)',
-            value: formatVnd(totalRevenue * 1_000_000),
+            label: 'Tổng doanh thu (đã thanh toán)',
+            value: formatVnd(totalEarnedVnd),
             color: '#00b14f',
             icon: <FaMoneyBillWave />,
           },
           {
-            label: 'Lợi nhuận (chưa tách chi phí)',
-            value: formatVnd(totalProfit * 1_000_000),
+            label: 'Doanh thu 12 tháng (theo booking)',
+            value: formatVnd(chartRevenueVnd),
             color: '#2563eb',
             icon: <FaChartLine />,
           },
           {
-            label: 'Doanh thu tháng hiện tại (bucket)',
+            label: 'Doanh thu tháng gần nhất',
             value: formatVnd(monthRevenueVnd),
             color: '#d97706',
             icon: <FaMoneyBillWave />,
           },
-          { label: 'Chuyến hoàn thành', value: String(completedTrips), color: '#7c3aed', icon: <FaChartLine /> },
+          { label: 'Đơn đã thanh toán', value: String(paidBookings), color: '#7c3aed', icon: <FaChartLine /> },
+          { label: 'Chuyến hoàn thành', value: String(completedTrips), color: '#059669', icon: <FaChartLine /> },
+          { label: 'Đang cho thuê', value: String(activeTrips), color: '#2563eb', icon: <FaChartLine /> },
         ].map((k) => (
           <div
             key={k.label}

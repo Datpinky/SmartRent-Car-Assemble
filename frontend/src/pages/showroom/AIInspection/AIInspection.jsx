@@ -433,24 +433,6 @@ const AIInspection = () => {
     }
   };
 
-  const handleConfirmManual = async () => {
-    if (!selectedBookingId || !isWaitingReturnReview) return;
-    const ok = window.confirm(
-      'Xác nhận hoàn tất trả xe thủ công (không công bố kết quả AI cho khách)? Booking sẽ chuyển sang hoàn thành.',
-    );
-    if (!ok) return;
-    setConfirming(true);
-    setAnalysisError('');
-    try {
-      await inspectionService.confirmReturnReview(selectedBookingId, { manual: true });
-      navigate('/showroom/bookings');
-    } catch (err) {
-      setAnalysisError(err?.response?.data?.message || err.message || 'Không thể xác nhận.');
-    } finally {
-      setConfirming(false);
-    }
-  };
-
   const step1Done = Boolean(queryBookingId && hydratedQuery && selectedBookingId && step >= 2);
 
   if (!isShowroom) {
@@ -613,9 +595,7 @@ const AIInspection = () => {
               afterImageUrls={returnImagesUrls}
               analyzing={analyzing}
               confirming={confirming}
-              onReanalyze={isWaitingReturnReview && !isCompletedBooking ? runServerReturnAnalyze : undefined}
               onConfirm={isWaitingReturnReview && !isCompletedBooking ? handleConfirmPublished : undefined}
-              onManualConfirm={isWaitingReturnReview && !isCompletedBooking ? handleConfirmManual : undefined}
               onReset={
                 isWaitingReturnReview && !isCompletedBooking
                   ? () => {
