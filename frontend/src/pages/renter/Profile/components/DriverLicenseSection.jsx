@@ -52,10 +52,10 @@ const DriverLicenseSection = ({ userId, profile, onSaved }) => {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       const url = res.data?.data?.[0]?.url || res.data?.data?.[0];
-      if (!url) throw new Error('Khong nhan duoc URL anh');
+      if (!url) throw new Error('Không nhận được URL ảnh');
       setForm((prev) => ({ ...prev, [field]: url }));
     } catch (err) {
-      setNotice({ type: 'error', message: err.message || 'Upload anh that bai' });
+      setNotice({ type: 'error', message: err.message || 'Tải ảnh thất bại' });
     } finally {
       setter(false);
     }
@@ -63,19 +63,19 @@ const DriverLicenseSection = ({ userId, profile, onSaved }) => {
 
   const handleSave = async () => {
     if (!form.driver_license_number.trim()) {
-      setNotice({ type: 'error', message: 'Vui long nhap so giay phep lai xe' });
+      setNotice({ type: 'error', message: 'Vui lòng nhập số Giấy phép lái xe' });
       return;
     }
     if (!form.driver_license_fullname.trim()) {
-      setNotice({ type: 'error', message: 'Vui long nhap ho ten tren GPLX' });
+      setNotice({ type: 'error', message: 'Vui lòng nhập họ tên trên Giấy phép lái xe' });
       return;
     }
     if (!form.driver_license_dob) {
-      setNotice({ type: 'error', message: 'Vui long nhap ngay sinh' });
+      setNotice({ type: 'error', message: 'Vui lòng nhập ngày sinh' });
       return;
     }
     if (!form.driver_license_front_image || !form.driver_license_back_image) {
-      setNotice({ type: 'error', message: 'Vui long tai anh 2 mat GPLX' });
+      setNotice({ type: 'error', message: 'Vui lòng tải ảnh đối chiếu mặt trước và mặt sau Giấy phép lái xe' });
       return;
     }
     setSaving(true);
@@ -84,9 +84,9 @@ const DriverLicenseSection = ({ userId, profile, onSaved }) => {
       const updated = await profileService.updateDriverLicense(userId, form);
       onSaved(updated);
       setEditing(false);
-      setNotice({ type: 'success', message: 'Cap nhat giay phep lai xe thanh cong' });
+      setNotice({ type: 'success', message: 'Cập nhật Giấy phép lái xe thành công' });
     } catch (err) {
-      setNotice({ type: 'error', message: err.message || 'Khong the cap nhat' });
+      setNotice({ type: 'error', message: err.message || 'Không thể cập nhật' });
     } finally {
       setSaving(false);
     }
@@ -249,7 +249,7 @@ const DriverLicenseSection = ({ userId, profile, onSaved }) => {
             marginBottom: 4,
           }}
         >
-          GPLX của bạn đang chờ admin xác minh. Bạn chưa thể đặt xe cho đến khi được duyệt.
+          GPLX của bạn đang chờ xác minh. Bạn chưa thể đặt xe cho đến khi được duyệt.
         </div>
       )}
 

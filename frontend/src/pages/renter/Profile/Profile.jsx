@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FaLocationArrow, FaMapMarkerAlt, FaSave, FaSpinner, FaStore, FaUser } from 'react-icons/fa';
+import { FaLocationArrow, FaMapMarkerAlt, FaSave, FaSpinner, FaUser } from 'react-icons/fa';
 import { MdAlternateEmail, MdInfoOutline, MdPhoneIphone } from 'react-icons/md';
 import CarLocationMap from '../../../components/Map/CarLocationMap';
-import BecomeShowroomModal from '../../../components/common/BecomeShowroomModal';
 import SavedCardManager from '../../../components/common/SavedCardManager';
 import { useAuth } from '../../../contexts/AuthContext';
 import mapService from '../../../services/mapService';
@@ -38,7 +37,6 @@ const Profile = () => {
   const [addressSuggestions, setAddressSuggestions] = useState([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [notice, setNotice] = useState({ type: '', message: '' });
-  const [showBecomeShowroom, setShowBecomeShowroom] = useState(false);
 
   const initials = useMemo(
     () =>
@@ -720,29 +718,6 @@ const Profile = () => {
             </div>
           )}
 
-          {/* Become showroom CTA (renter only) */}
-          {activeUser?.role === 'renter' && (
-            <div className="mt-6 px-5 py-4 bg-green-50 border border-green-200 rounded-xl">
-              <div className="flex items-center justify-between flex-wrap gap-3">
-                <div>
-                  <h4 className="font-bold text-green-800 flex items-center gap-2 mb-1">
-                    <FaStore /> Muốn cho thuê xe?
-                  </h4>
-                  <p className="text-xs text-green-800 m-0">
-                    Đăng ký trở thành Showroom để đăng xe và quản lý hợp đồng.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowBecomeShowroom(true)}
-                  className="flex items-center gap-1.5 px-5 py-2 bg-[#00b14f] border-none rounded-lg text-white font-bold cursor-pointer text-sm whitespace-nowrap hover:bg-[#009f45] transition-colors"
-                >
-                  <FaStore /> Đăng ký Showroom
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Map section */}
           <div style={{ marginTop: 24 }}>
             <h3 className="profile-section-title" style={{ marginBottom: 12 }}>
@@ -839,7 +814,6 @@ const Profile = () => {
         </div>
       </div>
 
-      {showBecomeShowroom && <BecomeShowroomModal onClose={() => setShowBecomeShowroom(false)} />}
     </>
   );
 };
