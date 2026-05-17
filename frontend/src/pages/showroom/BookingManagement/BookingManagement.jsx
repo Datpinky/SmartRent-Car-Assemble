@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FaArrowRight, FaCheckCircle, FaEye, FaSpinner, FaTimes } from 'react-icons/fa';
+import { FaArrowRight, FaCheckCircle, FaEye, FaMoneyBillWave, FaSpinner, FaTimes } from 'react-icons/fa';
 import DataTable from '../../../components/common/DataTable';
 import Modal from '../../../components/common/Modal';
 import StatusBadge from '../../../components/common/StatusBadge';
@@ -10,10 +10,12 @@ import {
   CANCELLABLE_STATUSES,
   FILTER_TABS,
   fmtDate,
+  getPipelineTabCount,
+  getShowroomBookingStatusPresentation,
   getVehicleName,
+  isShowroomRefundedBooking,
   PRIMARY_ACTIONS,
   STATUS_LABELS,
-  STATUS_ORDER,
 } from './bookingManagement.helpers';
 import HandoverPhotoModal from './components/HandoverPhotoModal';
 import OtpModal from './components/OtpModal';
@@ -33,6 +35,22 @@ const getVehicleImage = (vehicle) => {
   return images[0] || '';
 };
 
+const SHOWROOM_PAYMENT_LABELS = {
+  successful: 'Thanh toán thành công',
+  refunded: 'Đã hoàn tiền',
+  pending: 'Đang chờ thanh toán',
+  failed: 'Thanh toán thất bại',
+  declined: 'Bị từ chối',
+};
+
+const formatPaymentStatusLabel = (raw) => {
+  const key = String(raw || '').toLowerCase();
+  return SHOWROOM_PAYMENT_LABELS[key] || raw || '—';
+};
+
+const getPaymentStatus = (booking) =>
+  booking?.payment?.payment_status || booking?.paymentState?.paymentStatus || booking?.paymentStatus || '';
+
 const BookingManagement = () => {
   const navigate = useNavigate();
   const [bookings, setBookings] = useState([]);
@@ -47,6 +65,9 @@ const BookingManagement = () => {
   const [handoverUploading, setHandoverUploading] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
   const [otpError, setOtpError] = useState('');
+  const [refundReviewModal, setRefundReviewModal] = useState(null);
+  const [refundConfirmLoading, setRefundConfirmLoading] = useState(false);
+  const [refundConfirmError, setRefundConfirmError] = useState('');
 
   const fetchBookings = useCallback(async () => {
     setLoading(true);
@@ -151,6 +172,41 @@ const BookingManagement = () => {
     await _doUpdateStatus(bookingId, 'handed_over');
   };
 
+  const confirmShowroomRefund = async () => {
+    const bookingId = refundReviewModal?._id || refundReviewModal?.id;
+    if (!bookingId) return;
+    setRefundConfirmLoading(true);
+    setRefundConfirmError('');
+    try {
+      const result = await bookingService.confirmRefund(bookingId);
+      const nextStatus = result?.status || result?.bookingStatus || '';
+      if (nextStatus === 'cancel_failed') {
+        setRefundConfirmError(
+          result?.refundError || 'Hoàn tiền gặp lỗi. Vui lòng kiểm tra lại hoặc xử lý thủ công qua Stripe.',
+        );
+        await fetchBookings();
+        return;
+      }
+      const { _refundResult, _refundError, ...rest } = result || {};
+      setBookings((curr) =>
+        curr.map((item) =>
+          (item._id || item.id) === bookingId ? { ...item, ...rest, status: nextStatus || item.status } : item,
+        ),
+      );
+      setViewModal((curr) =>
+        curr && (curr._id || curr.id) === bookingId
+          ? { ...curr, ...rest, status: nextStatus || curr.status }
+          : curr,
+      );
+      setRefundReviewModal(null);
+      await fetchBookings();
+    } catch (err) {
+      setRefundConfirmError(err?.response?.data?.message || err?.message || 'Không thể xác nhận hoàn trả.');
+    } finally {
+      setRefundConfirmLoading(false);
+    }
+  };
+
   const cancelBooking = async (booking) => {
     const bookingId = booking?._id || booking?.id;
     if (!bookingId) return;
@@ -160,9 +216,11 @@ const BookingManagement = () => {
       const result = await bookingService.cancelBooking(bookingId);
       const nextStatus = result?.bookingStatus || 'cancelled';
       setBookings((curr) =>
-        curr.map((item) => ((item._id || item.id) === bookingId ? { ...item, status: nextStatus } : item)),
+        curr.map((item) => ((item._id || item.id) === bookingId ? { ...item, ...result, status: nextStatus } : item)),
       );
-      setViewModal((curr) => (curr && (curr._id || curr.id) === bookingId ? { ...curr, status: nextStatus } : curr));
+      setViewModal((curr) =>
+        curr && (curr._id || curr.id) === bookingId ? { ...curr, ...result, status: nextStatus } : curr,
+      );
       setCancelModal(null);
     } catch (err) {
       setLoadError(err?.response?.data?.message || err?.message || 'Không thể hủy đơn đặt xe hoặc hoàn tiền.');
@@ -217,6 +275,7 @@ const BookingManagement = () => {
           totalLabel: Number(booking.total_price || 0).toLocaleString('vi-VN'),
           totalPrice: Number(booking.total_price || 0),
           dayCount: Math.max(1, Math.round((new Date(booking.end_date) - new Date(booking.start_date)) / 86400000)),
+          paymentStatus: getPaymentStatus(booking),
         };
       }),
     [bookings],
@@ -225,18 +284,21 @@ const BookingManagement = () => {
   const filteredRows = useMemo(() => {
     if (statusFilter === 'all') return rows;
     const tab = FILTER_TABS.find((t) => t.key === statusFilter);
+    if (tab?.key === 'payment_refunded') {
+      return rows.filter((row) => isShowroomRefundedBooking(row));
+    }
     const statuses = tab ? tab.statuses : [statusFilter];
     return rows.filter((row) => statuses.includes(row.status));
   }, [rows, statusFilter]);
 
-  const countsByStatus = useMemo(
-    () =>
-      STATUS_ORDER.reduce((acc, status) => {
-        acc[status] = rows.filter((r) => r.status === status).length;
-        return acc;
-      }, {}),
-    [rows],
-  );
+  const countsByStatus = useMemo(() => {
+    const acc = {};
+    for (const r of rows) {
+      const s = r.status;
+      if (s) acc[s] = (acc[s] || 0) + 1;
+    }
+    return acc;
+  }, [rows]);
 
   const columns = [
     {
@@ -291,7 +353,10 @@ const BookingManagement = () => {
     {
       key: 'status',
       label: 'Trạng thái',
-      render: (row) => <StatusBadge status={row.status} customLabel={STATUS_LABELS[row.status] || row.status} />,
+      render: (row) => {
+        const pres = getShowroomBookingStatusPresentation(row);
+        return <StatusBadge status={pres.badgeKey} customLabel={pres.label} />;
+      },
     },
     {
       key: 'actions',
@@ -350,6 +415,28 @@ const BookingManagement = () => {
                 )}
               </button>
             )}
+            {row.status === 'refund_requested' && (
+              <button
+                type="button"
+                className="btn-icon"
+                style={{
+                  borderColor: '#b45309',
+                  color: '#b45309',
+                  fontSize: '0.72rem',
+                  whiteSpace: 'nowrap',
+                  padding: '5px 8px',
+                }}
+                onClick={() => {
+                  setRefundConfirmError('');
+                  setRefundReviewModal(row);
+                }}
+                disabled={isUpdating}
+                title="Xem lý do & xác nhận hoàn tiền"
+                aria-label="Xem lý do và xác nhận hoàn tiền"
+              >
+                <FaMoneyBillWave aria-hidden="true" />
+              </button>
+            )}
             {row.status === 'waiting_return_confirmation' && (
               <button
                 type="button"
@@ -397,7 +484,7 @@ const BookingManagement = () => {
         )}
       </div>
 
-      <StatusPipeline countsByStatus={countsByStatus} />
+      <StatusPipeline countsByStatus={countsByStatus} rows={rows} />
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <button
@@ -418,7 +505,7 @@ const BookingManagement = () => {
           Tất cả
         </button>
         {FILTER_TABS.map((tab) => {
-          const count = tab.statuses.reduce((sum, s) => sum + (countsByStatus[s] || 0), 0);
+          const count = getPipelineTabCount(tab, countsByStatus, rows);
           return (
             <button
               type="button"
@@ -525,8 +612,8 @@ const BookingManagement = () => {
                 </div>
               </div>
               <StatusBadge
-                status={viewModal.status}
-                customLabel={STATUS_LABELS[viewModal.status] || viewModal.status}
+                status={getShowroomBookingStatusPresentation(viewModal).badgeKey}
+                customLabel={getShowroomBookingStatusPresentation(viewModal).label}
               />
             </div>
             {[
@@ -536,7 +623,16 @@ const BookingManagement = () => {
               ['Thời gian trả', viewModal.endDateLabel],
               ['Số ngày', viewModal.dayCount],
               ['Tổng tiền', `${viewModal.totalLabel}đ`],
+              ['Trạng thái thanh toán', formatPaymentStatusLabel(viewModal.paymentStatus)],
               ['Ghi chú', viewModal.note || '—'],
+              ...(viewModal.status === 'refund_requested'
+                ? [
+                    [
+                      'Lý do hoàn trả (khách)',
+                      viewModal.refund_request_reason || '—',
+                    ],
+                  ]
+                : []),
             ].map(([label, value]) => (
               <div
                 key={label}
@@ -555,6 +651,28 @@ const BookingManagement = () => {
               </div>
             ))}
             <div style={{ display: 'flex', gap: 10, paddingTop: 4, justifyContent: 'center' }}>
+              {viewModal.status === 'refund_requested' && (
+                <button
+                  type="button"
+                  className="btn-primary"
+                  style={{
+                    flex: 1,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    background: '#b45309',
+                    borderColor: '#b45309',
+                  }}
+                  onClick={() => {
+                    setRefundConfirmError('');
+                    setRefundReviewModal(viewModal);
+                    setViewModal(null);
+                  }}
+                >
+                  Xem lý do & hoàn tiền <FaMoneyBillWave aria-hidden="true" />
+                </button>
+              )}
               {CANCELLABLE_STATUSES.includes(viewModal.status) && (
                 <button
                   type="button"
@@ -643,6 +761,75 @@ const BookingManagement = () => {
             Bạn đang hủy đơn đặt xe của khách hàng <b>{cancelModal.renterName}</b>. Nếu đơn đã thanh toán, hệ thống sẽ
             xử lý hoàn tiền trước khi chuyển đơn sang trạng thái đã hủy.
           </p>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={!!refundReviewModal}
+        onClose={() => {
+          if (!refundConfirmLoading) setRefundReviewModal(null);
+        }}
+        title="Yêu cầu hoàn trả"
+        width={480}
+        footer={
+          <>
+            <button type="button" className="btn-outline" disabled={refundConfirmLoading} onClick={() => setRefundReviewModal(null)}>
+              Đóng
+            </button>
+            <button
+              type="button"
+              className="btn-danger"
+              disabled={refundConfirmLoading}
+              onClick={confirmShowroomRefund}
+              style={{ background: '#b45309', borderColor: '#b45309' }}
+            >
+              {refundConfirmLoading ? 'Đang xử lý…' : 'Xác nhận hoàn tiền'}
+            </button>
+          </>
+        }
+      >
+        {refundReviewModal && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <p style={{ fontSize: '0.85rem', color: '#374151', margin: 0 }}>
+              Khách <b>{refundReviewModal.renterName}</b> yêu cầu hoàn trả cho đơn{' '}
+              <span className="code-badge">{`BK${String(refundReviewModal.id).slice(-6).toUpperCase()}`}</span>. Sau khi xác
+              nhận, hệ thống sẽ hoàn tiền qua Stripe và chuyển đơn sang <b>Đã hủy</b>.
+            </p>
+            <div>
+              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#6b7280', marginBottom: 6 }}>Lý do</div>
+              <div
+                style={{
+                  fontSize: '0.86rem',
+                  color: '#111827',
+                  lineHeight: 1.5,
+                  whiteSpace: 'pre-wrap',
+                  background: '#f9fafb',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 12,
+                  padding: 12,
+                  maxHeight: 220,
+                  overflowY: 'auto',
+                }}
+              >
+                {refundReviewModal.refund_request_reason || '—'}
+              </div>
+            </div>
+            {refundConfirmError && (
+              <div
+                role="alert"
+                style={{
+                  fontSize: '0.82rem',
+                  color: '#b91c1c',
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: 10,
+                  padding: '10px 12px',
+                }}
+              >
+                {refundConfirmError}
+              </div>
+            )}
+          </div>
         )}
       </Modal>
 

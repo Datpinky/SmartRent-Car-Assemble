@@ -100,10 +100,11 @@ const MyBookings = () => {
     handledHighlightRef.current = handledKey;
 
     if (targetBooking.isAwaitingPayment) {
-      navigate(
-        `/renter/pending-payments?bookingId=${targetBooking.id}&fromNotification=${fromNotification ? '1' : '0'}`,
-        { replace: true },
-      );
+      if (targetBooking.canRetryPayment) {
+        navigate(`/renter/retry-payment/${targetBooking.id}`, { replace: true });
+        return;
+      }
+      navigate(`/renter/payment-result?bookingId=${targetBooking.id}&status=pending`, { replace: true });
       return;
     }
 

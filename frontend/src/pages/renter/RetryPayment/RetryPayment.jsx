@@ -223,8 +223,8 @@ const RetryPayment = () => {
             <h1 className="page-title">Thanh toán lại</h1>
             <p className="page-subtitle">Mở lại phiên Stripe cho booking đang chờ thanh toán hoặc cần retry</p>
           </div>
-          <button className="renter-btn-soft" onClick={() => navigate('/renter/pending-payments')}>
-            <FaArrowLeft /> Chờ thanh toán
+          <button className="renter-btn-soft" onClick={() => navigate('/renter/bookings')}>
+            <FaArrowLeft /> Chuyến đi của tôi
           </button>
         </div>
 
@@ -260,7 +260,7 @@ const RetryPayment = () => {
             <div style={{ fontWeight: 800, marginBottom: 6, color: '#0f172a' }}>Nếu bạn đang kẹt thanh toán Stripe</div>
             <ul style={{ margin: 0, paddingLeft: 18 }}>
               <li>Bấm «Tạo lại phiên thanh toán» hoặc «Kiểm tra lại trạng thái booking» bên dưới.</li>
-              <li>Quay về «Chờ thanh toán» để thử booking khác hoặc đợi vài phút rồi mở lại trang này.</li>
+              <li>Quay về «Chuyến đi của tôi» hoặc mở «Kết quả thanh toán» để thử lại sau vài phút.</li>
               <li>Gửi email showroom nếu booking đã thanh toán nhưng giao diện chưa đồng bộ.</li>
             </ul>
           </div>
@@ -448,8 +448,8 @@ const RetryPayment = () => {
               )}
 
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 16 }}>
-                <button className="renter-btn-soft" onClick={() => navigate('/renter/pending-payments')}>
-                  <FaArrowLeft /> Quay về Chờ thanh toán
+                <button className="renter-btn-soft" onClick={() => navigate('/renter/bookings')}>
+                  <FaArrowLeft /> Chuyến đi của tôi
                 </button>
                 <button className="renter-btn-soft" onClick={handleRefreshBooking} disabled={loading || preparing}>
                   <FaSyncAlt /> Kiểm tra lại trạng thái booking

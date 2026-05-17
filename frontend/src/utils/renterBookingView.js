@@ -48,7 +48,7 @@ const getCoordinationMeta = (booking, flowState, paymentStatus) => {
       renterAction: needsRetry
         ? 'Thanh toán lại để tiếp tục quy trình đặt xe.'
         : 'Hoàn tất thanh toán để showroom tiếp tục xử lý.',
-      menuKey: 'pending-payments',
+      menuKey: 'bookings',
     };
   }
 
@@ -69,15 +69,15 @@ const getCoordinationMeta = (booking, flowState, paymentStatus) => {
     return {
       headline: isHandedOver ? 'Xác nhận đã nhận xe' : 'Chờ showroom hoàn tất bàn giao',
       waitingFor: isHandedOver
-        ? 'Showroom đã đánh dấu đã bàn giao xe. Hãy kiểm tra xe và xác nhận đã nhận để bắt đầu chuyến đi.'
+        ? 'Showroom đã đánh dấu đã bàn giao xe. Hãy kiểm tra xe và xác nhận đã nhận để bắt đầu chuyển đi.'
         : `Đơn đặt xe đã ở mức Chờ giao xe. ${startLabel}. Showroom cần hoàn tất bước bàn giao trên hệ thống.`,
       owner: isHandedOver ? 'Bên cần xử lý: Bạn' : 'Bên cần xử lý: Showroom',
       nextStep: isHandedOver
-        ? 'Sau khi xác nhận, đơn đặt xe chuyển sang Đang thuê và chuyến đi bắt đầu được tính.'
+        ? 'Sau khi xác nhận, đơn đặt xe chuyển sang Đang thuê và chuyển đi bắt đầu được tính.'
         : 'Khi showroom cập nhật đã bàn giao, bạn sẽ nhận được thông báo và cần xác nhận nhận xe.',
       renterAction: isHandedOver
-        ? 'Kiểm tra xe kỹ rồi bấm “Xác nhận đã nhận xe”. Khi đó thời gian thuê bắt đầu được tính.'
-        : 'Đến điểm giao nhận đúng hẹn, kiểm tra xe và liên hệ showroom nếu cần.',
+        ? 'Kiểm tra xe kỹ rồi bấm "Xác nhận đã nhận xe". Khi đó thời gian thuê bắt đầu được tính.'
+        : 'Đến điểm giao nhận đúng giờ, kiểm tra xe và liên hệ showroom nếu cần.',
       menuKey: 'pending-pickups',
     };
   }
@@ -121,20 +121,50 @@ const getCoordinationMeta = (booking, flowState, paymentStatus) => {
     };
   }
 
-  if (flowState.isCancelled) {
+  if (booking.status === 'refund_requested') {
     return {
-      headline: 'Đã hủy đơn đặt xe',
-      waitingFor: 'Đơn đặt xe này không còn tiếp tục trong quy trình thuê xe hiện tại.',
-      owner: 'Trạng thái: Đã hủy',
-      nextStep:
-        paymentStatus === 'refunded'
-          ? 'Khoản hoàn trả đã được ghi nhận trong lịch sử giao dịch.'
-          : 'Nếu cần đặt lại xe, bạn có thể tạo đơn đặt xe mới.',
-      renterAction: 'Kiểm tra lịch sử giao dịch nếu cần đối chiếu thanh toán.',
+      headline: 'Chờ showroom xác nhận hoàn trả',
+      waitingFor:
+        'Bạn đã gửi yêu cầu hoàn trả và giao dịch vẫn được ghi nhận thành công. Showroom sẽ xem lý do và xác nhận hoàn tiền.',
+      owner: 'Bên cần xử lý: Showroom',
+      nextStep: 'Sau khi showroom xác nhận, tiền sẽ được hoàn và đơn chuyển sang đã hủy.',
+      renterAction: 'Xem Lịch sử giao dịch (nhóm Chờ hoàn tiền) hoặc liên hệ showroom nếu cần.',
       menuKey: 'bookings',
     };
   }
 
+  if (flowState.isCancelled) {
+    const isRefundPending =
+      booking.status === 'cancel_pending' || (booking.status === 'cancelled' && paymentStatus === 'successful');
+    const isRefundFailed = booking.status === 'cancel_failed';
+    return {
+      headline: isRefundFailed
+        ? 'Hủy đơn thành công, hoàn tiền gặp lỗi'
+        : isRefundPending
+          ? 'Đang xử lý hoàn tiền'
+          : 'Đã hủy đơn đặt xe',
+      waitingFor: isRefundFailed
+        ? 'Đơn đặt xe đã hủy nhưng hệ thống chưa hoàn tất hoàn tiền tự động.'
+        : isRefundPending
+          ? 'Đơn đặt xe đã hủy. Hệ thống đang xử lý hoặc chờ ghi nhận hoàn tiền.'
+          : 'Đơn đặt xe này không còn tiếp tục trong quy trình thuê xe hiện tại.',
+      owner: isRefundFailed
+        ? 'Trạng thái: Hủy/hoàn tiền lỗi'
+        : isRefundPending
+          ? 'Trạng thái: Đang hoàn tiền'
+          : 'Trạng thái: Đã hủy',
+      nextStep:
+        paymentStatus === 'refunded'
+          ? 'Khoản hoàn trả đã được ghi nhận trong lịch sử giao dịch.'
+          : isRefundFailed
+            ? 'Liên hệ showroom hoặc admin để kiểm tra lỗi hoàn tiền và xử lý thủ công nếu cần.'
+            : isRefundPending
+              ? 'Theo dõi lịch sử giao dịch để xem khi khoản hoàn tiền được ghi nhận.'
+              : 'Nếu cần đặt lại xe, bạn có thể tạo đơn đặt xe mới.',
+      renterAction: 'Kiểm tra lịch sử giao dịch nếu cần đối chiếu thanh toán.',
+      menuKey: 'bookings',
+    };
+  }
   return {
     headline: 'Đang xử lý đơn đặt xe',
     waitingFor: 'Đơn đặt xe đang được hệ thống theo dõi theo trạng thái hiện tại.',
@@ -209,3 +239,4 @@ export const mapRenterBooking = (booking) => {
     raw: booking,
   };
 };
+

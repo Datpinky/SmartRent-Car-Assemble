@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
-import { FILTER_TABS } from '../bookingManagement.helpers';
+import { FILTER_TABS, getPipelineTabCount } from '../bookingManagement.helpers';
 
-const StatusPipeline = ({ countsByStatus }) => (
+const StatusPipeline = ({ countsByStatus, rows = [] }) => (
   <div
     style={{
       background: '#fff',
@@ -12,9 +12,9 @@ const StatusPipeline = ({ countsByStatus }) => (
       overflowX: 'auto',
     }}
   >
-    <div style={{ display: 'flex', alignItems: 'center', gap: 0, minWidth: 820 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 0, minWidth: 1020 }}>
       {FILTER_TABS.map((tab, index) => {
-        const count = tab.statuses.reduce((sum, s) => sum + (countsByStatus[s] || 0), 0);
+        const count = getPipelineTabCount(tab, countsByStatus, rows);
 
         return (
           <Fragment key={tab.key}>

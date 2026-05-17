@@ -19,10 +19,13 @@ const bookingSchema = new mongoose.Schema(
       enum: [
         'pending',
         'confirmed',
+        'cancel_pending',
+        'cancel_failed',
         'cancelled',
         'completed',
         'waiting_payment',
         'paid',
+        'refund_requested',
         'waiting_handover',
         'handed_over',
         'in_use',
@@ -35,6 +38,9 @@ const bookingSchema = new mongoose.Schema(
     handover_otp: { type: String, default: null },
     handover_otp_expires_at: { type: Date, default: null },
     pickup_images: { type: [String], default: [] },
+    /** Lý do khách yêu cầu hoàn tiền (luồng chờ showroom xác nhận) */
+    refund_request_reason: { type: String, trim: true, default: '' },
+    refund_requested_at: { type: Date, default: null },
   },
   { timestamps: true },
 );

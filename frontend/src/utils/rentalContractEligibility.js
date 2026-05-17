@@ -6,7 +6,8 @@
  */
 export function canRenterViewOfficialRentalContract(booking) {
   if (!booking) return false;
-  if (booking.isCancelled || booking.status === 'cancelled') return false;
+  if (booking.isCancelled || ['cancelled', 'cancel_pending', 'cancel_failed', 'refund_requested'].includes(booking.status))
+    return false;
   return booking.paymentStatus === 'successful';
 }
 

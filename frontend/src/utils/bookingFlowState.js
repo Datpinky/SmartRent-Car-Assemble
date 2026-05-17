@@ -46,7 +46,7 @@ export const getBookingFlowState = (booking, fallbackPaymentStatus) => {
   const now = Date.now();
   const hasStarted = Boolean(startAt) && now >= startAt.getTime();
   const hasEnded = Boolean(endAt) && now >= endAt.getTime();
-  const isCancelled = ['cancelled', 'cancel_pending', 'cancel_failed'].includes(status);
+  const isCancelled = ['cancelled', 'cancel_pending', 'cancel_failed', 'refund_requested'].includes(status);
   const isCompleted = status === 'completed';
   const hasSuccessfulPayment = paymentStatus === 'successful';
   const requiresRetryPayment = ['failed', 'declined'].includes(paymentStatus);

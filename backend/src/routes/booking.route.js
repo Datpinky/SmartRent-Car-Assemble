@@ -54,4 +54,20 @@ router.post('/resendHandoverOtp/:bookingId', authMiddleware, bookingController.r
 // Showroom lưu ảnh chụp xe trước khi bàn giao (tuỳ chọn)
 router.patch('/:bookingId/pickup-images', authMiddleware, bookingController.savePickupImages);
 
+router.post(
+  '/:bookingId/request-refund',
+  authMiddleware,
+  bookingValidation.requestRefund,
+  validate,
+  bookingController.requestRefund,
+);
+
+router.post(
+  '/:bookingId/confirm-refund',
+  authMiddleware,
+  bookingValidation.confirmRefund,
+  validate,
+  bookingController.confirmRefund,
+);
+
 module.exports = router;

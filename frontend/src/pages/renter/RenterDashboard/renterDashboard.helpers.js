@@ -115,7 +115,7 @@ export const resolveFinanceItem = (booking) => {
     parseDate(payment?.paid_at) || parseDate(payment?.updatedAt) || parseDate(booking.updatedAt) || createdAt;
   const updatedAt = parseDate(booking.updatedAt) || parseDate(payment?.updatedAt) || paidAt;
   const paymentRecorded = ['successful', 'refunded'].includes(paymentStatus);
-  const refundPending = booking.status === 'cancelled' && paymentStatus === 'successful';
+  const refundPending = ['cancel_pending', 'cancel_failed'].includes(booking.status) || (booking.status === 'cancelled' && paymentStatus === 'successful');
   const refundCompleted = paymentStatus === 'refunded';
   const pendingPayment = paymentStatus === 'pending' && booking.status !== 'cancelled';
   const images = sanitizeImageList([
@@ -147,7 +147,9 @@ export const resolveFinanceItem = (booking) => {
     image: images[0] || '',
     refundHint: refundCompleted
       ? 'Khoản hoàn trả đã được ghi nhận trên hệ thống.'
-      : refundPending
+      : booking.status === 'cancel_failed'
+        ? 'Đơn đặt xe đã hủy nhưng hoàn tiền gặp lỗi. Vui lòng liên hệ showroom hoặc admin để xử lý.'
+        : refundPending
         ? 'Đơn đặt xe đã hủy sau khi thanh toán thành công. Đang theo dõi để đối chiếu hoàn trả.'
         : pendingPayment
           ? 'Đơn đặt xe này chưa có thanh toán thành công.'

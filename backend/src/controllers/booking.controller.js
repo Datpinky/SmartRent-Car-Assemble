@@ -9,6 +9,7 @@ class BookingController {
       return res.status(201).json({
         message: 'Tạo booking thành công',
         data: result,
+        bookingStatus: result.status,
       });
     } catch (error) {
       next(error);
@@ -73,6 +74,9 @@ class BookingController {
           paymentStatus: result._refundResult?.paymentStatus || undefined,
           refundStatus: result._refundResult?.status || undefined,
         }),
+        ...(result._refundError && {
+          refundError: result._refundError,
+        }),
       });
     } catch (error) {
       next(error);
@@ -126,6 +130,48 @@ class BookingController {
           handover_otp: result.handover_otp,
           handover_otp_expires_at: result.handover_otp_expires_at,
         },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async requestRefund(req, res, next) {
+    try {
+      if (req.user.role !== 'user') {
+        return res.status(403).json({ message: 'Chỉ người thuê mới có thể gửi yêu cầu hoàn trả' });
+      }
+      const { bookingId } = req.params;
+      const { reason } = req.body;
+      const result = await bookingService.requestRefundByRenter(bookingId, req.user.userId, reason);
+      return res.status(200).json({
+        message: 'Đã gửi yêu cầu hoàn trả. Showroom sẽ xác nhận và xử lý hoàn tiền.',
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async confirmRefund(req, res, next) {
+    try {
+      const role = req.user.role;
+      if (role !== 'showroom' && role !== 'admin') {
+        return res.status(403).json({ message: 'Chỉ showroom hoặc admin có thể xác nhận hoàn trả' });
+      }
+      const { bookingId } = req.params;
+      const result = await bookingService.confirmRefundByShowroom(bookingId, role, req.user.userId);
+      return res.status(200).json({
+        message: 'Đã xử lý hoàn trả',
+        data: result,
+        ...(result._refundResult !== undefined && {
+          refundResult: result._refundResult,
+          paymentStatus: result._refundResult?.paymentStatus || undefined,
+          refundStatus: result._refundResult?.status || undefined,
+        }),
+        ...(result._refundError && {
+          refundError: result._refundError,
+        }),
       });
     } catch (error) {
       next(error);

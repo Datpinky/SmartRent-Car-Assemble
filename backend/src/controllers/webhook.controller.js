@@ -100,7 +100,15 @@ async function handleChargeRefunded(charge) {
   if (!intentId) return;
 
   const payment = await PaymentModel.findOne({ stripe_payment_intent_id: intentId }).lean();
-  if (!payment || payment.payment_status === 'refunded') return;
+  if (!payment) return;
+  if (payment.payment_status === 'refunded') {
+    if (payment.booking_id) {
+      await BookingService._setStatusInternal(payment.booking_id, 'cancelled').catch((err) => {
+        console.error('[Webhook] charge.refunded booking sync failed:', err.message);
+      });
+    }
+    return;
+  }
 
   const refund = charge.refunds?.data?.[0];
   await PaymentModel.findByIdAndUpdate(payment._id, {
@@ -109,6 +117,12 @@ async function handleChargeRefunded(charge) {
     refund_amount: charge.amount_refunded,
     refunded_at: new Date(),
   });
+
+  if (payment.booking_id) {
+    await BookingService._setStatusInternal(payment.booking_id, 'cancelled').catch((err) => {
+      console.error('[Webhook] charge.refunded booking sync failed:', err.message);
+    });
+  }
 
   console.log(`[Webhook] charge.refunded synced: payment=${payment._id}`);
 }

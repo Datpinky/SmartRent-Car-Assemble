@@ -16,7 +16,7 @@ const resolveId = (value) => {
   return value._id || value.id || '';
 };
 
-const NON_BLOCKING_STATUSES = new Set(['cancelled']);
+const NON_BLOCKING_STATUSES = new Set(['cancelled', 'cancel_pending', 'cancel_failed', 'refund_requested']);
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const parseDateTime = (value) => {
@@ -555,6 +555,24 @@ export const bookingService = {
     });
   },
 
+  async requestRefund(id, reason) {
+    const res = await apiClient.post(`/api/booking/${id}/request-refund`, { reason });
+    return res.data?.data;
+  },
+
+  async confirmRefund(id) {
+    const res = await apiClient.post(`/api/booking/${id}/confirm-refund`);
+    const data = res.data?.data;
+    return {
+      ...data,
+      bookingStatus: data?.status,
+      paymentStatus: res.data?.paymentStatus,
+      refundStatus: res.data?.refundStatus,
+      refundResult: res.data?.refundResult,
+      refundError: res.data?.refundError,
+    };
+  },
+
   async cancelBooking(id) {
     const res = await apiClient.patch(`/api/booking/updateBookingStatus/${id}`, {
       status: 'cancelled',
@@ -562,9 +580,11 @@ export const bookingService = {
     // Gộp booking data + refund info để getCancelBookingNotice đọc được
     const cancelledBooking = {
       ...res.data.data,
+      bookingStatus: res.data.data?.status,
       paymentStatus: res.data.paymentStatus,
       refundStatus: res.data.refundStatus,
       refundResult: res.data.refundResult,
+      refundError: res.data.refundError,
     };
     // Trigger event to notify about booking cancellation
     this.emitBookingCancelled(cancelledBooking);

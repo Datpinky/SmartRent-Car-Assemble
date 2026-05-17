@@ -7,19 +7,25 @@ import bookingService from '../../../services/bookingService';
 import paymentService from '../../../services/paymentService';
 
 const FILTERS = [
-  { key: 'all', label: 'Tất cả' },
-  { key: 'successful', label: 'Thành công' },
-  { key: 'refunded', label: 'Hoàn trả' },
-  { key: 'pending', label: 'Chờ xử lý' },
+  { key: 'paid_active', label: 'Thành công' },
+  { key: 'refund_waiting', label: 'Chờ hoàn tiền' },
+  { key: 'refunded', label: 'Đã hoàn tiền' },
   { key: 'failed', label: 'Thất bại / từ chối' },
 ];
 
-const PAYMENT_LABELS = {
+const BOOKING_STATUS_VI = {
   pending: 'Chờ thanh toán',
-  successful: 'Thành công',
-  refunded: 'Đã hoàn trả',
-  failed: 'Thất bại',
-  declined: 'Bị từ chối',
+  waiting_payment: 'Đang thanh toán',
+  paid: 'Đã thanh toán',
+  refund_requested: 'Chờ hoàn trả',
+  waiting_handover: 'Chờ bàn giao',
+  handed_over: 'Đã bàn giao',
+  in_use: 'Đang thuê',
+  waiting_return_confirmation: 'Chờ xác nhận trả',
+  completed: 'Hoàn thành',
+  cancel_pending: 'Đang xử lý hủy',
+  cancel_failed: 'Hủy (lỗi xử lý)',
+  cancelled: 'Đã hủy',
 };
 
 const formatDateTime = (value) => {
@@ -37,16 +43,68 @@ const formatDateTime = (value) => {
 
 const formatMoney = (value) => `${Number(value || 0).toLocaleString('vi-VN')} ₫`;
 
+const getTransactionDisplay = (transaction) => {
+  if (transaction.refundStatus === 'refund_failed') {
+    return { statusKey: 'refund_failed', label: 'Hoàn tiền lỗi' };
+  }
+
+  if (transaction.status === 'refunded' || transaction.refundStatus === 'refunded') {
+    return { statusKey: 'refunded', label: 'Đã hoàn tiền' };
+  }
+
+  if (transaction.refundStatus === 'awaiting_showroom_refund') {
+    return { statusKey: 'awaiting_showroom_refund', label: 'Chờ hoàn tiền' };
+  }
+
+  if (transaction.refundStatus === 'refund_pending') {
+    return { statusKey: 'refund_pending', label: 'Đang hoàn tiền' };
+  }
+
+  if (transaction.status === 'declined') {
+    return { statusKey: 'declined', label: 'Bị từ chối' };
+  }
+
+  if (transaction.status === 'failed') {
+    return { statusKey: 'failed', label: 'Thất bại' };
+  }
+
+  if (transaction.status === 'successful') {
+    return { statusKey: 'successful', label: 'Thành công' };
+  }
+
+  return { statusKey: 'pending', label: 'Đang cập nhật' };
+};
+
+const getTransactionBucket = (transaction) => {
+  if (transaction.refundStatus === 'refund_failed' || ['failed', 'declined'].includes(transaction.status)) {
+    return 'failed';
+  }
+
+  if (transaction.status === 'refunded' || transaction.refundStatus === 'refunded') {
+    return 'refunded';
+  }
+
+  if (transaction.refundStatus === 'awaiting_showroom_refund' || transaction.refundStatus === 'refund_pending') {
+    return 'refund_waiting';
+  }
+
+  if (transaction.status === 'successful') {
+    return 'paid_active';
+  }
+
+  return 'failed';
+};
+
 const matchFilter = (transaction, activeFilter) => {
-  if (activeFilter === 'all') {
-    return true;
-  }
+  return getTransactionBucket(transaction) === activeFilter;
+};
 
-  if (activeFilter === 'failed') {
-    return ['failed', 'declined'].includes(transaction.status);
-  }
-
-  return transaction.status === activeFilter;
+const getAmountColor = (transaction) => {
+  const bucket = getTransactionBucket(transaction);
+  if (bucket === 'failed') return '#dc2626';
+  if (bucket === 'refunded') return '#0369a1';
+  if (bucket === 'refund_waiting') return '#d97706';
+  return '#00b14f';
 };
 
 const Transactions = () => {
@@ -54,7 +112,7 @@ const Transactions = () => {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeFilter, setActiveFilter] = useState('all');
+  const [activeFilter, setActiveFilter] = useState('paid_active');
   const [detailModal, setDetailModal] = useState(null);
 
   useEffect(() => {
@@ -96,17 +154,24 @@ const Transactions = () => {
     [activeFilter, transactions],
   );
 
-  const summary = useMemo(
-    () => ({
+  const summary = useMemo(() => {
+    const paidActive = transactions.filter((t) => getTransactionBucket(t) === 'paid_active');
+    const refundWaiting = transactions.filter((t) => getTransactionBucket(t) === 'refund_waiting');
+    const refunded = transactions.filter((t) => getTransactionBucket(t) === 'refunded');
+    const failed = transactions.filter((t) => getTransactionBucket(t) === 'failed');
+
+    return {
       total: transactions.length,
-      successful: transactions.filter((transaction) => transaction.status === 'successful').length,
-      pending: transactions.filter((transaction) => transaction.status === 'pending').length,
-      totalPaid: transactions
-        .filter((transaction) => ['successful', 'refunded'].includes(transaction.status))
-        .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0),
-    }),
-    [transactions],
-  );
+      paidActiveCount: paidActive.length,
+      refundWaitingCount: refundWaiting.length,
+      refundedCount: refunded.length,
+      failedCount: failed.length,
+      totalPaid: paidActive.reduce((sum, t) => sum + Number(t.amount || 0), 0),
+      totalRefunded: refunded.reduce((sum, t) => sum + Number(t.amount || 0), 0),
+    };
+  }, [transactions]);
+
+  const formatBookingStatus = (raw) => BOOKING_STATUS_VI[raw] || raw || '—';
 
   return (
     <div>
@@ -138,10 +203,13 @@ const Transactions = () => {
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         {[
-          { label: 'Tổng giao dịch', value: summary.total, color: '#111827' },
-          { label: 'Thành công', value: summary.successful, color: '#059669' },
-          { label: 'Chờ xử lý', value: summary.pending, color: '#d97706' },
-          { label: 'Đã chi', value: formatMoney(summary.totalPaid), color: '#2563eb' },
+          { label: 'Tổng giao dịch', value: summary.total, color: '#111827', isMoney: false },
+          { label: 'Thành công (chưa hoàn)', value: summary.paidActiveCount, color: '#059669', isMoney: false },
+          { label: 'Chờ hoàn tiền', value: summary.refundWaitingCount, color: '#d97706', isMoney: false },
+          { label: 'Đã hoàn tiền', value: summary.refundedCount, color: '#0369a1', isMoney: false },
+          { label: 'Thất bại / từ chối', value: summary.failedCount, color: '#dc2626', isMoney: false },
+          { label: 'Đã chi (chưa hoàn)', value: formatMoney(summary.totalPaid), color: '#2563eb', isMoney: true },
+          { label: 'Số tiền đã hoàn', value: formatMoney(summary.totalRefunded), color: '#0369a1', isMoney: true },
         ].map((item) => (
           <div
             key={item.label}
@@ -154,7 +222,11 @@ const Transactions = () => {
             }}
           >
             <div
-              style={{ fontSize: item.label === 'Đã chi' ? '1.1rem' : '1.35rem', fontWeight: 800, color: item.color }}
+              style={{
+                fontSize: item.isMoney ? '1.05rem' : '1.35rem',
+                fontWeight: 800,
+                color: item.color,
+              }}
             >
               {item.value}
             </div>
@@ -188,115 +260,115 @@ const Transactions = () => {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {filteredTransactions.map((transaction) => (
-            <div
-              key={`${transaction.id}-${transaction.bookingId}`}
-              style={{
-                background: '#fff',
-                borderRadius: 18,
-                border: '1px solid #f0f0f0',
-                padding: 18,
-                display: 'grid',
-                gridTemplateColumns: '88px 1fr auto',
-                gap: 16,
-                alignItems: 'center',
-              }}
-            >
+          {filteredTransactions.map((transaction) => {
+            const display = getTransactionDisplay(transaction);
+            return (
               <div
+                key={`${transaction.id}-${transaction.bookingId}`}
                 style={{
-                  width: 88,
-                  height: 68,
-                  borderRadius: 12,
-                  overflow: 'hidden',
-                  background: '#f3f4f6',
-                  display: 'flex',
+                  background: '#fff',
+                  borderRadius: 18,
+                  border: '1px solid #f0f0f0',
+                  padding: 18,
+                  display: 'grid',
+                  gridTemplateColumns: '88px 1fr auto',
+                  gap: 16,
                   alignItems: 'center',
-                  justifyContent: 'center',
                 }}
               >
-                {transaction.image ? (
-                  <img
-                    src={transaction.image}
-                    alt={transaction.vehicleName}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
-                ) : (
-                  <FaCarFallback />
-                )}
-              </div>
-
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 800, color: '#111827', fontSize: '0.95rem' }}>{transaction.vehicleName}</div>
-                <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: 3 }}>{transaction.showroomName}</div>
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8 }}>
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      fontSize: '0.77rem',
-                      color: '#6b7280',
-                    }}
-                  >
-                    <FaCreditCard size={11} /> {transaction.method}
-                  </span>
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      fontSize: '0.77rem',
-                      color: '#6b7280',
-                    }}
-                  >
-                    <FaCalendarAlt size={11} /> {formatDateTime(transaction.createdAt)}
-                  </span>
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      fontSize: '0.77rem',
-                      color: '#6b7280',
-                    }}
-                  >
-                    <FaClock size={11} />{' '}
-                    {transaction.paidAt ? formatDateTime(transaction.paidAt) : 'Chưa ghi nhận paid_at'}
-                  </span>
-                </div>
-              </div>
-
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ marginBottom: 8 }}>
-                  <StatusBadge
-                    status={transaction.status}
-                    customLabel={PAYMENT_LABELS[transaction.status] || transaction.status}
-                  />
-                </div>
                 <div
                   style={{
-                    fontWeight: 800,
-                    color: transaction.status === 'refunded' ? '#2563eb' : '#00b14f',
-                    fontSize: '1rem',
+                    width: 88,
+                    height: 68,
+                    borderRadius: 12,
+                    overflow: 'hidden',
+                    background: '#f3f4f6',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                   }}
                 >
-                  {formatMoney(transaction.amount)}
+                  {transaction.image ? (
+                    <img
+                      src={transaction.image}
+                      alt={transaction.vehicleName}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  ) : (
+                    <FaCarFallback />
+                  )}
                 </div>
-                <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: 4 }}>
-                  Booking: {transaction.bookingId}
+
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 800, color: '#111827', fontSize: '0.95rem' }}>{transaction.vehicleName}</div>
+                  <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: 3 }}>{transaction.showroomName}</div>
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8 }}>
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontSize: '0.77rem',
+                        color: '#6b7280',
+                      }}
+                    >
+                      <FaCreditCard size={11} /> {transaction.method}
+                    </span>
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontSize: '0.77rem',
+                        color: '#6b7280',
+                      }}
+                    >
+                      <FaCalendarAlt size={11} /> {formatDateTime(transaction.createdAt)}
+                    </span>
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontSize: '0.77rem',
+                        color: '#6b7280',
+                      }}
+                    >
+                      <FaClock size={11} />{' '}
+                      {transaction.paidAt ? formatDateTime(transaction.paidAt) : 'Chưa ghi nhận '}
+                    </span>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  className="btn-icon"
-                  style={{ marginLeft: 'auto', marginTop: 10 }}
-                  onClick={() => setDetailModal(transaction)}
-                  title="Chi tiết giao dịch"
-                >
-                  <FaEye />
-                </button>
+
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ marginBottom: 8 }}>
+                    <StatusBadge status={display.statusKey} customLabel={display.label} />
+                  </div>
+                  <div
+                    style={{
+                      fontWeight: 800,
+                      color: getAmountColor(transaction),
+                      fontSize: '1rem',
+                    }}
+                  >
+                    {formatMoney(transaction.amount)}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: 4 }}>
+                    Booking: {transaction.bookingId}
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-icon"
+                    style={{ marginLeft: 'auto', marginTop: 10 }}
+                    onClick={() => setDetailModal(transaction)}
+                    title="Chi tiết giao dịch"
+                  >
+                    <FaEye />
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -310,8 +382,8 @@ const Transactions = () => {
 
             {[
               ['Mã đơn', detailModal.bookingId],
-              ['Trạng thái đơn', detailModal.bookingStatus],
-              ['Trạng thái payment', PAYMENT_LABELS[detailModal.status] || detailModal.status],
+              ['Trạng thái đơn', formatBookingStatus(detailModal.bookingStatus)],
+              ['Trạng thái giao dịch', getTransactionDisplay(detailModal).label],
               ['Phương thức', detailModal.method],
               ['Số tiền', formatMoney(detailModal.amount)],
               ['Tạo lúc', formatDateTime(detailModal.createdAt)],
@@ -342,11 +414,7 @@ const Transactions = () => {
                 onClick={() =>
                   navigate(
                     `/renter/payment-result?bookingId=${detailModal.bookingId}&status=${
-                      ['successful', 'refunded'].includes(detailModal.status)
-                        ? 'success'
-                        : detailModal.status === 'pending'
-                          ? 'pending'
-                          : 'error'
+                      ['successful', 'refunded'].includes(detailModal.status) ? 'success' : 'error'
                     }`,
                   )
                 }

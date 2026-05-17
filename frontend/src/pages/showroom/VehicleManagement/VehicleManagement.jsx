@@ -29,15 +29,6 @@ const resolveOperationalStatus = (vehicleStatus, hasRentedBooking) => {
 const FUEL_OPTS = ['Xăng', 'Dầu', 'Điện', 'Hybrid'];
 const CAT_OPTS = ['Sedan', 'SUV', 'MPV', 'Hatchback', 'Bán tải'];
 
-const VEHICLE_STATUS_OPTS = [
-  { value: 'available', label: 'Sẵn sàng' },
-  { value: 'maintenance', label: 'Bảo dưỡng' },
-  { value: 'rented', label: 'Đang thuê' },
-];
-
-const getVehicleStatusLabel = (status) =>
-  status === 'available' ? 'Sẵn sàng' : status === 'maintenance' ? 'Bảo dưỡng' : status === 'rented' ? 'Đang thuê' : status;
-
 const initForm = {
   name: '',
   plate: '',
@@ -50,7 +41,6 @@ const initForm = {
   engine_number: '',
   vin: '',
   description: '',
-  status: 'available',
   images: [],
 };
 
@@ -129,7 +119,6 @@ const VehicleManagement = () => {
       engine_number: v.engineNumber || v.vehicle_engine_number || '',
       vin: v.vehicleIdentificationNumber || v.vehicle_identification_number || '',
       description: v.description || '',
-      status: v.status || 'available',
       images: v.images || [],
     });
     setEditId(v._id || v.id);
@@ -158,7 +147,7 @@ const VehicleManagement = () => {
         vehicle_engine_number: form.engine_number,
         vehicle_identification_number: form.vin,
         description: form.description,
-        status: form.status === 'rented' ? undefined : form.status,
+        ...(editId ? {} : { status: 'available' }),
         vehicle_images_paths: form.images,
         company_owned: true,
       };
@@ -475,45 +464,6 @@ const VehicleManagement = () => {
               </select>
             </div>
           ))}
-          <div>
-            <label
-              style={{
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                color: '#374151',
-                display: 'block',
-                marginBottom: 4,
-              }}
-            >
-              Trạng thái vận hành
-            </label>
-            <select
-              value={form.status}
-              disabled={form.status === 'rented'}
-              onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-              style={{
-                width: '100%',
-                border: '1.5px solid #e5e7eb',
-                borderRadius: 9,
-                padding: '8px 12px',
-                fontSize: '0.85rem',
-                outline: 'none',
-                background: form.status === 'rented' ? '#f9fafb' : '#fff',
-                boxSizing: 'border-box',
-              }}
-            >
-              {VEHICLE_STATUS_OPTS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {getVehicleStatusLabel(o.value)}
-                </option>
-              ))}
-            </select>
-            {form.status === 'rented' && (
-              <p style={{ margin: '6px 0 0', fontSize: '0.72rem', color: '#9a3412' }}>
-                Xe đang có booking đang thuê, trạng thái này được đồng bộ từ booking.
-              </p>
-            )}
-          </div>
         </div>
         <div style={{ marginTop: 14 }}>
           <label

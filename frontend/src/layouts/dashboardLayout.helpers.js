@@ -42,7 +42,6 @@ export const MENUS = {
       label: 'Chuyến đi',
       icon: Car,
       items: [
-        { label: 'Chờ thanh toán', path: '/renter/pending-payments', icon: CreditCard },
         { label: 'Chờ showroom xử lý', path: '/renter/pending-showroom-processing', icon: Store },
         { label: 'Chờ nhận xe', path: '/renter/pending-pickups', icon: Clock },
         { label: 'Chuyến đi của tôi', path: '/renter/bookings', icon: CalendarDays },

@@ -26,7 +26,6 @@ import MapPage from './pages/renter/Map/MapPage';
 import MyBookings from './pages/renter/MyBookings/MyBookings';
 import MyContracts from './pages/renter/MyContracts/MyContracts';
 import PaymentResult from './pages/renter/PaymentResult/PaymentResult';
-import PendingPayments from './pages/renter/PendingPayments/PendingPayments';
 import PendingPickups from './pages/renter/PendingPickups/PendingPickups';
 import PendingShowroomProcessing from './pages/renter/PendingShowroomProcessing/PendingShowroomProcessing';
 import Profile from './pages/renter/Profile/Profile';
@@ -94,7 +93,6 @@ const SHOWROOM_DASHBOARD_ROUTES = [
 const RENTER_DASHBOARD_ROUTES = [
   { path: '/renter/dashboard', component: <RenterDashboard /> },
   { path: '/renter/profile', component: <Profile /> },
-  { path: '/renter/pending-payments', component: <PendingPayments /> },
   { path: '/renter/pending-showroom-processing', component: <PendingShowroomProcessing /> },
   { path: '/renter/pending-pickups', component: <PendingPickups /> },
   { path: '/renter/bookings', component: <MyBookings /> },
@@ -151,6 +149,14 @@ const App = () => (
           />
         ))}
 
+        <Route
+          path="/renter/pending-payments"
+          element={
+            <RenterPage>
+              <Navigate to="/renter/bookings" replace />
+            </RenterPage>
+          }
+        />
         {RENTER_DASHBOARD_ROUTES.map((route) => (
           <Route key={route.path} path={route.path} element={<RenterPage>{route.component}</RenterPage>} />
         ))}

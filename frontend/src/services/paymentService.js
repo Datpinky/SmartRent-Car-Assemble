@@ -13,6 +13,17 @@ const resolvePaymentStatus = (booking, payment, paymentState) =>
   booking?.paymentState?.paymentStatus ||
   (booking?.status === 'paid' ? 'successful' : 'pending');
 
+const resolveRefundStatus = (booking, paymentStatus) => {
+  const bookingStatus = booking?.status || booking?.paymentState?.bookingStatus || '';
+  if (bookingStatus === 'refund_requested') return 'awaiting_showroom_refund';
+  if (bookingStatus === 'cancel_pending') return 'refund_pending';
+  if (bookingStatus === 'cancel_failed') return 'refund_failed';
+  if (paymentStatus === 'refunded') return 'refunded';
+  if (bookingStatus === 'cancelled' && paymentStatus === 'successful') return 'refund_pending';
+  if (bookingStatus === 'cancelled') return 'not_required';
+  return '';
+};
+
 const normalizePaymentList = (payload) => {
   if (Array.isArray(payload)) {
     return payload;
@@ -168,6 +179,7 @@ const paymentService = {
         const fallbackPayment = booking?.payment || null;
         const fallbackStatus = resolvePaymentStatus(booking, fallbackPayment, paymentState);
         if (!fallbackPayment && !paymentState) return [];
+        const fallbackRefundStatus = resolveRefundStatus(booking, fallbackStatus);
 
         return [
           {
@@ -178,6 +190,7 @@ const paymentService = {
             amount: Number(fallbackPayment?.amount || booking?.total_price || 0),
             method: fallbackPayment?.payment_method || 'stripe',
             status: fallbackStatus,
+            refundStatus: fallbackRefundStatus,
             transactionCode: fallbackPayment?.transaction_code || fallbackPayment?.stripe_payment_intent_id || '',
             paidAt: fallbackPayment?.paid_at || '',
             createdAt: fallbackPayment?.createdAt || booking?.createdAt || '',
@@ -189,23 +202,27 @@ const paymentService = {
         ];
       }
 
-      return paymentRows.map((payment) => ({
-        id:
-          resolveId(payment) ||
-          `${bookingId}-${payment?.transaction_code || payment?.stripe_payment_intent_id || 'payment'}`,
-        bookingId,
-        vehicleName: booking?.vehicle?.name || booking?.vehicle_id?.vehicle_name || 'Xe khong ten',
-        showroomName: booking?.showroom?.name || booking?.showroom_id?.name || 'SmartRent',
-        amount: Number(payment?.amount || booking?.total_price || 0),
-        method: payment?.payment_method || 'stripe',
-        status: resolvePaymentStatus(booking, payment, paymentState),
-        transactionCode: payment?.transaction_code || payment?.stripe_payment_intent_id || '',
-        paidAt: payment?.paid_at || '',
-        createdAt: payment?.createdAt || booking?.createdAt || '',
-        bookingStatus: paymentState?.bookingStatus || booking?.status || '',
-        image: booking?.image || booking?.vehicle?.images?.[0] || booking?.vehicle_id?.vehicle_images_paths?.[0] || '',
-        raw: { booking, payment, paymentState },
-      }));
+      return paymentRows.map((payment) => {
+        const status = resolvePaymentStatus(booking, payment, paymentState);
+        return {
+          id:
+            resolveId(payment) ||
+            `${bookingId}-${payment?.transaction_code || payment?.stripe_payment_intent_id || 'payment'}`,
+          bookingId,
+          vehicleName: booking?.vehicle?.name || booking?.vehicle_id?.vehicle_name || 'Xe khong ten',
+          showroomName: booking?.showroom?.name || booking?.showroom_id?.name || 'SmartRent',
+          amount: Number(payment?.amount || booking?.total_price || 0),
+          method: payment?.payment_method || 'stripe',
+          status,
+          refundStatus: resolveRefundStatus(booking, status),
+          transactionCode: payment?.transaction_code || payment?.stripe_payment_intent_id || '',
+          paidAt: payment?.paid_at || '',
+          createdAt: payment?.createdAt || booking?.createdAt || '',
+          bookingStatus: paymentState?.bookingStatus || booking?.status || '',
+          image: booking?.image || booking?.vehicle?.images?.[0] || booking?.vehicle_id?.vehicle_images_paths?.[0] || '',
+          raw: { booking, payment, paymentState },
+        };
+      });
     });
 
     return rows.sort((a, b) => new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime());

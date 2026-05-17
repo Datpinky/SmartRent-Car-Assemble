@@ -6,10 +6,10 @@ const BaseService = require('./base.service');
 const throwError = require('../utils/throwError');
 const QueryBuilder = require('../utils/queryBuilder');
 
-// Lazy-require để tránh circular dependency (PaymentService cũng require BookingService)
+// Lazy-require Ä‘á»ƒ trÃ¡nh circular dependency (PaymentService cÅ©ng require BookingService)
 const getPaymentService = () => require('./payment.service');
 
-const PAYMENT_HOLD_MS = 5 * 60 * 1000; // 5 phút
+const PAYMENT_HOLD_MS = 5 * 60 * 1000; // 5 phÃºt
 
 const VEHICLE_STATUS_ON_BOOKING = {
   waiting_handover: 'waiting_handover',
@@ -17,6 +17,8 @@ const VEHICLE_STATUS_ON_BOOKING = {
   in_use: 'rented',
   completed: 'available',
   cancelled: 'available',
+  cancel_failed: 'available',
+  refund_requested: 'available',
 };
 
 const ALLOWED_TRANSITIONS = {
@@ -25,6 +27,7 @@ const ALLOWED_TRANSITIONS = {
     pending: ['cancelled'],
     // Sau khi thanh toán: chốt bàn giao hoặc hủy (sẽ hoàn tiền)
     paid: ['waiting_handover', 'cancelled'],
+    cancel_failed: ['cancelled'],
     waiting_handover: ['handed_over'],
     // Hoàn tất trả xe chỉ qua POST /inspections/return-review/:bookingId/confirm (AI hoặc thủ công)
     waiting_return_confirmation: ['in_use'],
@@ -33,6 +36,7 @@ const ALLOWED_TRANSITIONS = {
     waiting_payment: ['cancelled'],
     // Renter có thể hủy sau khi đã thanh toán — hệ thống tự động hoàn tiền Stripe
     paid: ['cancelled'],
+    cancel_failed: ['cancelled'],
     // handed_over → in_use: renter phải xác nhận qua OTP, không cho phép trực tiếp
     in_use: ['waiting_return_confirmation'],
   },
@@ -41,6 +45,7 @@ const ALLOWED_TRANSITIONS = {
     confirmed: ['waiting_payment', 'cancelled'],
     waiting_payment: ['paid', 'cancelled'],
     paid: ['waiting_handover', 'cancelled'],
+    cancel_failed: ['cancelled'],
     waiting_handover: ['handed_over'],
     handed_over: ['in_use'],
     in_use: ['waiting_return_confirmation'],
@@ -49,6 +54,42 @@ const ALLOWED_TRANSITIONS = {
 };
 
 class BookingService {
+  /**
+   * Sau khi booking ở cancel_pending (đặt tạm trước khi gọi Stripe) hoặc refund_requested
+   * cần chốt: gọi issueRefund rồi cancelled | cancel_failed.
+   */
+  static async _attemptStripeRefundForBooking(booking) {
+    try {
+      const paymentService = getPaymentService();
+      const refundResult = await paymentService.issueRefund(booking._id.toString());
+      booking._refundResult = refundResult;
+      booking.status = 'cancelled';
+    } catch (err) {
+      console.error('[BookingService] issueRefund error:', err.message);
+      booking._refundError = err.message;
+      booking.status = 'cancel_failed';
+    }
+    await booking.save();
+    const vehicleStatus = VEHICLE_STATUS_ON_BOOKING[booking.status];
+    if (vehicleStatus) {
+      await Vehicle.findByIdAndUpdate(booking.vehicle_id, { status: vehicleStatus });
+    }
+    return booking;
+  }
+
+  static async assertShowroomCanManageBooking(booking, userId, normalizedRole) {
+    if (normalizedRole === 'admin') return;
+    if (normalizedRole !== 'showroom') {
+      throwError(`Role "${normalizedRole}" không có quyền thao tác showroom trên booking này`, 403);
+    }
+    const vehicle = await Vehicle.findById(booking.vehicle_id).select('added_by').lean();
+    const vehicleOwnerId = vehicle && vehicle.added_by ? vehicle.added_by.toString() : null;
+    const bookingShowroomId = booking.showroom_id ? booking.showroom_id.toString() : null;
+    if (vehicleOwnerId !== userId.toString() && bookingShowroomId !== userId.toString()) {
+      throwError('Bạn không có quyền cập nhật booking này', 403);
+    }
+  }
+
   static async createBooking(data, userId) {
     const {
       vehicle_id,
@@ -79,7 +120,7 @@ class BookingService {
     // 3. Kiểm tra xe tồn tại và không bảo trì
     const vehicle = await Vehicle.findById(vehicle_id).lean();
     if (!vehicle) throwError('Xe không tồn tại', 404);
-    // Chỉ chặn các trạng thái xe bị khoá vĩnh viễn bởi chủ xe.
+    // Chỉ chặn các trạng thái xe bị khóa vĩnh viễn bởi chủ xe.
     // Trạng thái 'rented' / 'waiting_handover' vẫn cho phép đặt trước — conflict ngày thực tế
     // được kiểm tra trong transaction bên dưới.
     if (vehicle.status === 'maintenance') throwError('Xe đang bảo trì và không thể đặt lúc này', 409);
@@ -120,7 +161,7 @@ class BookingService {
         const now = new Date();
         const conflict = await Booking.findOne({
           vehicle_id,
-          status: { $nin: ['cancelled', 'completed'] },
+          status: { $nin: ['cancelled', 'cancel_pending', 'cancel_failed', 'completed'] },
           start_date: { $lt: endDate },
           end_date: { $gt: startDate },
           // Bỏ qua các booking waiting_payment đã hết giờ giữ chỗ
@@ -232,13 +273,7 @@ class BookingService {
       }
     }
     if (normalizedRole === 'showroom') {
-      const vehicle = await Vehicle.findById(booking.vehicle_id).select('added_by').lean();
-      const vehicleOwnerId = vehicle && vehicle.added_by ? vehicle.added_by.toString() : null;
-      const bookingShowroomId = booking.showroom_id ? booking.showroom_id.toString() : null;
-      // Allow if user is vehicle owner (added_by) OR booking.showroom_id matches user
-      if (vehicleOwnerId !== userId.toString() && bookingShowroomId !== userId.toString()) {
-        throwError('Bạn không có quyền cập nhật booking này', 403);
-      }
+      await BookingService.assertShowroomCanManageBooking(booking, userId, normalizedRole);
     }
 
     const allowedForRole = ALLOWED_TRANSITIONS[normalizedRole];
@@ -247,6 +282,14 @@ class BookingService {
     const allowedNextStatuses = allowedForRole[booking.status];
     if (!allowedNextStatuses || !allowedNextStatuses.includes(status)) {
       throwError(`Không thể chuyển từ "${booking.status}" sang "${status}" với role "${role}"`, 403);
+    }
+
+    if (status === 'cancelled') {
+      booking.status = 'cancel_pending';
+      booking.payment_expires_at = null;
+      await booking.save();
+      await BookingService._attemptStripeRefundForBooking(booking);
+      return booking;
     }
 
     booking.status = status;
@@ -258,22 +301,57 @@ class BookingService {
       // Sinh OTP 6 chữ số, hiệu lực 24h
       booking.handover_otp = String(Math.floor(100000 + Math.random() * 900000));
       booking.handover_otp_expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    } else if (status === 'cancelled') {
-      // Hoàn tiền Stripe nếu booking đã thanh toán
-      const paymentService = getPaymentService();
-      const refundResult = await paymentService.issueRefund(booking._id.toString()).catch((err) => {
-        console.error('[BookingService] issueRefund error:', err.message);
-        return null;
-      });
-      booking._refundResult = refundResult; // đính kèm để controller trả về client
     }
     await booking.save();
 
-    const vehicleStatus = VEHICLE_STATUS_ON_BOOKING[status];
+    const vehicleStatus = VEHICLE_STATUS_ON_BOOKING[booking.status];
     if (vehicleStatus) {
       await Vehicle.findByIdAndUpdate(booking.vehicle_id, { status: vehicleStatus });
     }
 
+    return booking;
+  }
+
+  static async requestRefundByRenter(bookingId, userId, reason) {
+    const RentalContractRecord = require('../models/rentalContractRecord.model');
+    const booking = await Booking.findById(bookingId);
+    if (!booking) throwError('Booking không tồn tại', 404);
+    if (booking.user_id.toString() !== userId.toString()) {
+      throwError('Bạn không có quyền yêu cầu hoàn trả booking này', 403);
+    }
+    if (booking.status !== 'paid') {
+      throwError('Chỉ có thể yêu cầu hoàn trả khi booking đã thanh toán', 400);
+    }
+    const record = await RentalContractRecord.findOne({ booking_id: booking._id }).select('status').lean();
+    if (record && record.status === 'signed') {
+      throwError('Đã ký hợp đồng. Vui lòng hủy đơn theo quy trình khác hoặc liên hệ showroom.', 400);
+    }
+    const trimmed = String(reason || '').trim();
+    if (trimmed.length < 10) throwError('Vui lòng nhập lý do hoàn trả ít nhất 10 ký tự', 400);
+    if (trimmed.length > 2000) throwError('Lý do không quá 2000 ký tự', 400);
+
+    booking.status = 'refund_requested';
+    booking.refund_request_reason = trimmed;
+    booking.refund_requested_at = new Date();
+    booking.payment_expires_at = null;
+    await booking.save();
+
+    const vehicleStatus = VEHICLE_STATUS_ON_BOOKING.refund_requested;
+    if (vehicleStatus) {
+      await Vehicle.findByIdAndUpdate(booking.vehicle_id, { status: vehicleStatus });
+    }
+    return booking;
+  }
+
+  static async confirmRefundByShowroom(bookingId, role, userId) {
+    const booking = await Booking.findById(bookingId);
+    if (!booking) throwError('Booking không tồn tại', 404);
+    if (booking.status !== 'refund_requested') {
+      throwError('Booking không ở trạng thái chờ xác nhận hoàn trả', 400);
+    }
+    const normalizedRole = role === 'user' ? 'renter' : role;
+    await BookingService.assertShowroomCanManageBooking(booking, userId, normalizedRole);
+    await BookingService._attemptStripeRefundForBooking(booking);
     return booking;
   }
 
@@ -327,17 +405,17 @@ class BookingService {
   }
 
   static async savePickupImages(bookingId, showroomUserId, images) {
-    console.log('🔔 Service.savePickupImages called:', { bookingId, imagesCount: images?.length, showroomUserId });
+    console.log(' Service.savePickupImages called:', { bookingId, imagesCount: images?.length, showroomUserId });
     const booking = await Booking.findById(bookingId);
     if (!booking) throwError('Booking không tồn tại', 404);
-    console.log('📋 Booking found. showroom_id:', booking.showroom_id.toString(), 'userId:', showroomUserId.toString());
+    console.log(' Booking found. showroom_id:', booking.showroom_id.toString(), 'userId:', showroomUserId.toString());
     if (booking.showroom_id.toString() !== showroomUserId.toString())
       throwError('Bạn không có quyền cập nhật booking này', 403);
     const safeImages = images.filter((u) => typeof u === 'string' && u.startsWith('http')).slice(0, 6);
-    console.log('📸 Safe images after filter:', safeImages.length);
+    console.log(' Safe images after filter:', safeImages.length);
     booking.pickup_images = safeImages;
     await booking.save();
-    console.log('✅ Saved to DB. pickup_images count:', booking.pickup_images.length);
+    console.log(' Saved to DB. pickup_images count:', booking.pickup_images.length);
     return booking;
   }
 
@@ -357,11 +435,6 @@ class BookingService {
     }
     return booking;
   }
-
-  /**
-   * Hủy các booking waiting_payment đã hết thời gian giữ chỗ.
-   * Gọi bởi background job mỗi 60 giây.
-   */
   static async expireStalePaymentBookings() {
     const now = new Date();
     const fiveMinutesAgo = new Date(now.getTime() - PAYMENT_HOLD_MS);
@@ -370,7 +443,6 @@ class BookingService {
       status: 'waiting_payment',
       $or: [
         { payment_expires_at: { $lte: now } },
-        // Legacy: không có payment_expires_at, đã chờ > 5 phút
         { payment_expires_at: null, updatedAt: { $lt: fiveMinutesAgo } },
       ],
     })
@@ -403,3 +475,4 @@ class BookingService {
 }
 
 module.exports = BookingService;
+

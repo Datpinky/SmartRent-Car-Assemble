@@ -264,7 +264,7 @@ class RentalContractService {
 
     if (!booking) throwError('Không tìm thấy booking', 404);
 
-    if (booking.status === 'cancelled') {
+    if (['cancelled', 'cancel_pending', 'cancel_failed'].includes(booking.status)) {
       throwError('Booking đã hủy, không phát hành hợp đồng', 400);
     }
 

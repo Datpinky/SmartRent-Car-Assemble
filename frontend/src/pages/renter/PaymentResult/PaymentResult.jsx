@@ -7,9 +7,11 @@ import {
   FaMoneyBillWave,
   FaSpinner,
   FaTimesCircle,
+  FaUndoAlt,
 } from 'react-icons/fa';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import ContractModal from '../../../components/common/ContractModal';
+import Modal from '../../../components/common/Modal';
 import bookingService from '../../../services/bookingService';
 import contractService from '../../../services/contractService';
 import paymentService from '../../../services/paymentService';
@@ -66,6 +68,11 @@ const PaymentResult = () => {
   const [booking, setBooking] = useState(null);
   const [showContractModal, setShowContractModal] = useState(false);
   const [contractSigned, setContractSigned] = useState(false);
+  const [refundReasonOpen, setRefundReasonOpen] = useState(false);
+  const [refundReason, setRefundReason] = useState('');
+  const [cancellingRefund, setCancellingRefund] = useState(false);
+  const [cancelRefundError, setCancelRefundError] = useState('');
+  const [cancelledForRefund, setCancelledForRefund] = useState(false);
   const canRetryPayment =
     ['pending', 'waiting_payment'].includes(booking?.paymentState?.bookingStatus || booking?.status || '') &&
     ['pending', 'failed', 'declined'].includes(
@@ -74,6 +81,13 @@ const PaymentResult = () => {
 
   const isSuccess = status === 'success';
   const isPending = status === 'pending';
+  const refundFlowStatus = booking?.status || '';
+  const isRefundFlowBooking =
+    isSuccess &&
+    !contractSigned &&
+    ['refund_requested', 'cancel_pending', 'cancel_failed', 'cancelled'].includes(refundFlowStatus);
+  const showRefundFlowResult = cancelledForRefund || isRefundFlowBooking;
+  const canCancelForRefund = isSuccess && !contractSigned && !showRefundFlowResult && Boolean(bookingId);
 
   useEffect(() => {
     let mounted = true;
@@ -149,6 +163,35 @@ const PaymentResult = () => {
       ? `BK${String(bookingId).slice(-6).toUpperCase()}`
       : 'N/A';
   const totalPrice = booking?.total_price != null ? `${Number(booking.total_price).toLocaleString('vi-VN')}d` : 'N/A';
+
+  const REFUND_REASON_MIN = 10;
+
+  const handleSubmitRefundRequest = async () => {
+    if (!bookingId || cancellingRefund) return;
+    const trimmed = String(refundReason || '').trim();
+    if (trimmed.length < REFUND_REASON_MIN) {
+      setCancelRefundError(`Vui lòng nhập lý do ít nhất ${REFUND_REASON_MIN} ký tự.`);
+      return;
+    }
+    setCancellingRefund(true);
+    setCancelRefundError('');
+    try {
+      const updated = await bookingService.requestRefund(bookingId, trimmed);
+      setBooking((prev) => ({ ...(prev || {}), ...(updated || {}), status: updated?.status || 'refund_requested' }));
+      setCancelledForRefund(true);
+      setRefundReasonOpen(false);
+      setRefundReason('');
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.response?.data?.errors?.[0]?.msg ||
+        err?.message ||
+        'Không thể gửi yêu cầu hoàn trả lúc này.';
+      setCancelRefundError(msg);
+    } finally {
+      setCancellingRefund(false);
+    }
+  };
 
   if (status === 'loading') {
     return (
@@ -226,6 +269,47 @@ const PaymentResult = () => {
                   Hợp đồng đã được ký. Showroom sẽ liên hệ và tiến hành bàn giao xe cho bạn.
                 </p>
               </div>
+            ) : showRefundFlowResult ? (
+              <div
+                className={`rounded-xl px-4 py-3 mb-5 text-left ${
+                  refundFlowStatus === 'cancel_failed'
+                    ? 'bg-red-50 border border-red-200'
+                    : refundFlowStatus === 'refund_requested'
+                      ? 'bg-amber-50 border border-amber-200'
+                      : 'bg-blue-50 border border-blue-200'
+                }`}
+              >
+                <p
+                  className={`text-xs font-semibold mb-0.5 ${
+                    refundFlowStatus === 'cancel_failed'
+                      ? 'text-red-800'
+                      : refundFlowStatus === 'refund_requested'
+                        ? 'text-amber-900'
+                        : 'text-blue-800'
+                  }`}
+                >
+                  {refundFlowStatus === 'cancel_failed'
+                    ? 'Hủy thành công, hoàn tiền gặp lỗi'
+                    : refundFlowStatus === 'refund_requested'
+                      ? 'Đã gửi yêu cầu hoàn trả'
+                      : 'Đã gửi yêu cầu hủy và hoàn tiền'}
+                </p>
+                <p
+                  className={`text-xs leading-relaxed ${
+                    refundFlowStatus === 'cancel_failed'
+                      ? 'text-red-700'
+                      : refundFlowStatus === 'refund_requested'
+                        ? 'text-amber-900'
+                        : 'text-blue-700'
+                  }`}
+                >
+                  {refundFlowStatus === 'cancel_failed'
+                    ? 'Hệ thống chưa hoàn tất hoàn tiền tự động. Vui lòng liên hệ showroom hoặc admin để kiểm tra.'
+                    : refundFlowStatus === 'refund_requested'
+                      ? 'Showroom sẽ xem lý do và xác nhận hoàn tiền. Giao dịch vẫn được ghi nhận thành công cho đến khi hoàn trả xong — bạn có thể theo dõi tại Lịch sử giao dịch.'
+                      : 'Booking đã được hủy. Nếu giao dịch đã ghi nhận thành công, hệ thống sẽ xử lý hoàn tiền và cập nhật trong lịch sử giao dịch.'}
+                </p>
+              </div>
             ) : (
               <>
                 <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-5 text-left">
@@ -240,6 +324,18 @@ const PaymentResult = () => {
                   className="flex items-center justify-center gap-2 w-full mb-4 px-6 py-3 bg-blue-700 border-none rounded-xl text-white font-bold cursor-pointer text-sm hover:bg-blue-800 transition-colors shadow-md"
                 >
                   <FaFileSignature /> Ký xác nhận hợp đồng
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCancelRefundError('');
+                    setRefundReason('');
+                    setRefundReasonOpen(true);
+                  }}
+                  disabled={!canCancelForRefund}
+                  className="flex items-center justify-center gap-2 w-full mb-4 px-6 py-3 bg-red-700 border-none rounded-xl text-white font-bold cursor-pointer text-sm hover:bg-red-800 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <FaUndoAlt /> Hủy đặt xe & yêu cầu hoàn tiền
                 </button>
               </>
             )}
@@ -303,7 +399,7 @@ const PaymentResult = () => {
           ))}
         </div>
 
-        {(!isSuccess || contractSigned) && (
+        {(!isSuccess || contractSigned || showRefundFlowResult) && (
           <>
             <div className="flex gap-2.5">
               <button
@@ -313,7 +409,15 @@ const PaymentResult = () => {
                 <FaHome /> Trang chủ
               </button>
 
-              {isSuccess ? (
+              {isSuccess && showRefundFlowResult ? (
+                <button
+                  onClick={() => navigate('/renter/transactions')}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-3 bg-blue-600 border-none rounded-xl text-white font-bold cursor-pointer text-sm hover:bg-blue-700 transition-colors"
+                >
+                  <FaMoneyBillWave />{' '}
+                  {refundFlowStatus === 'refund_requested' ? 'Lịch sử giao dịch' : 'Theo dõi hoàn tiền'}
+                </button>
+              ) : isSuccess ? (
                 <button
                   onClick={() => navigate('/renter/pending-pickups')}
                   className="flex-1 flex items-center justify-center gap-1.5 py-3 bg-[#00b14f] border-none rounded-xl text-white font-bold cursor-pointer text-sm hover:bg-[#009f45] transition-colors"
@@ -358,6 +462,48 @@ const PaymentResult = () => {
           }}
         />
       )}
+      <Modal
+        isOpen={refundReasonOpen}
+        onClose={() => {
+          if (!cancellingRefund) setRefundReasonOpen(false);
+        }}
+        title="Yêu cầu hoàn trả"
+        width={440}
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn-outline"
+              disabled={cancellingRefund}
+              onClick={() => !cancellingRefund && setRefundReasonOpen(false)}
+            >
+              Hủy
+            </button>
+            <button type="button" className="btn-danger" disabled={cancellingRefund} onClick={handleSubmitRefundRequest}>
+              {cancellingRefund ? 'Đang gửi…' : 'Gửi yêu cầu'}
+            </button>
+          </>
+        }
+      >
+        {cancelRefundError ? (
+          <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-left text-xs font-semibold text-red-700">
+            {cancelRefundError}
+          </div>
+        ) : null}
+        <p className="text-gray-600 text-sm mb-3 leading-relaxed">
+          Booking đã thanh toán và chưa ký hợp đồng. Nhập lý do hoàn trả (tối thiểu {REFUND_REASON_MIN} ký tự). Showroom
+          sẽ xem xét và xác nhận hoàn tiền trước khi tiền được hoàn.
+        </p>
+        <textarea
+          className="w-full min-h-[120px] rounded-xl border border-gray-200 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-200"
+          placeholder="Ví dụ: Thay đổi kế hoạch, không còn nhu cầu thuê…"
+          value={refundReason}
+          onChange={(e) => setRefundReason(e.target.value)}
+          disabled={cancellingRefund}
+          maxLength={2000}
+        />
+        <p className="text-xs text-gray-400 mt-1">{refundReason.trim().length}/2000 ký tự</p>
+      </Modal>
     </div>
   );
 };

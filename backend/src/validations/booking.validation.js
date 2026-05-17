@@ -3,10 +3,13 @@ const { body, param } = require('express-validator');
 const BOOKING_STATUSES = [
   'pending',
   'confirmed',
+  'cancel_pending',
+  'cancel_failed',
   'cancelled',
   'completed',
   'waiting_payment',
   'paid',
+  'refund_requested',
   'waiting_handover',
   'handed_over',
   'in_use',
@@ -108,6 +111,20 @@ class BookingValidation {
   ];
 
   deleteBooking = [
+    param('bookingId').notEmpty().withMessage('Không được để trống').isMongoId().withMessage('Phải là MongoId hợp lệ'),
+  ];
+
+  requestRefund = [
+    param('bookingId').notEmpty().withMessage('Không được để trống').isMongoId().withMessage('Phải là MongoId hợp lệ'),
+    body('reason')
+      .trim()
+      .notEmpty()
+      .withMessage('Vui lòng nhập lý do hoàn trả')
+      .isLength({ min: 10, max: 2000 })
+      .withMessage('Lý do từ 10 đến 2000 ký tự'),
+  ];
+
+  confirmRefund = [
     param('bookingId').notEmpty().withMessage('Không được để trống').isMongoId().withMessage('Phải là MongoId hợp lệ'),
   ];
 }

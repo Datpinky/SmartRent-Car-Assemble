@@ -82,7 +82,10 @@ const buildNotificationLink = (view) => {
     return `/renter/retry-payment/${view.id}`;
   }
 
-  if (view.menuKey === 'pending-payments') return '/renter/pending-payments';
+  if (view.isAwaitingPayment) {
+    return `/renter/payment-result?bookingId=${view.id}&status=pending`;
+  }
+
   if (view.menuKey === 'pending-showroom-processing') return '/renter/pending-showroom-processing';
   if (view.menuKey === 'pending-pickups') return '/renter/pending-pickups';
   if (view.menuKey === 'ai-reports') return '/renter/ai-reports';

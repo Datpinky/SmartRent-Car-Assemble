@@ -216,6 +216,10 @@ class PaymentService {
       reason: 'requested_by_customer',
     });
 
+    if (refund.status === 'failed' || refund.failure_reason) {
+      throwError(`Stripe hoàn tiền thất bại: ${refund.failure_reason || refund.status}`, 502);
+    }
+
     await PaymentModel.findByIdAndUpdate(payment._id, {
       payment_status: 'refunded',
       stripe_refund_id: refund.id,
